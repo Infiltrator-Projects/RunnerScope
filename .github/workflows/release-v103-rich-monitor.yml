@@ -21,10 +21,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base64 -d .v103-payload.gz.b64 | gzip -dc > /tmp/runnerscope.py
+          cat .v103-part00 .v103-part01 .v103-part02 .v103-part03 .v103-part04 | base64 -d | gzip -dc > /tmp/runnerscope.py
           echo 'b4cf4a9bbd3c4e5f0a445ae866ac935f680a090f4496f2869793630ecdf91b5a  /tmp/runnerscope.py' | sha256sum -c -
           mv /tmp/runnerscope.py runnerscope.py
-          rm -f .v103-payload.gz.b64 .release-v103-trigger
+          rm -f .v103-payload.gz.b64 .v103-part00 .v103-part01 .v103-part02 .v103-part03 .v103-part04
+          rm -f .release-v103-trigger .release-v103-trigger-retry
           rm -f .github/workflows/release-v103-rich-monitor.yml
 
       - name: Install GUI test dependencies
@@ -45,7 +46,6 @@ jobs:
           xvfb-run -a python3 - <<'PY'
           import tkinter as tk
           import runnerscope as r
-
           root = tk.Tk()
           root.withdraw()
           cfg = dict(r.DEFAULT_CONFIG)
@@ -89,11 +89,9 @@ jobs:
           mkdir -p dist
           cp runnerscope.py dist/RunnerScope-Windows-v1.0.3.py
           cp runnerscope.py dist/RunnerScope-Linux-v1.0.3.py
-
           ROOT="$RUNNER_TEMP/runnerscope-deb"
           PKG="$ROOT/runnerscope_1.0.3-1_all"
           mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/lib/runnerscope" "$PKG/usr/share/applications" "$PKG/usr/share/doc/runnerscope"
-
           cat > "$PKG/DEBIAN/control" <<'EOF'
           Package: runnerscope
           Version: 1.0.3-1
@@ -107,17 +105,14 @@ jobs:
            RunnerScope monitors runner state, active jobs, history, utilisation,
            and local runner service health from a desktop GUI.
           EOF
-
           install -m 0644 runnerscope.py "$PKG/usr/lib/runnerscope/runnerscope.py"
           install -m 0644 README.md "$PKG/usr/share/doc/runnerscope/README.md"
           install -m 0644 LICENSE "$PKG/usr/share/doc/runnerscope/copyright"
-
           cat > "$PKG/usr/bin/runnerscope" <<'EOF'
           #!/bin/sh
           exec python3 /usr/lib/runnerscope/runnerscope.py "$@"
           EOF
           chmod 0755 "$PKG/usr/bin/runnerscope"
-
           cat > "$PKG/usr/share/applications/runnerscope.desktop" <<'EOF'
           [Desktop Entry]
           Type=Application
@@ -128,15 +123,10 @@ jobs:
           Terminal=false
           Categories=Development;System;Monitor;
           EOF
-
           dpkg-deb --build --root-owner-group "$PKG" "dist/runnerscope_1.0.3-1_all.deb"
           dpkg-deb --info dist/runnerscope_1.0.3-1_all.deb
           dpkg-deb --contents dist/runnerscope_1.0.3-1_all.deb
-          sha256sum \
-            dist/RunnerScope-Windows-v1.0.3.py \
-            dist/RunnerScope-Linux-v1.0.3.py \
-            dist/runnerscope_1.0.3-1_all.deb \
-            > dist/SHA256SUMS.txt
+          sha256sum dist/RunnerScope-Windows-v1.0.3.py dist/RunnerScope-Linux-v1.0.3.py dist/runnerscope_1.0.3-1_all.deb > dist/SHA256SUMS.txt
 
       - name: Publish RunnerScope v1.0.3
         env:
@@ -167,11 +157,4 @@ jobs:
           - runnerscope_1.0.3-1_all.deb — optional Debian/Ubuntu/Linux Mint package
           - SHA256SUMS.txt — release checksums
           EOF
-          gh release create v1.0.3 \
-            --target "$PATCH_SHA" \
-            --title 'RunnerScope 1.0.3' \
-            --notes-file /tmp/release-notes.md \
-            dist/RunnerScope-Windows-v1.0.3.py \
-            dist/RunnerScope-Linux-v1.0.3.py \
-            dist/runnerscope_1.0.3-1_all.deb \
-            dist/SHA256SUMS.txt
+          gh release create v1.0.3 --target "$PATCH_SHA" --title 'RunnerScope 1.0.3' --notes-file /tmp/release-notes.md dist/RunnerScope-Windows-v1.0.3.py dist/RunnerScope-Linux-v1.0.3.py dist/runnerscope_1.0.3-1_all.deb dist/SHA256SUMS.txt
