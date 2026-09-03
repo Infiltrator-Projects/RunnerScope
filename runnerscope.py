@@ -28,7 +28,7 @@ except ImportError as exc:
     raise SystemExit(f"Tkinter is unavailable: {exc}") from exc
 
 APP = "RunnerScope"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 DEFAULTS: dict[str, Any] = {
     "organisation": "",
     "expected_runners": 0,
@@ -172,8 +172,13 @@ class ConfigDialog(tk.Toplevel):
         self.vars = {key: tk.StringVar(value=str(source[key])) for key, _ in self.FIELDS}
         self.title(f"{APP} setup")
         self.resizable(False, False)
-        self.transient(parent)
+        if parent.winfo_viewable():
+            self.transient(parent)
         self.grab_set()
+        self.update_idletasks()
+        self.deiconify()
+        self.lift()
+        self.focus_force()
         frame = ttk.Frame(self, padding=16)
         frame.pack(fill=tk.BOTH, expand=True)
         ttk.Label(frame, text=f"{APP} configuration", font=("TkDefaultFont", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w")
