@@ -1,0 +1,84 @@
+name: Add RunnerScope v1.0.0 Debian package
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    if: github.event.head_commit.message == 'Add RunnerScope v1.0.0 Debian package'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Self-test shared core
+        run: python3 runnerscope.py --self-test
+
+      - name: Build Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/runnerscope-deb"
+          PKG="$ROOT/runnerscope_1.0.0-1_all"
+          mkdir -p \
+            "$PKG/DEBIAN" \
+            "$PKG/usr/bin" \
+            "$PKG/usr/lib/runnerscope" \
+            "$PKG/usr/share/applications" \
+            "$PKG/usr/share/doc/runnerscope" \
+            dist
+
+          cat > "$PKG/DEBIAN/control" <<'EOF'
+          Package: runnerscope
+          Version: 1.0.0-1
+          Section: devel
+          Priority: optional
+          Architecture: all
+          Depends: python3 (>= 3.10), python3-tk, gh
+          Maintainer: Shannon Smith <noreply@github.com>
+          Homepage: https://github.com/Infiltrator-Projects/RunnerScope
+          Description: Cross-platform GitHub Actions self-hosted runner monitor
+           RunnerScope monitors self-hosted runner connectivity, active jobs,
+           history and local runner health from a desktop GUI.
+          EOF
+
+          install -m 0644 runnerscope.py "$PKG/usr/lib/runnerscope/runnerscope.py"
+          install -m 0644 README.md "$PKG/usr/share/doc/runnerscope/README.md"
+          install -m 0644 LICENSE "$PKG/usr/share/doc/runnerscope/copyright"
+
+          cat > "$PKG/usr/bin/runnerscope" <<'EOF'
+          #!/bin/sh
+          exec python3 /usr/lib/runnerscope/runnerscope.py "$@"
+          EOF
+          chmod 0755 "$PKG/usr/bin/runnerscope"
+
+          cat > "$PKG/usr/share/applications/runnerscope.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=RunnerScope
+          Comment=Monitor GitHub Actions self-hosted runners
+          Exec=runnerscope
+          Icon=utilities-system-monitor
+          Terminal=false
+          Categories=Development;System;Monitor;
+          EOF
+
+          dpkg-deb --build --root-owner-group "$PKG" "dist/runnerscope_1.0.0-1_all.deb"
+          dpkg-deb --info dist/runnerscope_1.0.0-1_all.deb
+          dpkg-deb --contents dist/runnerscope_1.0.0-1_all.deb
+          sha256sum dist/runnerscope_1.0.0-1_all.deb > dist/runnerscope_1.0.0-1_all.deb.sha256
+
+      - name: Upload Debian package to v1.0.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload v1.0.0 \
+            dist/runnerscope_1.0.0-1_all.deb \
+            dist/runnerscope_1.0.0-1_all.deb.sha256 \
+            --clobber
