@@ -21,11 +21,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .v103-part00 .v103-part01 .v103-part02 .v103-part03 .v103-part04 | base64 -d | gzip -dc > /tmp/runnerscope.py
+          { head -c 7000 .v103-part00; cat .v103-part01 .v103-part02 .v103-part03 .v103-part04; } | base64 -d | gzip -dc > /tmp/runnerscope.py
           echo 'b4cf4a9bbd3c4e5f0a445ae866ac935f680a090f4496f2869793630ecdf91b5a  /tmp/runnerscope.py' | sha256sum -c -
           mv /tmp/runnerscope.py runnerscope.py
           rm -f .v103-payload.gz.b64 .v103-part00 .v103-part01 .v103-part02 .v103-part03 .v103-part04
-          rm -f .release-v103-trigger .release-v103-trigger-retry
+          rm -f .release-v103-trigger .release-v103-trigger-retry .release-v103-trigger-final
           rm -f .github/workflows/release-v103-rich-monitor.yml
 
       - name: Install GUI test dependencies
