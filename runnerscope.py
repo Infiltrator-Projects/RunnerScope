@@ -262,6 +262,10 @@ class RunnerScope(tk.Tk):
         self.request_runners()
         self.request_activity()
         self.request_local()
+        self.after(int(self.poll * 1000), self.runner_timer)
+        self.after(int(self.activity_poll * 1000), self.activity_timer)
+        if sys.platform == "win32" or sys.platform.startswith("linux"):
+            self.after(int(self.local_poll * 1000), self.local_timer)
 
     def configure_style(self) -> None:
         style = ttk.Style(self)
@@ -391,12 +395,26 @@ class RunnerScope(tk.Tk):
     def refresh_all(self) -> None:
         self.request_runners(); self.request_activity(); self.request_local()
 
+    def runner_timer(self) -> None:
+        if self.stop.is_set(): return
+        self.request_runners()
+        self.after(int(self.poll * 1000), self.runner_timer)
+
+    def activity_timer(self) -> None:
+        if self.stop.is_set(): return
+        self.request_activity()
+        self.after(int(self.activity_poll * 1000), self.activity_timer)
+
+    def local_timer(self) -> None:
+        if self.stop.is_set(): return
+        self.request_local()
+        self.after(int(self.local_poll * 1000), self.local_timer)
+
     def request_runners(self) -> None:
         with self.lock:
             if self.runner_busy or self.stop.is_set(): return
             self.runner_busy = True
         threading.Thread(target=self.runner_worker, daemon=True).start()
-        self.after(int(self.poll * 1000), self.request_runners)
 
     def runner_worker(self) -> None:
         try:
@@ -426,7 +444,6 @@ class RunnerScope(tk.Tk):
             if self.activity_busy or self.stop.is_set(): return
             self.activity_busy = True
         threading.Thread(target=self.activity_worker, daemon=True).start()
-        self.after(int(self.activity_poll * 1000), self.request_activity)
 
     def activity_worker(self) -> None:
         try:
@@ -474,7 +491,6 @@ class RunnerScope(tk.Tk):
             if self.local_busy or self.stop.is_set(): return
             self.local_busy = True
         threading.Thread(target=self.local_worker, daemon=True).start()
-        self.after(int(self.local_poll * 1000), self.request_local)
 
     def local_worker(self) -> None:
         try:
@@ -622,7 +638,12 @@ class RunnerScope(tk.Tk):
             if sys.platform == "win32":
                 ps = shutil.which("powershell.exe") or "powershell.exe"
                 quoted = "'" + service.replace("'", "''") + "'"
-                script = f"$ErrorActionPreference='Stop'; $n={quoted}; Restart-Service -Name $n -Force -ErrorAction Stop"
+                script = (
+                    f"$ErrorActionPreference='Stop'; $n={quoted}; "
+                    "$svc=Get-Service -Name $n -ErrorAction Stop; "
+                    "if ($svc.Status -eq 'Running') { Restart-Service -Name $n -Force -ErrorAction Stop } "
+                    "else { Start-Service -Name $n -ErrorAction Stop }"
+                )
                 encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
                 launcher = f"$p=Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile','-EncodedCommand','{encoded}'); exit $p.ExitCode"
                 proc = run_command([ps, "-NoProfile", "-Command", launcher], 60)
