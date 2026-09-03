@@ -8,6 +8,8 @@ The Windows and Linux launchers use the same `runnerscope.py` core. Platform-spe
 
 - Live organisation runner status: running, idle and offline
 - Active workflow/job discovery, including current step where GitHub exposes it
+- Parallel active-job scanning with repository caching for much faster startup and refresh
+- Mercedes graphite/silver UI with MB Corpo fonts when installed, plus safe platform fallbacks
 - Self-hosted versus GitHub-hosted activity counters
 - Runtime, queue time and per-runner session history
 - Search/filter across monitoring tables
