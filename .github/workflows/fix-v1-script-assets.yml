@@ -1,0 +1,59 @@
+name: Fix RunnerScope v1.0.0 script assets
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  fix-assets:
+    if: github.event.head_commit.message == 'Fix RunnerScope v1.0.0 script assets'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare direct Python downloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp runnerscope.py dist/RunnerScope-Windows-v1.0.0.py
+          cp runnerscope.py dist/RunnerScope-Linux-v1.0.0.py
+          sha256sum dist/RunnerScope-Windows-v1.0.0.py dist/RunnerScope-Linux-v1.0.0.py > dist/SHA256SUMS.txt
+
+      - name: Replace release assets and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release delete-asset v1.0.0 RunnerScope-Windows-v1.0.0.zip -y || true
+          gh release delete-asset v1.0.0 RunnerScope-Linux-v1.0.0.tar.gz -y || true
+          gh release delete-asset v1.0.0 SHA256SUMS.txt -y || true
+
+          gh release upload v1.0.0 \
+            dist/RunnerScope-Windows-v1.0.0.py \
+            dist/RunnerScope-Linux-v1.0.0.py \
+            dist/SHA256SUMS.txt \
+            --clobber
+
+          cat > /tmp/release-notes.md <<'EOF'
+          RunnerScope 1.0.0
+
+          Initial public release of RunnerScope, a cross-platform Python monitor for GitHub Actions self-hosted runners.
+
+          Direct downloads:
+          - RunnerScope-Windows-v1.0.0.py — Windows Python script
+          - RunnerScope-Linux-v1.0.0.py — Linux Python script
+          - runnerscope_1.0.0-1_all.deb — optional Debian/Ubuntu/Linux Mint package
+          - SHA256SUMS.txt — checksums for the direct Python scripts
+
+          The Windows and Linux .py downloads contain the same cross-platform RunnerScope code. On first launch RunnerScope asks for the user's organisation and stores those details locally rather than embedding them in the public source.
+          EOF
+
+          gh release edit v1.0.0 \
+            --title "RunnerScope 1.0.0" \
+            --notes-file /tmp/release-notes.md
