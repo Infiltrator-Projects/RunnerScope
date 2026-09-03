@@ -59,3 +59,23 @@ jobs:
             dist/RunnerScope-Linux-v1.0.0.tar.gz \
             dist/SHA256SUMS.txt \
             --clobber
+
+      - name: Remove temporary bootstrap branches
+        shell: bash
+        run: |
+          set -u
+          for branch in \
+            release-action \
+            release-bootstrap \
+            release-bootstrap-final \
+            release-bootstrap-v1.0.0 \
+            release-now \
+            release-trigger \
+            release-v1-bootstrap \
+            release-v1.0.0 \
+            temp-release-bootstrap \
+            v1-release-workflow \
+            noop-check
+          do
+            git push origin --delete "$branch" || true
+          done
