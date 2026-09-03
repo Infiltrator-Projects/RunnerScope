@@ -10,7 +10,7 @@ The Windows and Linux launchers use the same `runnerscope.py` core. Platform-spe
 - Active workflow/job discovery, including current step where GitHub exposes it
 - Self-hosted versus GitHub-hosted activity counters
 - Runtime, queue time and per-runner session history
-- Search/filter and sortable tables
+- Search/filter across monitoring tables
 - CSV export
 - Local runner health and `_diag` discovery
 - Local runner service restart with confirmation before interrupting an active job
@@ -80,7 +80,6 @@ Environment variables can override local config values when needed:
 - `GITHUB_RUNNER_REFRESH`
 - `GITHUB_RUNNER_ACTIVITY_REFRESH`
 - `GITHUB_RUNNER_REPO_LIMIT`
-- `GITHUB_RUNNER_REPO_CACHE`
 - `GITHUB_RUNNER_HISTORY`
 - `GITHUB_RUNNER_EXPECTED`
 - `GITHUB_RUNNER_LOCAL_HEALTH_REFRESH`
