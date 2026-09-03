@@ -4,7 +4,6 @@
   "runner_poll_seconds": 2.0,
   "activity_scan_seconds": 45.0,
   "repository_scan_limit": 25,
-  "repository_cache_seconds": 300.0,
   "history_entries": 300,
   "local_health_seconds": 10.0
 }
