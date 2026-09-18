@@ -228,6 +228,9 @@ typedef struct {
     char *error;
 } LocalRefreshResult;
 
+static gboolean activity_apply_idle(gpointer data);
+static gboolean local_apply_idle(gpointer data);
+
 static void raw_runner_free(gpointer data)
 {
     RawRunner *row = data;
@@ -566,7 +569,7 @@ static void apply_theme(RunnerScopeApp *app)
     g_free(css);
 }
 
-static char *run_command(char *const argv[], GError **error)
+static char *run_command(char **argv, GError **error)
 {
     gchar *stdout_text = NULL;
     gchar *stderr_text = NULL;
@@ -832,15 +835,16 @@ static void update_summary(RunnerScopeApp *app)
     }
     const double elapsed = MAX(1.0, now_monotonic() - app->session_started);
     const guint runner_count = MAX(1U, g_hash_table_size(app->sessions));
+    char *up_text = duration_text(elapsed);
     char *summary = g_strdup_printf(
         "Observed this session: self-hosted %u jobs  •  GitHub-hosted %u active  •  "
         "self-hosted share %.0f%%  •  monitor up %s",
         jobs, app->hosted_active,
         MIN(100.0, (busy * 100.0) / (elapsed * (double)runner_count)),
-        ({ char *d = duration_text(elapsed); d; }));
+        up_text);
     gtk_label_set_text(GTK_LABEL(app->summary_label), summary);
-    /* duration_text above is embedded via a GNU expression; free safely below. */
     g_free(summary);
+    g_free(up_text);
 }
 
 static gboolean runner_apply_idle(gpointer data)
@@ -907,9 +911,10 @@ static gboolean runner_apply_idle(gpointer data)
             row->runtime = duration_text(now - session->state_since);
         } else {
             row->repo = g_strdup(session->last_repo ? session->last_repo : "—");
-            row->job = g_strdup(session->last_job
-                ? ({ char *s = g_strdup_printf("Last: %s", session->last_job); s; })
-                : "—");
+            if (session->last_job)
+                row->job = g_strdup_printf("Last: %s", session->last_job);
+            else
+                row->job = g_strdup("—");
             row->runtime = g_strdup("—");
         }
         row->state_for = duration_text(now - session->state_since);
@@ -1041,7 +1046,7 @@ static gpointer activity_worker(gpointer data)
         result->error = g_strdup_printf("Activity scan error: %s",
             error ? error->message : "unable to list repositories");
         g_clear_error(&error);
-        g_idle_add((GSourceFunc)activity_apply_idle, result);
+        g_idle_add(activity_apply_idle, result);
         return NULL;
     }
 
@@ -1478,15 +1483,17 @@ static void on_settings(GtkButton *button, gpointer user_data)
     }
 }
 
-static char *csv_escape(const char *text)
+static char *csv_escape(const char *input)
 {
-    GString *out = g_string_new(""");
-    for (const char *p = text ? text : ""; *p; p++) {
-        if (*p == '"') g_string_append(out, """");
-        else g_string_append_c(out, *p);
+    GString *builder = g_string_new("\"");
+    for (const char *cursor = input ? input : ""; *cursor; cursor++) {
+        if (*cursor == '"')
+            g_string_append(builder, "\"\"");
+        else
+            g_string_append_c(builder, *cursor);
     }
-    g_string_append_c(out, '"');
-    return g_string_free(out, FALSE);
+    g_string_append_c(builder, '"');
+    return g_string_free(builder, FALSE);
 }
 
 static void export_model(GtkWindow *parent, GtkTreeModel *model)
@@ -1792,10 +1799,10 @@ static int self_test(void)
         infiltratr_theme_resolve(INFILTRATR_THEME_NIGHT, true);
     if (!day || !night || day->background_rgb == night->background_rgb)
         return 2;
-    char text[64];
-    if (!infiltratr_format_duration_compact(true, 3661U, text, sizeof(text)))
+    char duration[64];
+    if (!infiltratr_format_duration_compact(true, 3661U, duration, sizeof(duration)))
         return 3;
-    if (strstr(text, "1h") == NULL) return 4;
+    if (strstr(duration, "1h") == NULL) return 4;
     puts("RunnerScope 1.2.0 native C/Common self-test passed");
     return 0;
 }
@@ -1879,7 +1886,7 @@ int main(int argc, char **argv)
     RunnerScopeApp app;
     app_init(&app);
     GtkApplication *application = gtk_application_new(
-        RUNNERSCOPE_APP_ID, G_APPLICATION_FLAGS_NONE);
+        RUNNERSCOPE_APP_ID, G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(application, "activate", G_CALLBACK(activate), &app);
     const int status = g_application_run(G_APPLICATION(application), argc, argv);
     g_object_unref(application);
