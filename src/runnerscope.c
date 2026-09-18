@@ -644,7 +644,10 @@ static GPtrArray *split_tsv_lines(const char *text)
 
 static const char *field(char **fields, guint index)
 {
-    return fields && fields[index] ? fields[index] : "";
+    if (!fields) return "";
+    for (guint current = 0U; current < index; current++)
+        if (!fields[current]) return "";
+    return fields[index] ? fields[index] : "";
 }
 
 static gboolean text_matches_filter(RunnerScopeApp *app, const char *text)
@@ -1886,6 +1889,24 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_show_all(app->window);
 }
 
+static InfiltratrProjectInfo project_info(void)
+{
+    InfiltratrProjectInfo info = INFILTRATR_PROJECT_INFO_INIT;
+    info.program_name = "RunnerScope";
+    info.executable_name = "runnerscope";
+    info.application_id = RUNNERSCOPE_APP_ID;
+    info.version = RUNNERSCOPE_VERSION;
+    info.source_id = "Infiltrator-Projects/RunnerScope";
+    info.build_profile = "native-c-gtk";
+    info.author = "Shannon Smith";
+    info.website = "https://github.com/Infiltrator-Projects/RunnerScope";
+    info.license_id = "GPL-3.0-or-later";
+    info.comments = "Native GitHub Actions self-hosted runner monitor";
+    info.icon_name = "utilities-system-monitor";
+    info.copyright_text = "Copyright (c) 2026 Shannon Smith";
+    return info;
+}
+
 static int self_test(void)
 {
     if (strcmp(INFILTRATR_COMMON_VERSION, RUNNERSCOPE_COMMON_VERSION) != 0)
@@ -1989,6 +2010,10 @@ int main(int argc, char **argv)
     if (argc == 2 && strcmp(argv[1], "--common-version") == 0) {
         puts(INFILTRATR_COMMON_VERSION);
         return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "--project-info") == 0) {
+        InfiltratrProjectInfo info = project_info();
+        return infiltratr_project_info_print(stdout, &info) == 0 ? 0 : 1;
     }
     if (argc == 2 && strcmp(argv[1], "--self-test") == 0)
         return self_test();
