@@ -2,7 +2,7 @@ Source: runnerscope
 Section: devel
 Priority: optional
 Maintainer: Shannon Smith <noreply@github.com>
-Build-Depends: debhelper-compat (= 13), cmake, gcc, git, python3
+Build-Depends: debhelper-compat (= 13), cmake, gcc, git, python3, python3-tk
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
 Homepage: https://github.com/Infiltrator-Projects/RunnerScope

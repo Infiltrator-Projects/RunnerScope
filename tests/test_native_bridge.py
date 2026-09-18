@@ -25,7 +25,8 @@ def main() -> int:
 
     info = run(helper, "--project-info").stdout.decode("utf-8")
     assert "name=RunnerScope" in info
-    assert "version=1.1.0" in info\n    assert "common-library=infiltratr-common-1.19.2" in info
+    assert "version=1.1.0" in info
+    assert "common-library=infiltratr-common-1.19.2" in info
     assert "source-id=Infiltrator-Projects/RunnerScope" in info
 
     palette = {}
