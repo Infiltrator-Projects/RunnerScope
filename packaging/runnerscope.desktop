@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=RunnerScope
+Comment=Monitor GitHub Actions self-hosted runners
+Exec=runnerscope
+Icon=utilities-system-monitor
+Terminal=false
+Categories=Development;System;Monitor;
+StartupNotify=true

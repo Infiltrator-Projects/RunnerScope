@@ -1,0 +1,7 @@
+runnerscope (1.1.0-1) unstable; urgency=medium
+
+  * Add the native C/Infiltratr Common bridge.
+  * Use Common semantic theme roles and durable atomic file publication.
+  * Install RunnerScope as a proper native-architecture Debian package.
+
+ -- Shannon Smith <noreply@github.com>  Fri, 18 Sep 2026 17:15:00 +1000

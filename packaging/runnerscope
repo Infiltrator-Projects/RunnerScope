@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+export RUNNERSCOPE_NATIVE_HELPER="${RUNNERSCOPE_NATIVE_HELPER:-/usr/lib/runnerscope/runnerscope-native}"
+exec python3 /usr/lib/runnerscope/runnerscope.py "$@"
