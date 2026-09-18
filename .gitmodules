@@ -1,0 +1,3 @@
+[submodule "infiltratr-common"]
+	path = infiltratr-common
+	url = https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git
