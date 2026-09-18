@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define RUNNERSCOPE_VERSION "1.1.0"
+#define RUNNERSCOPE_VERSION "1.1.1"
 #define RUNNERSCOPE_COMMON_VERSION "1.19.2"
 
 static InfiltratrProjectInfo project_info(void)
@@ -25,7 +25,7 @@ static InfiltratrProjectInfo project_info(void)
     info.website = "https://github.com/Infiltrator-Projects/RunnerScope";
     info.license_id = "GPL-3.0-or-later";
     info.comments = "GitHub Actions self-hosted runner monitor native bridge";
-    info.icon_name = "utilities-system-monitor";
+    info.icon_name = "runnerscope";
     info.copyright_text = "Copyright (c) 2026 Shannon Smith";
     return info;
 }

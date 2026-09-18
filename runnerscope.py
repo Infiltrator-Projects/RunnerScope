@@ -65,7 +65,38 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 
 APP_NAME = "RunnerScope"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
+
+
+def _application_icon_path() -> Path | None:
+    """Return the packaged RunnerScope icon, with source-tree fallback."""
+    base = Path(__file__).resolve().parent
+    candidates = (
+        Path("/usr/share/icons/hicolor/128x128/apps/runnerscope.png"),
+        Path("/usr/share/pixmaps/runnerscope.png"),
+        base / "runnerscope.png",
+        base / "packaging" / "runnerscope.png",
+    )
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+def _apply_window_icon(window: tk.Misc) -> None:
+    """Apply the RunnerScope application icon to Tk/Toplevel windows."""
+    icon_path = _application_icon_path()
+    if icon_path is None:
+        return
+    try:
+        icon = tk.PhotoImage(file=str(icon_path))
+        window.wm_iconphoto(True, icon)
+        setattr(window, "_runnerscope_icon", icon)
+    except tk.TclError:
+        pass
 
 
 _NATIVE_HELPER_ENV = "RUNNERSCOPE_NATIVE_HELPER"
@@ -374,6 +405,7 @@ class ConfigDialog(tk.Toplevel):
             source.update(cfg)
         self.vars = {key: tk.StringVar(value=str(source[key])) for key, _, _ in self.FIELDS}
         self.title(title)
+        _apply_window_icon(self)
         self.resizable(False, False)
         configure_shared_theme(self)
         apply_windows_dark_titlebar(self)
@@ -565,9 +597,10 @@ class RunnerMonitor(tk.Tk):
     ACTIVE_STATUSES = {"queued", "in_progress", "waiting", "pending", "requested"}
 
     def __init__(self, config: dict[str, Any]) -> None:
-        super().__init__()
+        super().__init__(className=APP_NAME)
         self.config_data = dict(config)
         self.title(f"RunnerScope {VERSION}")
+        _apply_window_icon(self)
         self.geometry("1480x780")
         self.minsize(1050, 600)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -2192,7 +2225,8 @@ def main() -> int:
     register_optional_brand_fonts()
     cfg = load_config()
     if cfg is None or not str(cfg.get("organisation") or "").strip():
-        setup_root = tk.Tk()
+        setup_root = tk.Tk(className=APP_NAME)
+        _apply_window_icon(setup_root)
         setup_root.withdraw()
         configure_shared_theme(setup_root)
         setup = ConfigDialog(setup_root, cfg)

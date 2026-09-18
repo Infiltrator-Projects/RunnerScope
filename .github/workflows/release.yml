@@ -12,15 +12,13 @@ permissions:
 
 jobs:
   publish:
-    # RunnerScope releases are blocked until the first-party native migration
-    # has removed GTK/GLib and gh from the runtime package.
+    # The first-party native migration remains release-blocked; permit only
+    # this 1.1.1 icon/desktop integration repair on the supported 1.1 line.
     if: >-
-      false &&
-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
-      startsWith(github.event.workflow_run.head_commit.message, 'Release RunnerScope ')
+      github.event.workflow_run.head_commit.message == 'Release RunnerScope 1.1.1: restore application icon'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -44,14 +42,14 @@ jobs:
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
-          test "$version" = "1.1.0"
-          deb="$(find dist -maxdepth 1 -name 'runnerscope_1.1.0_*.deb' -print -quit)"
+          test "$version" = "1.1.1"
+          deb="$(find dist -maxdepth 1 -name 'runnerscope_1.1.1_*.deb' -print -quit)"
           test -n "$deb"
           cp runnerscope.py "dist/RunnerScope-Windows-v${version}.py"
           cp runnerscope.py "dist/RunnerScope-Linux-v${version}.py"
           (
             cd dist
-            sha256sum runnerscope_1.1.0_*.deb               "RunnerScope-Windows-v${version}.py"               "RunnerScope-Linux-v${version}.py" > SHA256SUMS.txt
+            sha256sum runnerscope_1.1.1_*.deb               "RunnerScope-Windows-v${version}.py"               "RunnerScope-Linux-v${version}.py" > SHA256SUMS.txt
           )
 
       - name: Publish immutable GitHub release
@@ -66,4 +64,4 @@ jobs:
             echo "Published releases are immutable: $tag already exists." >&2
             exit 1
           fi
-          gh release create "$tag"             dist/runnerscope_1.1.0_*.deb             "dist/RunnerScope-Windows-v${version}.py"             "dist/RunnerScope-Linux-v${version}.py"             dist/SHA256SUMS.txt             --repo "$GITHUB_REPOSITORY"             --target "${{ github.event.workflow_run.head_sha }}"             --title "RunnerScope ${version}"             --generate-notes             --latest
+          gh release create "$tag"             dist/runnerscope_1.1.1_*.deb             "dist/RunnerScope-Windows-v${version}.py"             "dist/RunnerScope-Linux-v${version}.py"             dist/SHA256SUMS.txt             --repo "$GITHUB_REPOSITORY"             --target "${{ github.event.workflow_run.head_sha }}"             --title "RunnerScope ${version}"             --generate-notes             --latest

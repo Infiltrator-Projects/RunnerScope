@@ -83,24 +83,28 @@ jobs:
         run: |
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          cp ../runnerscope_1.1.0_*.deb dist/
-          dpkg-deb --info dist/runnerscope_1.1.0_*.deb
-          dpkg-deb --contents dist/runnerscope_1.1.0_*.deb
+          cp ../runnerscope_1.1.1_*.deb dist/
+          dpkg-deb --info dist/runnerscope_1.1.1_*.deb
+          dpkg-deb --contents dist/runnerscope_1.1.1_*.deb
 
       - name: Install exact package
-        run: sudo apt-get install -y ./dist/runnerscope_1.1.0_*.deb
+        run: sudo apt-get install -y ./dist/runnerscope_1.1.1_*.deb
 
       - name: Smoke installed native and Python boundaries
         run: |
           /usr/lib/runnerscope/runnerscope-native --self-test
           runnerscope --self-test
           test -f /usr/share/applications/runnerscope.desktop
+          test -f /usr/share/icons/hicolor/scalable/apps/runnerscope.svg
+          test -f /usr/share/icons/hicolor/128x128/apps/runnerscope.png
+          grep -qx 'Icon=runnerscope' /usr/share/applications/runnerscope.desktop
+          grep -qx 'StartupWMClass=RunnerScope' /usr/share/applications/runnerscope.desktop
 
       - name: Upload qualified Debian package
         uses: actions/upload-artifact@v4
         with:
           name: runnerscope-deb
-          path: dist/runnerscope_1.1.0_*.deb
+          path: dist/runnerscope_1.1.1_*.deb
           if-no-files-found: error
 
       - name: Purge package cleanly

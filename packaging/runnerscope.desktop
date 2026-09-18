@@ -1,9 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 [Desktop Entry]
 Type=Application
 Name=RunnerScope
+GenericName=GitHub Runner Monitor
 Comment=Monitor GitHub Actions self-hosted runners
-Exec=runnerscope
-Icon=utilities-system-monitor
+TryExec=/usr/bin/runnerscope
+Exec=/usr/bin/runnerscope
+Icon=runnerscope
+StartupWMClass=RunnerScope
 Terminal=false
 Categories=Development;System;Monitor;
+Keywords=github;actions;runner;ci;workflow;monitor;
 StartupNotify=true
