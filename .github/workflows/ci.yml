@@ -44,21 +44,36 @@ jobs:
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
 
-      - name: Ensure local Tk runtime dependency
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! python3 -c 'import tkinter' >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y python3-tk
-          fi
-          python3 -c 'import tkinter; print("Tkinter available")'
-
       - name: Run native and Python contracts
         run: |
           python3 tests/test_native_bridge.py ./build/runnerscope-native
-          RUNNERSCOPE_NATIVE_HELPER="$PWD/build/runnerscope-native" python3 runnerscope.py --self-test
           python3 -m py_compile runnerscope.py runnerscope_linux.py runnerscope_windows.py
+
+  clean-package-install:
+    name: Hosted clean Debian build / install
+    needs: local-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact source and pinned Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install clean package build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake debhelper devscripts git \
+            python3 python3-tk
+
+      - name: Verify exact Common pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.2"
+          test "$(git -C infiltratr-common rev-parse HEAD)" = "44409af17c89b6ece6b4bcb2c0c133213c695c23"
 
       - name: Build Debian package
         run: |
@@ -68,35 +83,21 @@ jobs:
           dpkg-deb --info dist/runnerscope_1.1.0_*.deb
           dpkg-deb --contents dist/runnerscope_1.1.0_*.deb
 
-      - name: Upload tested Debian package
-        uses: actions/upload-artifact@v4
-        with:
-          name: runnerscope-deb
-          path: dist/runnerscope_1.1.0_*.deb
-          if-no-files-found: error
-
-  clean-package-install:
-    name: Hosted clean Debian package install
-    needs: local-linux
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - name: Download exact locally tested package
-        uses: actions/download-artifact@v4
-        with:
-          name: runnerscope-deb
-          path: dist
-
-      - name: Install package
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ./dist/runnerscope_1.1.0_*.deb
+      - name: Install exact package
+        run: sudo apt-get install -y ./dist/runnerscope_1.1.0_*.deb
 
       - name: Smoke installed native and Python boundaries
         run: |
           /usr/lib/runnerscope/runnerscope-native --self-test
           runnerscope --self-test
           test -f /usr/share/applications/runnerscope.desktop
+
+      - name: Upload qualified Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: runnerscope-deb
+          path: dist/runnerscope_1.1.0_*.deb
+          if-no-files-found: error
 
       - name: Purge package cleanly
         run: |
