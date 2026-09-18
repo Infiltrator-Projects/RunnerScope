@@ -65,6 +65,7 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 
 APP_NAME = "Runner Monitor"
+LEGACY_STORAGE_NAME = "RunnerScope"
 VERSION = "1.1.2"
 
 
@@ -186,7 +187,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 def config_dir() -> Path:
     if sys.platform == "win32":
         root = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
-        return Path(root) / APP_NAME if root else Path.home() / APP_NAME
+        return Path(root) / LEGACY_STORAGE_NAME if root else Path.home() / LEGACY_STORAGE_NAME
     root = os.environ.get("XDG_CONFIG_HOME")
     return Path(root) / "runnerscope" if root else Path.home() / ".config" / "runnerscope"
 
@@ -336,7 +337,7 @@ def enable_windows_dpi_awareness() -> None:
 
 
 def configure_shared_theme(window: tk.Misc) -> dict[str, tuple[Any, ...]]:
-    """Apply RunnerScope's graphite/silver theme to any Tk or Toplevel window."""
+    """Apply Runner Monitor's graphite/silver theme to any Tk or Toplevel window."""
     families = {str(name) for name in tkfont.families(window)}
     body_family = MB_BODY_FONT if MB_BODY_FONT in families else ("Segoe UI" if sys.platform == "win32" else "TkDefaultFont")
     brand_family = MB_BRAND_FONT if MB_BRAND_FONT in families else body_family
