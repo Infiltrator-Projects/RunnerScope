@@ -38,11 +38,15 @@ jobs:
           test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.2"
           test "$(git -C infiltratr-common rev-parse HEAD)" = "44409af17c89b6ece6b4bcb2c0c133213c695c23"
 
-      - name: Build native bridge
+      - name: Enforce first-party native boundary
+        run: ./tools/check-first-party-native.sh
+
+      - name: Build native bridge and first-party core
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
+          ./build/runnerscope-firstparty-core --self-test
 
       - name: Run native and Python contracts
         run: |

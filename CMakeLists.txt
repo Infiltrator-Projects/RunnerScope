@@ -33,3 +33,32 @@ enable_testing()
 add_test(NAME runnerscope-native-self-test COMMAND runnerscope-native --self-test)
 
 install(TARGETS runnerscope-native RUNTIME DESTINATION lib/runnerscope)
+
+
+# First-party native rewrite: Common plus libc/POSIX only.
+add_executable(runnerscope-firstparty-core
+    src/native2/main.c
+    src/native2/model.c
+    src/native2/http.c
+    src/native2/secure_config.c
+    src/native2/linux_local.c)
+target_include_directories(runnerscope-firstparty-core PRIVATE src/native2)
+target_link_libraries(runnerscope-firstparty-core PRIVATE InfiltratrCommon::Common m)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(runnerscope-firstparty-core PRIVATE
+        -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2)
+endif()
+add_executable(runnerscope-firstparty-contract
+    tests/first_party_core.c
+    src/native2/model.c
+    src/native2/http.c)
+target_include_directories(runnerscope-firstparty-contract PRIVATE src/native2)
+target_link_libraries(runnerscope-firstparty-contract PRIVATE m)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(runnerscope-firstparty-contract PRIVATE
+        -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2)
+endif()
+add_test(NAME runnerscope-firstparty-core-self-test
+         COMMAND runnerscope-firstparty-core --self-test)
+add_test(NAME runnerscope-firstparty-contract
+         COMMAND runnerscope-firstparty-contract)
