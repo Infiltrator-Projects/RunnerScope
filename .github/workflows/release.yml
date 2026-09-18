@@ -12,7 +12,11 @@ permissions:
 
 jobs:
   publish:
+    # RunnerScope releases are blocked until the first-party native migration
+    # has removed GTK/GLib and gh from the runtime package.
     if: >-
+      false &&
+
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
