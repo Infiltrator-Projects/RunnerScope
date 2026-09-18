@@ -44,6 +44,16 @@ jobs:
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
 
+      - name: Ensure local Tk runtime dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 -c 'import tkinter' >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y python3-tk
+          fi
+          python3 -c 'import tkinter; print("Tkinter available")'
+
       - name: Run native and Python contracts
         run: |
           python3 tests/test_native_bridge.py ./build/runnerscope-native
