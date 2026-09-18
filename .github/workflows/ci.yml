@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: RunnerScope CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runnerscope-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-linux:
+    name: Local Linux build / test / package
+    runs-on: [self-hosted, Linux, X64, linux-native]
+    timeout-minutes: 30
+    steps:
+      - name: Check out RunnerScope and pinned Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Verify local build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for command_name in cmake gcc make python3 dpkg-buildpackage dh; do
+            command -v "$command_name" >/dev/null 2>&1 || {
+              echo "Self-hosted runner is missing $command_name." >&2
+              exit 1
+            }
+          done
+          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.2"
+          test "$(git -C infiltratr-common rev-parse HEAD)" = "44409af17c89b6ece6b4bcb2c0c133213c695c23"
+
+      - name: Build native bridge
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Run native and Python contracts
+        run: |
+          python3 tests/test_native_bridge.py ./build/runnerscope-native
+          RUNNERSCOPE_NATIVE_HELPER="$PWD/build/runnerscope-native" python3 runnerscope.py --self-test
+          python3 -m py_compile runnerscope.py runnerscope_linux.py runnerscope_windows.py
+
+      - name: Build Debian package
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir -p dist
+          cp ../runnerscope_1.1.0-1_*.deb dist/
+          dpkg-deb --info dist/runnerscope_1.1.0-1_*.deb
+          dpkg-deb --contents dist/runnerscope_1.1.0-1_*.deb
+
+      - name: Upload tested Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: runnerscope-deb
+          path: dist/runnerscope_1.1.0-1_*.deb
+          if-no-files-found: error
+
+  clean-package-install:
+    name: Hosted clean Debian package install
+    needs: local-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download exact locally tested package
+        uses: actions/download-artifact@v4
+        with:
+          name: runnerscope-deb
+          path: dist
+
+      - name: Install package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ./dist/runnerscope_1.1.0-1_*.deb
+
+      - name: Smoke installed native and Python boundaries
+        run: |
+          /usr/lib/runnerscope/runnerscope-native --self-test
+          runnerscope --self-test
+          test -f /usr/share/applications/runnerscope.desktop
+
+      - name: Purge package cleanly
+        run: |
+          sudo apt-get purge -y runnerscope
+          ! dpkg-query -W runnerscope >/dev/null 2>&1
