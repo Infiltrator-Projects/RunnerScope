@@ -1,18 +1,21 @@
 # Changelog
 
-## 1.2.0 - 2026-09-18
-
-- Replaces the installed Python/Tk monitor with a native C11/GTK application.
-- Removes Python and Tkinter from Debian runtime dependencies.
-- Links RunnerScope directly against pinned Infiltratr Common 1.19.2.
-- Uses Common for System/Day/Night semantics, formatting, monotonic timing and durable publication.
-- Retains `gh` as the authentication/API boundary so RunnerScope stores no token.
-- Preserves live runner state, active job scanning, filtering, CSV export, history and Linux service monitoring.
-
-## 1.1.0 - 2026-09-18
-
-- Transitional hybrid release adding a C/Common bridge while retaining Python/Tk.
-
 ## 1.0.3
 
-- Restored the rich runner monitor UI/data model from the proven Windows baseline.
+- Restores the full rich runner monitor UI/data model from the proven Windows baseline.
+- Restores State for, session job count, busy percentage, resolving busy-runner state, detailed session summaries, sortable columns and clickable counters.
+- Keeps the fast 2-second runner-state poll and immediately requests job resolution when a runner becomes busy.
+- Uses the graphite/silver theme consistently in setup, settings and the main monitor.
+- Keeps one shared Windows/Linux code path while adding Linux local service health and restart support.
+- Keeps organisation, runner names and credentials out of the published source.
+
+## 1.0.0 - 2026-09-04
+
+Initial public release of RunnerScope.
+
+- Shared Windows/Linux monitoring core
+- First-run local configuration
+- GitHub CLI authentication without storing tokens
+- Self-hosted runner state and active workflow/job monitoring
+- Local Windows service and Linux systemd health/restart support
+- CSV export and session history

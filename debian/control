@@ -2,16 +2,16 @@ Source: runnerscope
 Section: devel
 Priority: optional
 Maintainer: Shannon Smith <noreply@github.com>
-Build-Depends: debhelper-compat (= 13), cmake, gcc, git, pkg-config, libgtk-3-dev
+Build-Depends: debhelper-compat (= 13), cmake, gcc, git, python3, python3-tk
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
 Homepage: https://github.com/Infiltrator-Projects/RunnerScope
 
 Package: runnerscope
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, gh
-Description: native GitHub Actions self-hosted runner desktop monitor
- RunnerScope is a native C/GTK desktop monitor for GitHub Actions runners.
- It uses pinned Infiltratr Common for theme policy, formatting, timing and
- durable state/configuration publication while GitHub CLI retains ownership
- of authentication credentials.
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3 (>= 3.10), python3-tk, gh
+Description: GitHub Actions self-hosted runner desktop monitor
+ RunnerScope shows runner connectivity, busy state, active workflow jobs,
+ session history and local runner service health. Packaged Linux builds use
+ a native C bridge linked to pinned Infiltratr Common for canonical theme
+ roles and durable atomic configuration/history publication.

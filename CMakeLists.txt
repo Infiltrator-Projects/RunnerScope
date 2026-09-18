@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(RunnerScope VERSION 1.2.0 LANGUAGES C)
+project(RunnerScope VERSION 1.1.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -18,24 +18,18 @@ if(NOT RUNNERSCOPE_COMMON_ACTUAL_VERSION STREQUAL RUNNERSCOPE_COMMON_VERSION)
     message(FATAL_ERROR "RunnerScope requires Infiltratr Common ${RUNNERSCOPE_COMMON_VERSION}; found ${RUNNERSCOPE_COMMON_ACTUAL_VERSION}")
 endif()
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
-
 set(INFILTRATR_COMMON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(INFILTRATR_COMMON_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 add_subdirectory(infiltratr-common EXCLUDE_FROM_ALL)
 
-add_executable(runnerscope src/runnerscope.c)
-target_link_libraries(runnerscope PRIVATE InfiltratrCommon::Common PkgConfig::GTK3)
+add_executable(runnerscope-native native/runnerscope_native.c)
+target_link_libraries(runnerscope-native PRIVATE InfiltratrCommon::Common)
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(runnerscope PRIVATE
-        -Wall -Wextra -Wpedantic -Werror
-        -Wshadow -Wformat=2 -Wconversion -Wsign-conversion)
+    target_compile_options(runnerscope-native PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 enable_testing()
-add_test(NAME runnerscope-self-test COMMAND runnerscope --self-test)
+add_test(NAME runnerscope-native-self-test COMMAND runnerscope-native --self-test)
 
-install(TARGETS runnerscope RUNTIME DESTINATION bin)
-install(FILES packaging/runnerscope.desktop DESTINATION share/applications)
+install(TARGETS runnerscope-native RUNTIME DESTINATION lib/runnerscope)
