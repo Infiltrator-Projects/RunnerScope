@@ -133,7 +133,7 @@ bool rs_http_parse_response(const char *response, size_t response_length,
     const char *cursor = line_end + 2;
     while (cursor < headers_end) {
         const char *end = find_bytes(
-            cursor, (size_t)(headers_end - cursor), "\r\n", 2U);
+            cursor, (size_t)((headers_end + 2) - cursor), "\r\n", 2U);
         if (!end) return false;
         const size_t length = (size_t)(end - cursor);
         if (header_name_equals(cursor, length, "Content-Length")) {
