@@ -24,6 +24,7 @@ static int model_contract(void)
     EXPECT(rs_runner_session_apply(&session, RS_RUNNER_IDLE, 120.0));
     EXPECT(fabs(rs_runner_session_busy_seconds(&session, 140.0) - 10.0) < 0.001);
     EXPECT(fabs(rs_runner_session_busy_percent(&session, 100.0, 140.0) - 25.0) < 0.001);
+    return 0;
 }
 
 static int http_contract(void)
@@ -64,6 +65,7 @@ static int http_contract(void)
         decoded, sizeof(decoded), &decoded_length));
     EXPECT(decoded_length == 9U);
     EXPECT(strcmp(decoded, "Wikipedia") == 0);
+    return 0;
 }
 
 int main(void)
