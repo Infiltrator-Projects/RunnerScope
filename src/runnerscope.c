@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <gtk/gtk.h>
+#include <glib/gstdio.h>
 
 #include <infiltratr/core.h>
 #include <infiltratr/design.h>
@@ -57,6 +58,7 @@ typedef struct {
     char *event;
     char *branch;
     char *url;
+    double started_epoch;
 } ActivityRow;
 
 typedef struct {
@@ -197,6 +199,10 @@ typedef struct {
     guint activity_timer;
     guint local_timer;
     guint tick_timer;
+    GThread *runner_thread;
+    GThread *activity_thread;
+    GThread *local_thread;
+    gint shutting_down;
     guint runners_total;
     guint runners_running;
     guint runners_idle;
@@ -500,8 +506,18 @@ static gboolean system_dark_mode(void)
 {
     GtkSettings *settings = gtk_settings_get_default();
     gboolean dark = FALSE;
+    char *theme_name = NULL;
     if (settings)
-        g_object_get(settings, "gtk-application-prefer-dark-theme", &dark, NULL);
+        g_object_get(settings,
+                     "gtk-application-prefer-dark-theme", &dark,
+                     "gtk-theme-name", &theme_name,
+                     NULL);
+    if (!dark && theme_name) {
+        char *lower = g_ascii_strdown(theme_name, -1);
+        dark = strstr(lower, "dark") != NULL;
+        g_free(lower);
+    }
+    g_free(theme_name);
     return dark;
 }
 
@@ -577,7 +593,10 @@ static char *run_command(char **argv, GError **error)
     GError *spawn_error = NULL;
     if (!g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
                       &stdout_text, &stderr_text, &status, &spawn_error)) {
-        g_propagate_error(error, spawn_error);
+        if (error)
+            g_propagate_error(error, spawn_error);
+        else
+            g_clear_error(&spawn_error);
         g_free(stdout_text); g_free(stderr_text);
         return NULL;
     }
@@ -587,8 +606,10 @@ static char *run_command(char **argv, GError **error)
             g_set_error(error, G_SPAWN_ERROR, G_SPAWN_ERROR_FAILED,
                         "%s", g_strstrip(stderr_text));
             g_clear_error(&wait_error);
-        } else {
+        } else if (error) {
             g_propagate_error(error, wait_error);
+        } else {
+            g_clear_error(&wait_error);
         }
         g_free(stdout_text); g_free(stderr_text);
         return NULL;
@@ -851,6 +872,10 @@ static gboolean runner_apply_idle(gpointer data)
 {
     RunnerRefreshResult *result = data;
     RunnerScopeApp *app = result->app;
+    if (app->runner_thread) {
+        g_thread_join(app->runner_thread);
+        app->runner_thread = NULL;
+    }
     if (result->error) {
         gtk_label_set_text(GTK_LABEL(app->status_label), result->error);
         g_free(result->error);
@@ -875,6 +900,7 @@ static gboolean runner_apply_idle(gpointer data)
             g_strlcpy(session->state, state, sizeof(session->state));
             session->state_since = now;
             session->busy_started = strcmp(state, "RUNNING") == 0 ? now : 0.0;
+            session->jobs = strcmp(state, "RUNNING") == 0 ? 1U : 0U;
             g_hash_table_insert(app->sessions, g_strdup(raw->name), session);
             add_history(app, raw->name, state, "");
         } else if (strcmp(session->state, state) != 0) {
@@ -996,9 +1022,9 @@ static gpointer runner_worker(gpointer data)
 
 static void request_runner_refresh(RunnerScopeApp *app)
 {
-    if (!app->config.organisation[0]) return;
+    if (!app->config.organisation[0] || g_atomic_int_get(&app->shutting_down)) return;
     if (!g_atomic_int_compare_and_exchange(&app->runner_refreshing, 0, 1)) return;
-    g_thread_unref(g_thread_new("runnerscope-runners", runner_worker, app));
+    app->runner_thread = g_thread_new("runnerscope-runners", runner_worker, app);
 }
 
 static double parse_iso8601_epoch(const char *text)
@@ -1011,11 +1037,8 @@ static double parse_iso8601_epoch(const char *text)
     return value;
 }
 
-static char *job_environment(RunnerScopeApp *app, const char *runner,
-                             const char *group, const char *labels)
+static char *job_environment(const char *group, const char *labels)
 {
-    if (runner && *runner && g_hash_table_contains(app->sessions, runner))
-        return g_strdup("LOCAL");
     if (labels && strstr(labels, "self-hosted"))
         return g_strdup("LOCAL");
     if (group && strcmp(group, "GitHub Actions") == 0)
@@ -1108,11 +1131,10 @@ static gpointer activity_worker(gpointer data)
                 row->status = g_ascii_strcasecmp(status, "in_progress") == 0
                     ? g_strdup("IN_PROGRESS") : g_strdup("QUEUED");
                 row->runner = g_strdup(*field(job, 3U) ? field(job, 3U) : "—");
-                row->environment = job_environment(
-                    app, field(job, 3U), field(job, 4U), field(job, 5U));
-                const double started = parse_iso8601_epoch(field(job, 6U));
-                row->runtime = started > 0.0
-                    ? duration_text(MAX(0.0, (double)time(NULL) - started))
+                row->environment = job_environment(field(job, 4U), field(job, 5U));
+                row->started_epoch = parse_iso8601_epoch(field(job, 6U));
+                row->runtime = row->started_epoch > 0.0
+                    ? duration_text(MAX(0.0, (double)time(NULL) - row->started_epoch))
                     : g_strdup("—");
                 row->event = g_strdup(field(run_fields, 2U));
                 row->branch = g_strdup(field(run_fields, 3U));
@@ -1137,6 +1159,10 @@ static gboolean activity_apply_idle(gpointer data)
 {
     ActivityRefreshResult *result = data;
     RunnerScopeApp *app = result->app;
+    if (app->activity_thread) {
+        g_thread_join(app->activity_thread);
+        app->activity_thread = NULL;
+    }
     if (result->error) {
         gtk_label_set_text(GTK_LABEL(app->status_label), result->error);
         g_free(result->error);
@@ -1157,6 +1183,7 @@ static gboolean activity_apply_idle(gpointer data)
         row->runner = g_strdup(source->runner); row->runtime = g_strdup(source->runtime);
         row->event = g_strdup(source->event); row->branch = g_strdup(source->branch);
         row->url = g_strdup(source->url);
+        row->started_epoch = source->started_epoch;
         g_ptr_array_add(app->activity_rows, row);
 
         if (strcmp(row->status, "IN_PROGRESS") == 0 && row->runner &&
@@ -1164,8 +1191,7 @@ static gboolean activity_apply_idle(gpointer data)
             JobSummary *summary = g_new0(JobSummary, 1U);
             summary->repo = g_strdup(row->repo);
             summary->job = g_strdup_printf("%s › %s", row->workflow, row->job);
-            summary->started_at = row->runtime && strcmp(row->runtime, "—") != 0
-                ? (double)time(NULL) : 0.0;
+            summary->started_at = row->started_epoch;
             g_hash_table_replace(app->job_by_runner, g_strdup(row->runner), summary);
         }
     }
@@ -1190,20 +1216,9 @@ static gboolean activity_apply_idle(gpointer data)
 
 static void request_activity_refresh(RunnerScopeApp *app)
 {
-    if (!app->config.organisation[0]) return;
+    if (!app->config.organisation[0] || g_atomic_int_get(&app->shutting_down)) return;
     if (!g_atomic_int_compare_and_exchange(&app->activity_refreshing, 0, 1)) return;
-    g_thread_unref(g_thread_new("runnerscope-activity", activity_worker, app));
-}
-
-static const char *github_state_for(RunnerScopeApp *app, const char *service_name)
-{
-    for (guint i = 0U; i < app->runner_rows->len; i++) {
-        RunnerRow *row = g_ptr_array_index(app->runner_rows, i);
-        if (row->name && service_name &&
-            g_strrstr(g_ascii_strdown(service_name, -1), g_ascii_strdown(row->name, -1)))
-            return row->state;
-    }
-    return "—";
+    app->activity_thread = g_thread_new("runnerscope-activity", activity_worker, app);
 }
 
 static gpointer local_worker(gpointer data)
@@ -1243,7 +1258,7 @@ static gpointer local_worker(gpointer data)
         LocalRow *row = g_new0(LocalRow, 1U);
         row->service_name = g_strdup(service);
         row->runner = g_strdup(service);
-        row->github_state = g_strdup(github_state_for(app, service));
+        row->github_state = g_strdup("—");
         row->service_state = g_strdup("UNKNOWN");
         row->pid = g_strdup("—"); row->start_mode = g_strdup("—");
         row->account = g_strdup("—"); row->diag = g_strdup("—");
@@ -1261,8 +1276,10 @@ static gpointer local_worker(gpointer data)
                     g_free(row->runner); row->runner = g_strdup(value);
                 } else if (strcmp(key, "ActiveState") == 0) {
                     g_free(row->service_state);
-                    row->service_state = g_strdup(strcmp(value, "active") == 0
-                        ? "RUNNING" : g_ascii_strup(value, -1));
+                    if (strcmp(value, "active") == 0)
+                        row->service_state = g_strdup("RUNNING");
+                    else
+                        row->service_state = g_ascii_strup(value, -1);
                 } else if (strcmp(key, "MainPID") == 0 && strcmp(value, "0") != 0) {
                     g_free(row->pid); row->pid = g_strdup(value);
                 } else if (strcmp(key, "UnitFileState") == 0 && *value) {
@@ -1270,7 +1287,58 @@ static gpointer local_worker(gpointer data)
                 } else if (strcmp(key, "User") == 0 && *value) {
                     g_free(row->account); row->account = g_strdup(value);
                 } else if (strcmp(key, "ExecStart") == 0 && *value) {
-                    g_free(row->path); row->path = g_strdup(value);
+                    const char *start = strstr(value, "path=");
+                    if (start) start += 5;
+                    else start = strchr(value, '/');
+                    if (start) {
+                        const char *end = start;
+                        while (*end && *end != ' ' && *end != ';' && *end != '}') end++;
+                        char *executable = g_strndup(start, (gsize)(end - start));
+                        char *root = g_path_get_dirname(executable);
+                        char *base = g_path_get_basename(root);
+                        if (g_ascii_strcasecmp(base, "bin") == 0) {
+                            char *parent = g_path_get_dirname(root);
+                            g_free(root);
+                            root = parent;
+                        }
+                        g_free(base);
+                        char *diag = g_build_filename(root, "_diag", NULL);
+                        g_free(row->path); row->path = g_strdup(root);
+                        if (g_file_test(diag, G_FILE_TEST_IS_DIR)) {
+                            g_free(row->diag_path);
+                            row->diag_path = g_strdup(diag);
+                            GDir *directory = g_dir_open(diag, 0U, NULL);
+                            const char *name = NULL;
+                            time_t newest_time = 0;
+                            char *newest_name = NULL;
+                            if (directory) {
+                                while ((name = g_dir_read_name(directory)) != NULL) {
+                                    if (!g_str_has_prefix(name, "Runner_") &&
+                                        !g_str_has_prefix(name, "Worker_"))
+                                        continue;
+                                    char *candidate = g_build_filename(diag, name, NULL);
+                                    GStatBuf stat_buffer;
+                                    if (g_stat(candidate, &stat_buffer) == 0 &&
+                                        stat_buffer.st_mtime > newest_time) {
+                                        newest_time = stat_buffer.st_mtime;
+                                        g_free(newest_name);
+                                        newest_name = g_strdup(name);
+                                    }
+                                    g_free(candidate);
+                                }
+                                g_dir_close(directory);
+                            }
+                            if (newest_name) {
+                                g_free(row->diag); row->diag = newest_name;
+                                g_free(row->diag_age);
+                                row->diag_age = duration_text(
+                                    MAX(0.0, (double)time(NULL) - (double)newest_time));
+                            }
+                        }
+                        g_free(diag); g_free(root); g_free(executable);
+                    } else {
+                        g_free(row->path); row->path = g_strdup(value);
+                    }
                 }
             }
             g_strfreev(props); g_free(show);
@@ -1287,6 +1355,10 @@ static gboolean local_apply_idle(gpointer data)
 {
     LocalRefreshResult *result = data;
     RunnerScopeApp *app = result->app;
+    if (app->local_thread) {
+        g_thread_join(app->local_thread);
+        app->local_thread = NULL;
+    }
     if (result->error) {
         gtk_label_set_text(GTK_LABEL(app->status_label), result->error);
         g_free(result->error);
@@ -1305,6 +1377,21 @@ static gboolean local_apply_idle(gpointer data)
         row->diag=g_strdup(src->diag); row->diag_age=g_strdup(src->diag_age);
         row->path=g_strdup(src->path); row->diag_path=g_strdup(src->diag_path);
         row->service_name=g_strdup(src->service_name);
+        for (guint runner_index = 0U; runner_index < app->runner_rows->len; runner_index++) {
+            RunnerRow *runner = g_ptr_array_index(app->runner_rows, runner_index);
+            char *service_lower = g_ascii_strdown(row->service_name, -1);
+            char *description_lower = g_ascii_strdown(row->runner, -1);
+            char *runner_lower = g_ascii_strdown(runner->name, -1);
+            const gboolean matches =
+                strstr(service_lower, runner_lower) != NULL ||
+                strstr(description_lower, runner_lower) != NULL;
+            g_free(service_lower); g_free(description_lower); g_free(runner_lower);
+            if (matches) {
+                g_free(row->runner); row->runner = g_strdup(runner->name);
+                g_free(row->github_state); row->github_state = g_strdup(runner->state);
+                break;
+            }
+        }
         g_ptr_array_add(app->local_rows, row);
     }
     render_local(app);
@@ -1316,8 +1403,9 @@ static gboolean local_apply_idle(gpointer data)
 
 static void request_local_refresh(RunnerScopeApp *app)
 {
+    if (g_atomic_int_get(&app->shutting_down)) return;
     if (!g_atomic_int_compare_and_exchange(&app->local_refreshing, 0, 1)) return;
-    g_thread_unref(g_thread_new("runnerscope-local", local_worker, app));
+    app->local_thread = g_thread_new("runnerscope-local", local_worker, app);
 }
 
 static gboolean runner_timer_cb(gpointer data)
@@ -1341,7 +1429,16 @@ static gboolean local_timer_cb(gpointer data)
 static gboolean tick_timer_cb(gpointer data)
 {
     RunnerScopeApp *app = data;
+    const double wall_now = (double)time(NULL);
+    for (guint i = 0U; i < app->activity_rows->len; i++) {
+        ActivityRow *row = g_ptr_array_index(app->activity_rows, i);
+        if (row->started_epoch > 0.0) {
+            g_free(row->runtime);
+            row->runtime = duration_text(MAX(0.0, wall_now - row->started_epoch));
+        }
+    }
     render_runners(app);
+    render_activity(app);
     update_summary(app);
     return G_SOURCE_CONTINUE;
 }
@@ -1858,10 +1955,23 @@ static void app_init(RunnerScopeApp *app)
 
 static void app_destroy(RunnerScopeApp *app)
 {
+    g_atomic_int_set(&app->shutting_down, 1);
     if (app->runner_timer) g_source_remove(app->runner_timer);
     if (app->activity_timer) g_source_remove(app->activity_timer);
     if (app->local_timer) g_source_remove(app->local_timer);
     if (app->tick_timer) g_source_remove(app->tick_timer);
+    if (app->runner_thread) {
+        g_thread_join(app->runner_thread);
+        app->runner_thread = NULL;
+    }
+    if (app->activity_thread) {
+        g_thread_join(app->activity_thread);
+        app->activity_thread = NULL;
+    }
+    if (app->local_thread) {
+        g_thread_join(app->local_thread);
+        app->local_thread = NULL;
+    }
     g_hash_table_unref(app->sessions);
     g_hash_table_unref(app->job_by_runner);
     g_ptr_array_unref(app->runner_rows);
