@@ -9,16 +9,9 @@ override_dh_auto_configure:
 
 override_dh_auto_build:
 	dh_auto_build --builddirectory=build-debian
-	python3 -m py_compile runnerscope.py
 
 override_dh_auto_test:
-	build-debian/runnerscope-native --self-test
-	python3 tests/test_native_bridge.py build-debian/runnerscope-native
-	RUNNERSCOPE_NATIVE_HELPER="$(CURDIR)/build-debian/runnerscope-native" python3 runnerscope.py --self-test
+	build-debian/runnerscope --self-test
 
 override_dh_auto_install:
 	DESTDIR="$(CURDIR)/debian/runnerscope" cmake --install build-debian --prefix /usr
-	install -D -m 0644 runnerscope.py "$(CURDIR)/debian/runnerscope/usr/lib/runnerscope/runnerscope.py"
-	install -D -m 0755 packaging/runnerscope "$(CURDIR)/debian/runnerscope/usr/bin/runnerscope"
-	install -D -m 0644 packaging/runnerscope.desktop "$(CURDIR)/debian/runnerscope/usr/share/applications/runnerscope.desktop"
-	install -D -m 0644 README.md "$(CURDIR)/debian/runnerscope/usr/share/doc/runnerscope/README.md"

@@ -15,88 +15,78 @@ concurrency:
 
 jobs:
   local-linux:
-    name: Local Linux build / test / package
+    name: Local native C/Common build and test
     runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 30
     steps:
-      - name: Check out RunnerScope and pinned Common
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Verify local build dependencies
+      - name: Verify exact Common and native dependencies
         shell: bash
         run: |
           set -euo pipefail
-          for command_name in cmake gcc make python3 dpkg-buildpackage dh; do
-            command -v "$command_name" >/dev/null 2>&1 || {
-              echo "Self-hosted runner is missing $command_name." >&2
-              exit 1
-            }
+          for command_name in cmake gcc make pkg-config; do
+            command -v "$command_name" >/dev/null
           done
+          pkg-config --exists gtk+-3.0
           test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.2"
           test "$(git -C infiltratr-common rev-parse HEAD)" = "44409af17c89b6ece6b4bcb2c0c133213c695c23"
 
-      - name: Build native bridge
+      - name: Build and test native RunnerScope
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
+          ./build/runnerscope --version
+          ./build/runnerscope --common-version
 
-      - name: Run native and Python contracts
-        run: |
-          python3 tests/test_native_bridge.py ./build/runnerscope-native
-          python3 -m py_compile runnerscope.py runnerscope_linux.py runnerscope_windows.py
-
-  clean-package-install:
-    name: Hosted clean Debian build / install
+  clean-package:
+    name: Hosted clean Debian build / install / purge
     needs: local-linux
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - name: Check out exact source and pinned Common
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Install clean package build dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake debhelper devscripts git \
-            python3 python3-tk
-
-      - name: Verify exact Common pin
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.2"
-          test "$(git -C infiltratr-common rev-parse HEAD)" = "44409af17c89b6ece6b4bcb2c0c133213c695c23"
+          sudo apt-get install -y build-essential cmake debhelper devscripts git pkg-config libgtk-3-dev gh
 
       - name: Build Debian package
         run: |
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          cp ../runnerscope_1.1.0_*.deb dist/
-          dpkg-deb --info dist/runnerscope_1.1.0_*.deb
-          dpkg-deb --contents dist/runnerscope_1.1.0_*.deb
+          cp ../runnerscope_1.2.0_*.deb dist/
+          dpkg-deb --info dist/runnerscope_1.2.0_*.deb
+          dpkg-deb --contents dist/runnerscope_1.2.0_*.deb
+          if dpkg-deb -f dist/runnerscope_1.2.0_*.deb Depends | grep -Eiq 'python|tkinter|python3-tk'; then
+            echo "Native package unexpectedly depends on Python/Tkinter." >&2
+            exit 1
+          fi
 
       - name: Install exact package
-        run: sudo apt-get install -y ./dist/runnerscope_1.1.0_*.deb
+        run: sudo apt-get install -y ./dist/runnerscope_1.2.0_*.deb
 
-      - name: Smoke installed native and Python boundaries
+      - name: Smoke installed native binary
         run: |
-          /usr/lib/runnerscope/runnerscope-native --self-test
+          test "$(runnerscope --version)" = "1.2.0"
+          test "$(runnerscope --common-version)" = "1.19.2"
           runnerscope --self-test
+          file /usr/bin/runnerscope | grep -q ELF
           test -f /usr/share/applications/runnerscope.desktop
 
       - name: Upload qualified Debian package
         uses: actions/upload-artifact@v4
         with:
           name: runnerscope-deb
-          path: dist/runnerscope_1.1.0_*.deb
+          path: dist/runnerscope_1.2.0_*.deb
           if-no-files-found: error
 
       - name: Purge package cleanly

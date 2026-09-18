@@ -1,7 +1,9 @@
-runnerscope (1.1.0) unstable; urgency=medium
+runnerscope (1.2.0) unstable; urgency=medium
 
-  * Add the native C/Infiltratr Common bridge.
-  * Use Common semantic theme roles and durable atomic file publication.
-  * Install RunnerScope as a proper native-architecture Debian package.
+  * Replace the installed Python/Tk application with native C/GTK.
+  * Link Infiltratr Common 1.19.2 directly into RunnerScope.
+  * Remove Python and Tkinter runtime dependencies from the Debian package.
+  * Preserve GitHub CLI as the authentication boundary.
+  * Keep runner, active-job, history and local Linux service monitoring.
 
- -- Shannon Smith <noreply@github.com>  Fri, 18 Sep 2026 17:15:00 +1000
+ -- Shannon Smith <noreply@github.com>  Fri, 18 Sep 2026 17:58:00 +1000

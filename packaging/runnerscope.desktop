@@ -1,6 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=RunnerScope
+GenericName=GitHub Runner Monitor
 Comment=Monitor GitHub Actions self-hosted runners
 Exec=runnerscope
 Icon=utilities-system-monitor
