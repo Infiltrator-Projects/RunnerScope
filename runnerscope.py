@@ -65,7 +65,81 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 
 APP_NAME = "RunnerScope"
-VERSION = "1.0.3"
+VERSION = "1.1.0"
+
+
+_NATIVE_HELPER_ENV = "RUNNERSCOPE_NATIVE_HELPER"
+
+
+def _native_helper_path() -> Path | None:
+    """Resolve the optional native/Common bridge without changing source-mode portability."""
+    candidates: list[Path] = []
+    configured = os.environ.get(_NATIVE_HELPER_ENV)
+    if configured:
+        candidates.append(Path(configured))
+    base = Path(__file__).resolve().parent
+    candidates.extend(
+        (
+            base / "runnerscope-native",
+            base / "build" / "runnerscope-native",
+            Path("/usr/lib/runnerscope/runnerscope-native"),
+        )
+    )
+    resolved = shutil.which("runnerscope-native")
+    if resolved:
+        candidates.append(Path(resolved))
+    for candidate in candidates:
+        try:
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+def _native_palette() -> dict[str, str]:
+    """Read the canonical Common Night palette when the native bridge is available."""
+    helper = _native_helper_path()
+    if helper is None:
+        return {}
+    try:
+        completed = subprocess.run(
+            [str(helper), "--palette", "night"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    palette: dict[str, str] = {}
+    for raw in completed.stdout.splitlines():
+        key, separator, value = raw.partition("=")
+        if separator and key and re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
+            palette[key] = value.lower()
+    return palette
+
+
+def _durable_write_text(path: Path, text: str) -> None:
+    """Publish UTF-8 text through Common's durable atomic writer when installed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    helper = _native_helper_path()
+    if helper is not None:
+        completed = subprocess.run(
+            [str(helper), "--atomic-write", str(path)],
+            input=text.encode("utf-8"),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=10,
+        )
+        if completed.returncode != 0:
+            detail = completed.stderr.decode("utf-8", errors="replace").strip()
+            raise OSError(detail or f"native durable write failed with status {completed.returncode}")
+        return
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "organisation": "",
@@ -118,11 +192,8 @@ def load_config() -> dict[str, Any] | None:
     return cfg
 
 def save_config(cfg: dict[str, Any]) -> None:
-    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     clean = {key: cfg.get(key, value) for key, value in DEFAULT_CONFIG.items()}
-    tmp = CONFIG_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(clean, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(CONFIG_FILE)
+    _durable_write_text(CONFIG_FILE, json.dumps(clean, indent=2) + "\n")
 
 def apply_config(cfg: dict[str, Any]) -> None:
     global ORG, REFRESH_SECONDS, ACTIVITY_SECONDS, REPO_LIMIT
@@ -136,28 +207,30 @@ def apply_config(cfg: dict[str, Any]) -> None:
     EXPECTED_RUNNERS = _env_int("GITHUB_RUNNER_EXPECTED", int(cfg.get("expected_runners", 0)), 0)
     LOCAL_HEALTH_SECONDS = _env_float("GITHUB_RUNNER_LOCAL_HEALTH_REFRESH", float(cfg.get("local_health_seconds", 10.0)), 5.0)
 
-# RunnerScope graphite/silver visual language, shared on Windows and Linux.
-MB_BG = "#050608"
-MB_PANEL = "#101318"
-MB_CARD = "#171b20"
-MB_SURFACE = "#0d1014"
-MB_BORDER = "#353a40"
-MB_TEXT = "#e8ecef"
-MB_TITLE = "#eef1f3"
-MB_MUTED = "#aeb6bd"
-MB_SUBTLE = "#899198"
-MB_BUTTON_BG = "#d7dde2"
-MB_BUTTON_FG = "#111418"
-MB_SELECT_BG = "#2b3137"
-MB_SELECT_FG = "#eef1f3"
+# Common is the source of truth for semantic colour roles when the native bridge
+# is installed. The literals are source-mode/Windows compatibility fallbacks.
+_COMMON_THEME = _native_palette()
+MB_BG = _COMMON_THEME.get("background", "#050608")
+MB_PANEL = _COMMON_THEME.get("panel", "#101318")
+MB_CARD = _COMMON_THEME.get("card", "#171b20")
+MB_SURFACE = _COMMON_THEME.get("surface", "#0d1014")
+MB_BORDER = _COMMON_THEME.get("border", "#353a40")
+MB_TEXT = _COMMON_THEME.get("text", "#e8ecef")
+MB_TITLE = _COMMON_THEME.get("title", "#eef1f3")
+MB_MUTED = _COMMON_THEME.get("muted", "#aeb6bd")
+MB_SUBTLE = _COMMON_THEME.get("subtle", "#899198")
+MB_BUTTON_BG = _COMMON_THEME.get("button_background", "#d7dde2")
+MB_BUTTON_FG = _COMMON_THEME.get("button_foreground", "#111418")
+MB_SELECT_BG = _COMMON_THEME.get("selection_background", "#2b3137")
+MB_SELECT_FG = _COMMON_THEME.get("selection_foreground", "#eef1f3")
 
-# Status colours keep operational states distinct inside the graphite/silver palette.
-STATE_RED = "#c96b6b"
-STATE_GREEN = "#63ab7c"
-STATE_BLUE = "#9aa7b2"
-STATE_AMBER = "#d19e47"
-STATE_PURPLE = "#7fa7c9"
-STATE_GREY = "#899198"
+# Operational roles map directly onto Common's semantic state colours.
+STATE_RED = _COMMON_THEME.get("fault", "#c96b6b")
+STATE_GREEN = _COMMON_THEME.get("success", "#63ab7c")
+STATE_BLUE = _COMMON_THEME.get("info", "#9aa7b2")
+STATE_AMBER = _COMMON_THEME.get("warning", "#d19e47")
+STATE_PURPLE = _COMMON_THEME.get("operation", "#7fa7c9")
+STATE_GREY = _COMMON_THEME.get("subtle", "#899198")
 
 MB_BODY_FONT = "MB Corpo S Title WEB"
 MB_BRAND_FONT = "MB Corpo A Title Cond WEB"
@@ -2002,13 +2075,10 @@ class RunnerMonitor(tk.Tk):
 
     def _save_persistent_history_locked(self) -> None:
         try:
-            STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            temp = STATE_FILE.with_suffix(".tmp")
-            temp.write_text(
-                json.dumps({"history": list(self.history)}, ensure_ascii=False, indent=2),
-                encoding="utf-8",
+            _durable_write_text(
+                STATE_FILE,
+                json.dumps({"history": list(self.history)}, ensure_ascii=False, indent=2) + "\n",
             )
-            temp.replace(STATE_FILE)
         except OSError:
             pass
 
@@ -2106,6 +2176,11 @@ def run_self_test() -> int:
         set(),
     ) == "GITHUB"
     assert DEFAULT_CONFIG["organisation"] == ""
+    helper = _native_helper_path()
+    if helper is not None:
+        palette = _native_palette()
+        for key in ("background", "text", "success", "warning", "fault"):
+            assert re.fullmatch(r"#[0-9a-f]{6}", palette[key])
     print(f"RunnerScope {VERSION} self-test passed")
     return 0
 

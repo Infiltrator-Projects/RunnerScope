@@ -8,3 +8,4 @@ state.json
 _diag/
 .DS_Store
 Thumbs.db
+build*/\ndist/\n

@@ -2,7 +2,7 @@
 
 RunnerScope is a cross-platform desktop monitor for GitHub Actions self-hosted runners. It shows runner connectivity and busy state, resolves active workflow jobs, records session history, exports CSV data, and can inspect the local runner service on Windows and Linux.
 
-The Windows and Linux launchers use the same `runnerscope.py` core. Platform-specific code is limited to local service discovery/restart and small operating-system integration details, so the two versions do not drift apart.
+RunnerScope 1.1 begins the native Infiltrator migration without discarding the proven monitor UI. The Windows and Linux launchers still share the same `runnerscope.py` application, while packaged Linux builds add a native C bridge linked to an exact Infiltratr Common release. Common owns the canonical semantic palette and durable atomic publication used for configuration/history; GitHub credentials remain owned by the authenticated `gh` CLI.
 
 ## Features
 
@@ -18,7 +18,7 @@ The Windows and Linux launchers use the same `runnerscope.py` core. Platform-spe
 - Local runner service restart with confirmation before interrupting an active job
 - First-run configuration dialog
 - No GitHub token stored by RunnerScope
-- Shared graphite/silver interface on Windows and Linux
+- Shared graphite/silver interface on Windows and Linux\n- Native C/Common bridge on packaged Linux builds\n- Common-owned semantic theme roles and durable atomic config/history writes
 
 ## Requirements
 
