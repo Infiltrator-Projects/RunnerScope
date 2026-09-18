@@ -24,9 +24,9 @@ def main() -> int:
     assert run(helper, "--common-version").stdout.strip() == b"1.19.2"
 
     info = run(helper, "--project-info").stdout.decode("utf-8")
-    assert "program_name=RunnerScope" in info
-    assert "version=1.1.0" in info
-    assert "source_id=Infiltrator-Projects/RunnerScope" in info
+    assert "name=RunnerScope" in info
+    assert "version=1.1.0" in info\n    assert "common-library=infiltratr-common-1.19.2" in info
+    assert "source-id=Infiltrator-Projects/RunnerScope" in info
 
     palette = {}
     for line in run(helper, "--palette", "night").stdout.decode("ascii").splitlines():

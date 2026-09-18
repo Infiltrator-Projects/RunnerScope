@@ -1,4 +1,4 @@
-runnerscope (1.1.0-1) unstable; urgency=medium
+runnerscope (1.1.0) unstable; urgency=medium
 
   * Add the native C/Infiltratr Common bridge.
   * Use Common semantic theme roles and durable atomic file publication.

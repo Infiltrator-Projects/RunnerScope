@@ -54,15 +54,15 @@ jobs:
         run: |
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          cp ../runnerscope_1.1.0-1_*.deb dist/
-          dpkg-deb --info dist/runnerscope_1.1.0-1_*.deb
-          dpkg-deb --contents dist/runnerscope_1.1.0-1_*.deb
+          cp ../runnerscope_1.1.0_*.deb dist/
+          dpkg-deb --info dist/runnerscope_1.1.0_*.deb
+          dpkg-deb --contents dist/runnerscope_1.1.0_*.deb
 
       - name: Upload tested Debian package
         uses: actions/upload-artifact@v4
         with:
           name: runnerscope-deb
-          path: dist/runnerscope_1.1.0-1_*.deb
+          path: dist/runnerscope_1.1.0_*.deb
           if-no-files-found: error
 
   clean-package-install:
@@ -80,7 +80,7 @@ jobs:
       - name: Install package
         run: |
           sudo apt-get update
-          sudo apt-get install -y ./dist/runnerscope_1.1.0-1_*.deb
+          sudo apt-get install -y ./dist/runnerscope_1.1.0_*.deb
 
       - name: Smoke installed native and Python boundaries
         run: |
