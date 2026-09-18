@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.2
+
+- Renamed the application from RunnerScope to Runner Monitor.
+- Kept the existing `runnerscope` package, executable, configuration paths and desktop WM class for upgrade compatibility.
+- Kept all runner monitoring, job resolution, history and local-service functions unchanged.
+
+
 ## 1.0.3
 
 - Restores the full rich runner monitor UI/data model from the proven Windows baseline.

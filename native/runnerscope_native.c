@@ -9,13 +9,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#define RUNNERSCOPE_VERSION "1.1.1"
+#define RUNNERSCOPE_VERSION "1.1.2"
 #define RUNNERSCOPE_COMMON_VERSION "1.19.2"
 
 static InfiltratrProjectInfo project_info(void)
 {
     InfiltratrProjectInfo info = INFILTRATR_PROJECT_INFO_INIT;
-    info.program_name = "RunnerScope";
+    info.program_name = "Runner Monitor";
     info.executable_name = "runnerscope-native";
     info.application_id = "net.ssmith.runnerscope";
     info.version = RUNNERSCOPE_VERSION;
@@ -111,7 +111,7 @@ static int self_test(void)
     if (!day || !night || day == night) return 3;
     if (day->background_rgb == night->background_rgb) return 4;
 
-    (void)printf("RunnerScope %s native/Common self-test passed (Common %s)\n",
+    (void)printf("Runner Monitor %s native/Common self-test passed (Common %s)\n",
                  RUNNERSCOPE_VERSION, INFILTRATR_COMMON_VERSION);
     return ferror(stdout) ? 5 : 0;
 }

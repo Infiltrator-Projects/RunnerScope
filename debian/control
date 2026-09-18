@@ -11,7 +11,7 @@ Package: runnerscope
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, python3 (>= 3.10), python3-tk, gh
 Description: GitHub Actions self-hosted runner desktop monitor
- RunnerScope shows runner connectivity, busy state, active workflow jobs,
+ Runner Monitor shows runner connectivity, busy state, active workflow jobs,
  session history and local runner service health. Packaged Linux builds use
  a native C bridge linked to pinned Infiltratr Common for canonical theme
  roles and durable atomic configuration/history publication.

@@ -1,3 +1,11 @@
+runnerscope (1.1.2) unstable; urgency=medium
+
+  * Rename the user-facing application to Runner Monitor.
+  * Preserve the runnerscope package, executable, config paths and WM class for upgrades.
+  * Keep monitoring behaviour and local runner controls unchanged.
+
+ -- Shannon Smith <noreply@github.com>  Fri, 18 Sep 2026 19:26:00 +1000
+
 runnerscope (1.1.1) unstable; urgency=medium
 
   * Install a dedicated RunnerScope application icon.

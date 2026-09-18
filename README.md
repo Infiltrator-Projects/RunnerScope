@@ -1,8 +1,8 @@
-# RunnerScope
+# Runner Monitor
 
-RunnerScope is a cross-platform desktop monitor for GitHub Actions self-hosted runners. It shows runner connectivity and busy state, resolves active workflow jobs, records session history, exports CSV data, and can inspect the local runner service on Windows and Linux.
+Runner Monitor is a cross-platform desktop monitor for GitHub Actions self-hosted runners. It shows runner connectivity and busy state, resolves active workflow jobs, records session history, exports CSV data, and can inspect the local runner service on Windows and Linux.
 
-RunnerScope 1.1 begins the native Infiltrator migration without discarding the proven monitor UI. The Windows and Linux launchers still share the same `runnerscope.py` application, while packaged Linux builds add a native C bridge linked to an exact Infiltratr Common release. Common owns the canonical semantic palette and durable atomic publication used for configuration/history; GitHub credentials remain owned by the authenticated `gh` CLI.
+Runner Monitor 1.1 begins the native Infiltrator migration without discarding the proven monitor UI. The Windows and Linux launchers still share the same `runnerscope.py` application, while packaged Linux builds add a native C bridge linked to an exact Infiltratr Common release. Common owns the canonical semantic palette and durable atomic publication used for configuration/history; GitHub credentials remain owned by the authenticated `gh` CLI.
 
 ## Features
 
@@ -17,7 +17,7 @@ RunnerScope 1.1 begins the native Infiltrator migration without discarding the p
 - Local runner health and `_diag` discovery
 - Local runner service restart with confirmation before interrupting an active job
 - First-run configuration dialog
-- No GitHub token stored by RunnerScope
+- No GitHub token stored by Runner Monitor
 - Shared graphite/silver interface on Windows and Linux\n- Native C/Common bridge on packaged Linux builds\n- Common-owned semantic theme roles and durable atomic config/history writes
 
 ## Requirements
@@ -35,7 +35,7 @@ RunnerScope 1.1 begins the native Infiltrator migration without discarding the p
 - `systemd` for local runner service health/restart features
 - `pkexec` or `sudo` if you want to restart a local runner from the GUI
 
-Authenticate GitHub CLI before starting RunnerScope:
+Authenticate GitHub CLI before starting Runner Monitor:
 
 ```text
 gh auth login
@@ -65,7 +65,7 @@ python runnerscope.py
 
 ## First-run configuration
 
-On first launch RunnerScope asks for the GitHub organisation and monitoring preferences, then writes a local configuration file. It does not put the user's organisation, runner names, machine paths, or authentication credentials into the source tree.
+On first launch Runner Monitor asks for the GitHub organisation and monitoring preferences, then writes a local configuration file. It does not put the user's organisation, runner names, machine paths, or authentication credentials into the source tree.
 
 Default config locations:
 
@@ -74,7 +74,7 @@ Default config locations:
 
 A safe `config.example.json` is included only as a reference. `config.json` and `state.json` are explicitly ignored by Git.
 
-The configuration can be changed later with the **Settings** button. Restart RunnerScope after changing polling settings.
+The configuration can be changed later with the **Settings** button. Restart Runner Monitor after changing polling settings.
 
 Environment variables can override local config values when needed:
 
@@ -94,7 +94,7 @@ python runnerscope.py --self-test
 
 ## Privacy and credentials
 
-RunnerScope shells out to the installed GitHub CLI. Authentication remains in GitHub CLI's own credential storage. RunnerScope does not ask for, store, or publish a GitHub token.
+Runner Monitor shells out to the installed GitHub CLI. Authentication remains in GitHub CLI's own credential storage. Runner Monitor does not ask for, store, or publish a GitHub token.
 
 The local config contains monitoring preferences and the organisation name only. It is stored outside the repository by default.
 
@@ -102,6 +102,6 @@ The local config contains monitoring preferences and the organisation name only.
 
 Copyright © 2026 Shannon Smith.
 
-RunnerScope is free software licensed under the GNU General Public License v3.0 or later. See `LICENSE`.
+Runner Monitor is free software licensed under the GNU General Public License v3.0 or later. See `LICENSE`.
 
-GitHub and GitHub Actions are trademarks of GitHub, Inc. RunnerScope is an independent project and is not affiliated with or endorsed by GitHub, Inc.
+GitHub and GitHub Actions are trademarks of GitHub, Inc. Runner Monitor is an independent project and is not affiliated with or endorsed by GitHub, Inc.

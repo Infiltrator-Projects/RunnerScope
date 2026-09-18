@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# RunnerScope - cross-platform GitHub Actions runner monitor
+# Runner Monitor - cross-platform GitHub Actions runner monitor
 # Copyright (C) 2026 Shannon Smith
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""RunnerScope - cross-platform desktop monitor for GitHub Actions self-hosted runners.
+"""Runner Monitor - cross-platform desktop monitor for GitHub Actions self-hosted runners.
 
-RunnerScope keeps the fast runner polling, rich activity resolution, session history,
+Runner Monitor keeps the fast runner polling, rich activity resolution, session history,
 local service health, and graphite/silver interface of the original monitor while
 storing user-specific organisation and runner settings outside the source tree.
 
@@ -64,12 +64,12 @@ def _env_int(name: str, default: int, minimum: int) -> int:
         return default
 
 
-APP_NAME = "RunnerScope"
-VERSION = "1.1.1"
+APP_NAME = "Runner Monitor"
+VERSION = "1.1.2"
 
 
 def _application_icon_path() -> Path | None:
-    """Return the packaged RunnerScope icon, with source-tree fallback."""
+    """Return the packaged Runner Monitor icon, with source-tree fallback."""
     base = Path(__file__).resolve().parent
     candidates = (
         Path("/usr/share/icons/hicolor/128x128/apps/runnerscope.png"),
@@ -87,7 +87,7 @@ def _application_icon_path() -> Path | None:
 
 
 def _apply_window_icon(window: tk.Misc) -> None:
-    """Apply the RunnerScope application icon to Tk/Toplevel windows."""
+    """Apply the Runner Monitor application icon to Tk/Toplevel windows."""
     icon_path = _application_icon_path()
     if icon_path is None:
         return
@@ -397,7 +397,7 @@ class ConfigDialog(tk.Toplevel):
         ("local_health_seconds", "Local service health", "How often local runner services are checked."),
     )
 
-    def __init__(self, parent: tk.Misc, cfg: dict[str, Any] | None = None, title: str = "RunnerScope setup") -> None:
+    def __init__(self, parent: tk.Misc, cfg: dict[str, Any] | None = None, title: str = "Runner Monitor setup") -> None:
         super().__init__(parent)
         self.result: dict[str, Any] | None = None
         source = dict(DEFAULT_CONFIG)
@@ -416,7 +416,7 @@ class ConfigDialog(tk.Toplevel):
 
         outer = ttk.Frame(self, padding=18)
         outer.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(outer, text="RunnerScope", style="Title.TLabel").grid(row=0, column=0, columnspan=3, sticky="w")
+        ttk.Label(outer, text="Runner Monitor", style="Title.TLabel").grid(row=0, column=0, columnspan=3, sticky="w")
         ttk.Label(outer, text="Connect this monitor to your GitHub Actions runners.", style="Meta.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(1, 14))
 
         first_entry = None
@@ -428,7 +428,7 @@ class ConfigDialog(tk.Toplevel):
             if first_entry is None:
                 first_entry = entry
 
-        ttk.Label(outer, text="Authentication stays in GitHub CLI (gh auth login); RunnerScope never stores your token.", style="Meta.TLabel").grid(row=8, column=0, columnspan=3, sticky="w", pady=(12, 4))
+        ttk.Label(outer, text="Authentication stays in GitHub CLI (gh auth login); Runner Monitor never stores your token.", style="Meta.TLabel").grid(row=8, column=0, columnspan=3, sticky="w", pady=(12, 4))
         self.test_status = tk.StringVar(value="")
         ttk.Label(outer, textvariable=self.test_status, style="Meta.TLabel").grid(row=9, column=0, columnspan=2, sticky="w")
         buttons = ttk.Frame(outer)
@@ -597,9 +597,9 @@ class RunnerMonitor(tk.Tk):
     ACTIVE_STATUSES = {"queued", "in_progress", "waiting", "pending", "requested"}
 
     def __init__(self, config: dict[str, Any]) -> None:
-        super().__init__(className=APP_NAME)
+        super().__init__(className="RunnerScope")
         self.config_data = dict(config)
-        self.title(f"RunnerScope {VERSION}")
+        self.title(f"Runner Monitor {VERSION}")
         _apply_window_icon(self)
         self.geometry("1480x780")
         self.minsize(1050, 600)
@@ -798,7 +798,7 @@ class RunnerMonitor(tk.Tk):
         self.bind("<Control-comma>", lambda _e: self._open_settings())
 
     def _open_settings(self) -> None:
-        dialog = ConfigDialog(self, self.config_data, title="RunnerScope settings")
+        dialog = ConfigDialog(self, self.config_data, title="Runner Monitor settings")
         self.wait_window(dialog)
         if not dialog.result:
             return
@@ -2214,7 +2214,7 @@ def run_self_test() -> int:
         palette = _native_palette()
         for key in ("background", "text", "success", "warning", "fault"):
             assert re.fullmatch(r"#[0-9a-f]{6}", palette[key])
-    print(f"RunnerScope {VERSION} self-test passed")
+    print(f"Runner Monitor {VERSION} self-test passed")
     return 0
 
 
@@ -2225,7 +2225,7 @@ def main() -> int:
     register_optional_brand_fonts()
     cfg = load_config()
     if cfg is None or not str(cfg.get("organisation") or "").strip():
-        setup_root = tk.Tk(className=APP_NAME)
+        setup_root = tk.Tk(className="RunnerScope")
         _apply_window_icon(setup_root)
         setup_root.withdraw()
         configure_shared_theme(setup_root)
@@ -2242,7 +2242,7 @@ def main() -> int:
         app.mainloop()
         return 0
     except tk.TclError as exc:
-        message = f"Unable to start RunnerScope: {exc}"
+        message = f"Unable to start Runner Monitor: {exc}"
         try:
             messagebox.showerror(APP_NAME, message)
         except tk.TclError:

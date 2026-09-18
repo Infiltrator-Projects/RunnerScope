@@ -24,7 +24,7 @@ def main() -> int:
     assert run(helper, "--common-version").stdout.strip() == b"1.19.2"
 
     info = run(helper, "--project-info").stdout.decode("utf-8")
-    assert "name=RunnerScope" in info
+    assert "name=Runner Monitor" in info
     assert "version=1.1.1" in info
     assert "common-library=infiltratr-common-1.19.2" in info
     assert "source-id=Infiltrator-Projects/RunnerScope" in info
@@ -49,7 +49,7 @@ def main() -> int:
         assert path.read_bytes() == second
         assert stat.S_IMODE(path.stat().st_mode) == 0o640
 
-    print("RunnerScope native bridge contract tests passed")
+    print("Runner Monitor native bridge contract tests passed")
     return 0
 
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: RunnerScope CI
+name: Runner Monitor CI
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 30
     steps:
-      - name: Check out RunnerScope and pinned Common
+      - name: Check out Runner Monitor and pinned Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -83,12 +83,12 @@ jobs:
         run: |
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          cp ../runnerscope_1.1.1_*.deb dist/
-          dpkg-deb --info dist/runnerscope_1.1.1_*.deb
-          dpkg-deb --contents dist/runnerscope_1.1.1_*.deb
+          cp ../runnerscope_1.1.2_*.deb dist/
+          dpkg-deb --info dist/runnerscope_1.1.2_*.deb
+          dpkg-deb --contents dist/runnerscope_1.1.2_*.deb
 
       - name: Install exact package
-        run: sudo apt-get install -y ./dist/runnerscope_1.1.1_*.deb
+        run: sudo apt-get install -y ./dist/runnerscope_1.1.2_*.deb
 
       - name: Smoke installed native and Python boundaries
         run: |
@@ -104,7 +104,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runnerscope-deb
-          path: dist/runnerscope_1.1.1_*.deb
+          path: dist/runnerscope_1.1.2_*.deb
           if-no-files-found: error
 
       - name: Purge package cleanly

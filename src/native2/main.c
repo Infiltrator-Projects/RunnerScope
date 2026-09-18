@@ -29,14 +29,14 @@ static int self_test(void)
                            "api.github.com",
                            "/orgs/Infiltrator-Projects/actions/runners",
                            "token-example",
-                           "RunnerScope/1.2.0-dev",
+                           "RunnerMonitor/1.2.0-dev",
                            &request_length))
         return 4;
     if (request_length == 0U ||
         strstr(request, "Authorization: Bearer token-example") == NULL)
         return 5;
 
-    puts("RunnerScope first-party native core self-test passed");
+    puts("Runner Monitor first-party native core self-test passed");
     return 0;
 }
 
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
     RsLocalRunnerUnit units[64];
     const size_t count = rs_linux_discover_runner_units(
         units, sizeof(units) / sizeof(units[0]));
-    printf("RunnerScope native-next %s\n", RUNNERSCOPE_NATIVE_NEXT_VERSION);
+    printf("Runner Monitor native-next %s\n", RUNNERSCOPE_NATIVE_NEXT_VERSION);
     printf("Common %s\n", INFILTRATR_COMMON_VERSION);
     printf("Local runner units: %zu\n", count);
     for (size_t i = 0U; i < count; ++i)

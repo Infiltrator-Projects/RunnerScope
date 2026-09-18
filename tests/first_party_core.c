@@ -33,14 +33,14 @@ static int http_contract(void)
     size_t written = 0U;
     EXPECT(rs_http_build_get(request, sizeof(request),
                              "api.github.com", "/rate_limit",
-                             "abc123", "RunnerScope/test", &written));
+                             "abc123", "RunnerMonitor/test", &written));
     EXPECT(written == strlen(request));
     EXPECT(strstr(request, "GET /rate_limit HTTP/1.1\r\n") != NULL);
     EXPECT(strstr(request, "Host: api.github.com\r\n") != NULL);
     EXPECT(strstr(request, "Authorization: Bearer abc123\r\n") != NULL);
     EXPECT(!rs_http_build_get(request, sizeof(request),
                               "api.github.com\r\nInjected: yes", "/",
-                              NULL, "RunnerScope/test", NULL));
+                              NULL, "RunnerMonitor/test", NULL));
 
     const char response[] =
         "HTTP/1.1 200 OK\r\n"
@@ -72,6 +72,6 @@ int main(void)
 {
     if (model_contract() != 0) return 1;
     if (http_contract() != 0) return 1;
-    puts("RunnerScope first-party core contracts passed");
+    puts("Runner Monitor first-party core contracts passed");
     return 0;
 }
