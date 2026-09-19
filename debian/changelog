@@ -1,3 +1,11 @@
+infiltrator-runner-monitor (1.1.3) unstable; urgency=medium
+
+  * Move the Debian/APT package identity into the protected infiltrator- namespace.
+  * Preserve the Runner Monitor name, runnerscope executable, desktop identity and configuration paths.
+  * Replace and migrate existing runnerscope package installations through the central repository transition package.
+
+ -- Shannon Smith <noreply@github.com>  Sat, 19 Sep 2026 12:00:00 +1000
+
 runnerscope (1.1.2) unstable; urgency=medium
 
   * Rename the user-facing application to Runner Monitor.
