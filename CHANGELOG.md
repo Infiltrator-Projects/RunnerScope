@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.6
+
+- Unified Follow system, Day and Night with the Common appearance contract.
+- Day uses the white palette; Night uses the MB graphite/black palette with #00ADEF.
+- Repaired dynamic theme refresh and tree recolouring so live OS theme changes cannot recurse or crash the UI.
+
 ## 1.1.2
 
 - Renamed the application from RunnerScope to Runner Monitor.
