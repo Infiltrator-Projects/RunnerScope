@@ -10,7 +10,7 @@ The user-facing product remains **Runner Monitor**. The Debian/APT package ident
 
 ## Engineering ethos
 
-What does a runner monitor need to own so that a change in a helper tool does not redefine what the application means? Runner Monitor treats GitHub's runner and workflow state as input, while session history, interpretation, presentation and local-runner behaviour remain project-owned.
+What does a runner monitor built from first principles need to own so that a change in a helper tool does not redefine what the application means? Runner Monitor treats GitHub's runner and workflow state as input, while session history, interpretation, presentation and local-runner behaviour remain project-owned.
 
 The current application is partway through a native migration, so Python, the authenticated GitHub CLI and platform services are still practical adapters. They are not intended to become semantic sources of truth. Critical behaviour is moved into first-party native code when doing so makes the contract clearer or more dependable, while proven parts are not rewritten merely for fashion.
 
