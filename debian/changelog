@@ -1,3 +1,11 @@
+infiltrator-runner-monitor (1.1.6) unstable; urgency=medium
+
+  * Make Follow system resolve to the exact Common Day or Night palette and refresh when the host appearance changes.
+  * Keep Day white and Night on the MB graphite/black palette with the canonical #00ADEF accent.
+  * Repair Runner Monitor theme refresh so live tree recolouring cannot recurse and the theme helper accepts the selected mode.
+
+ -- Shannon Smith <noreply@github.com>  Sat, 19 Sep 2026 23:45:00 +1000
+
 infiltrator-runner-monitor (1.1.4) unstable; urgency=medium
 
   * Install the Runner Monitor artwork under the exact Debian package-name alias used by Linux Mint Software Manager.
