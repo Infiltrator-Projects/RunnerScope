@@ -66,7 +66,7 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 APP_NAME = "Runner Monitor"
 LEGACY_STORAGE_NAME = "RunnerScope"
-VERSION = "1.1.5"
+VERSION = "1.1.6"
 
 
 def _application_icon_path() -> Path | None:
@@ -417,8 +417,9 @@ def enable_windows_dpi_awareness() -> None:
             pass
 
 
-def configure_shared_theme(window: tk.Misc) -> dict[str, tuple[Any, ...]]:
-    """Apply Runner Monitor's graphite/silver theme to any Tk or Toplevel window."""
+def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str, tuple[Any, ...]]:
+    """Apply the selected Common Day/Night palette to any Tk or Toplevel window."""
+    _activate_palette(mode)
     families = {str(name) for name in tkfont.families(window)}
     body_family = MB_BODY_FONT if MB_BODY_FONT in families else ("Segoe UI" if sys.platform == "win32" else "TkDefaultFont")
     brand_family = MB_BRAND_FONT if MB_BRAND_FONT in families else body_family
@@ -454,12 +455,12 @@ def configure_shared_theme(window: tk.Misc) -> dict[str, tuple[Any, ...]]:
     style.configure("CounterCard.TFrame", background=MB_CARD, bordercolor=MB_BORDER, relief="solid", borderwidth=1)
     style.configure("Detail.TLabel", foreground=MB_MUTED, font=fonts["small"])
     style.configure("TButton", background=MB_BUTTON_BG, foreground=MB_BUTTON_FG, bordercolor=MB_BORDER, font=fonts["body_bold"], padding=(12, 6), relief="flat")
-    style.map("TButton", background=[("disabled", MB_PANEL), ("pressed", "#b9c0c6"), ("active", "#eef1f3")], foreground=[("disabled", MB_SUBTLE), ("pressed", MB_BUTTON_FG), ("active", MB_BUTTON_FG)])
+    style.map("TButton", background=[("disabled", MB_PANEL), ("pressed", MB_SELECT_BG), ("active", MB_CARD)], foreground=[("disabled", MB_SUBTLE), ("pressed", MB_SELECT_FG), ("active", MB_TEXT)])
     style.configure("TEntry", fieldbackground=MB_SURFACE, foreground=MB_TEXT, insertcolor=MB_TEXT, bordercolor=MB_BORDER, lightcolor=MB_BORDER, darkcolor=MB_BORDER, padding=(7, 5))
     style.map("TEntry", fieldbackground=[("focus", MB_PANEL), ("disabled", MB_PANEL)], foreground=[("disabled", MB_SUBTLE)], bordercolor=[("focus", MB_MUTED)])
     style.configure("TNotebook", background=MB_BG, bordercolor=MB_BORDER, tabmargins=(0, 5, 0, 0))
     style.configure("TNotebook.Tab", background=MB_PANEL, foreground=MB_MUTED, bordercolor=MB_BORDER, font=fonts["body_bold"], padding=(16, 8))
-    style.map("TNotebook.Tab", background=[("selected", MB_CARD), ("active", "#14181d")], foreground=[("selected", MB_TITLE), ("active", MB_TEXT)])
+    style.map("TNotebook.Tab", background=[("selected", MB_CARD), ("active", MB_SURFACE)], foreground=[("selected", MB_TITLE), ("active", MB_TEXT)])
     style.configure("Treeview", background=MB_SURFACE, fieldbackground=MB_SURFACE, foreground=MB_TEXT, bordercolor=MB_BORDER, rowheight=28, font=fonts["small"])
     style.map("Treeview", background=[("selected", MB_SELECT_BG)], foreground=[("selected", MB_SELECT_FG)])
     style.configure("Treeview.Heading", background=MB_PANEL, foreground=MB_TITLE, bordercolor=MB_BORDER, font=fonts["small_bold"], padding=(7, 7), relief="flat")
@@ -766,7 +767,16 @@ class RunnerMonitor(tk.Tk):
         apply_windows_dark_titlebar(self, _effective_theme_mode(THEME_MODE) == "night")
 
     def _apply_tree_theme(self, tree: ttk.Treeview) -> None:
-        self._apply_tree_theme(tree)
+        tree.tag_configure("RUNNING", foreground=STATE_GREEN, font=self.font_small_bold)
+        tree.tag_configure("IDLE", foreground=STATE_BLUE)
+        tree.tag_configure("OFFLINE", foreground=STATE_RED, font=self.font_small_bold)
+        tree.tag_configure("LOCAL", foreground=STATE_GREEN, font=self.font_small_bold)
+        tree.tag_configure("GITHUB", foreground=STATE_PURPLE)
+        tree.tag_configure("QUEUED", foreground=STATE_AMBER)
+        tree.tag_configure("UNKNOWN", foreground=STATE_GREY)
+        tree.tag_configure("SUCCESS", foreground=STATE_GREEN, font=self.font_small_bold)
+        tree.tag_configure("FAILURE", foreground=STATE_RED, font=self.font_small_bold)
+        tree.tag_configure("CANCELLED", foreground=STATE_AMBER)
 
     def _refresh_theme(self) -> None:
         self._configure_style()
