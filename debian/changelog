@@ -1,3 +1,11 @@
+infiltrator-runner-monitor (1.1.4) unstable; urgency=medium
+
+  * Install the Runner Monitor artwork under the exact Debian package-name alias used by Linux Mint Software Manager.
+  * Keep the icon owned by the Runner Monitor package; no shared icon helper package is required.
+  * Verify the installed package-name icon alias during clean-package CI.
+
+ -- Shannon Smith <noreply@github.com>  Sat, 19 Sep 2026 19:16:00 +1000
+
 infiltrator-runner-monitor (1.1.3) unstable; urgency=medium
 
   * Move the Debian/APT package identity into the protected infiltrator- namespace.

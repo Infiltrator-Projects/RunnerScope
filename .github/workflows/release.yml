@@ -13,12 +13,12 @@ permissions:
 jobs:
   publish:
     # The first-party native migration remains release-blocked; permit only
-    # this 1.1.3 application-name migration on the supported 1.1 line.
+    # this 1.1.4 application-name migration on the supported 1.1 line.
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
-      startsWith(github.event.workflow_run.head_commit.message, 'Release 1.1.3:')
+      startsWith(github.event.workflow_run.head_commit.message, 'Release 1.1.4:')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -42,14 +42,14 @@ jobs:
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
-          test "$version" = "1.1.3"
-          deb="$(find dist -maxdepth 1 -name 'runnerscope_1.1.3_*.deb' -print -quit)"
+          test "$version" = "1.1.4"
+          deb="$(find dist -maxdepth 1 -name 'runnerscope_1.1.4_*.deb' -print -quit)"
           test -n "$deb"
           cp runnerscope.py "dist/Runner-Monitor-Windows-v${version}.py"
           cp runnerscope.py "dist/Runner-Monitor-Linux-v${version}.py"
           (
             cd dist
-            sha256sum runnerscope_1.1.3_*.deb               "Runner-Monitor-Windows-v${version}.py"               "Runner-Monitor-Linux-v${version}.py" > SHA256SUMS.txt
+            sha256sum runnerscope_1.1.4_*.deb               "Runner-Monitor-Windows-v${version}.py"               "Runner-Monitor-Linux-v${version}.py" > SHA256SUMS.txt
           )
 
       - name: Publish immutable GitHub release
@@ -64,4 +64,4 @@ jobs:
             echo "Published releases are immutable: $tag already exists." >&2
             exit 1
           fi
-          gh release create "$tag"             dist/runnerscope_1.1.3_*.deb             "dist/Runner-Monitor-Windows-v${version}.py"             "dist/Runner-Monitor-Linux-v${version}.py"             dist/SHA256SUMS.txt             --repo "$GITHUB_REPOSITORY"             --target "${{ github.event.workflow_run.head_sha }}"             --title "Runner Monitor ${version}"             --generate-notes             --latest
+          gh release create "$tag"             dist/runnerscope_1.1.4_*.deb             "dist/Runner-Monitor-Windows-v${version}.py"             "dist/Runner-Monitor-Linux-v${version}.py"             dist/SHA256SUMS.txt             --repo "$GITHUB_REPOSITORY"             --target "${{ github.event.workflow_run.head_sha }}"             --title "Runner Monitor ${version}"             --generate-notes             --latest

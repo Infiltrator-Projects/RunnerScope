@@ -83,12 +83,12 @@ jobs:
         run: |
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          cp ../infiltrator-runner-monitor_1.1.3_*.deb dist/runnerscope_1.1.3_amd64.deb
-          dpkg-deb --info dist/runnerscope_1.1.3_*.deb
-          dpkg-deb --contents dist/runnerscope_1.1.3_*.deb
+          cp ../infiltrator-runner-monitor_1.1.4_*.deb dist/runnerscope_1.1.4_amd64.deb
+          dpkg-deb --info dist/runnerscope_1.1.4_*.deb
+          dpkg-deb --contents dist/runnerscope_1.1.4_*.deb
 
       - name: Install exact package
-        run: sudo apt-get install -y ./dist/runnerscope_1.1.3_*.deb
+        run: sudo apt-get install -y ./dist/runnerscope_1.1.4_*.deb
 
       - name: Smoke installed native and Python boundaries
         run: |
@@ -97,6 +97,7 @@ jobs:
           test -f /usr/share/applications/runnerscope.desktop
           test -f /usr/share/icons/hicolor/scalable/apps/runnerscope.svg
           test -f /usr/share/icons/hicolor/128x128/apps/runnerscope.png
+          test -f /usr/share/app-install/icons/infiltrator-runner-monitor.png
           grep -qx 'Icon=runnerscope' /usr/share/applications/runnerscope.desktop
           grep -qx 'StartupWMClass=RunnerScope' /usr/share/applications/runnerscope.desktop
 
@@ -104,7 +105,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runnerscope-deb
-          path: dist/runnerscope_1.1.3_*.deb
+          path: dist/runnerscope_1.1.4_*.deb
           if-no-files-found: error
 
       - name: Purge package cleanly

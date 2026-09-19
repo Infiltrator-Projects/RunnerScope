@@ -23,4 +23,5 @@ override_dh_auto_install:
 	install -D -m 0644 packaging/runnerscope.desktop "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/applications/runnerscope.desktop"
 	install -D -m 0644 packaging/runnerscope.svg "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/icons/hicolor/scalable/apps/runnerscope.svg"
 	install -D -m 0644 packaging/runnerscope.png "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/icons/hicolor/128x128/apps/runnerscope.png"
+	install -D -m 0644 packaging/runnerscope.png "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/app-install/icons/infiltrator-runner-monitor.png"
 	install -D -m 0644 README.md "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/doc/infiltrator-runner-monitor/README.md"
