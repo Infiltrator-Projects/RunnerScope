@@ -35,8 +35,8 @@ jobs:
               exit 1
             }
           done
-          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.2"
-          test "$(git -C infiltratr-common rev-parse HEAD)" = "44409af17c89b6ece6b4bcb2c0c133213c695c23"
+          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.6"
+          test "$(git -C infiltratr-common rev-parse HEAD)" = "a0e26896cc2a5674a138b29f009a7b30f0d636c6"
 
       - name: Enforce first-party native boundary
         run: ./tools/check-first-party-native.sh
@@ -76,19 +76,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.2"
-          test "$(git -C infiltratr-common rev-parse HEAD)" = "44409af17c89b6ece6b4bcb2c0c133213c695c23"
+          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.6"
+          test "$(git -C infiltratr-common rev-parse HEAD)" = "a0e26896cc2a5674a138b29f009a7b30f0d636c6"
 
       - name: Build Debian package
         run: |
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          cp ../infiltrator-runner-monitor_1.1.4_*.deb dist/runnerscope_1.1.4_amd64.deb
-          dpkg-deb --info dist/runnerscope_1.1.4_*.deb
-          dpkg-deb --contents dist/runnerscope_1.1.4_*.deb
+          cp ../infiltrator-runner-monitor_1.1.6_*.deb dist/runnerscope_1.1.6_amd64.deb
+          dpkg-deb --info dist/runnerscope_1.1.6_*.deb
+          dpkg-deb --contents dist/runnerscope_1.1.6_*.deb
 
       - name: Install exact package
-        run: sudo apt-get install -y ./dist/runnerscope_1.1.4_*.deb
+        run: sudo apt-get install -y ./dist/runnerscope_1.1.6_*.deb
 
       - name: Smoke installed native and Python boundaries
         run: |
@@ -105,7 +105,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runnerscope-deb
-          path: dist/runnerscope_1.1.4_*.deb
+          path: dist/runnerscope_1.1.6_*.deb
           if-no-files-found: error
 
       - name: Purge package cleanly
