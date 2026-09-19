@@ -17,10 +17,10 @@ override_dh_auto_test:
 	RUNNERSCOPE_NATIVE_HELPER="$(CURDIR)/build-debian/runnerscope-native" python3 runnerscope.py --self-test
 
 override_dh_auto_install:
-	DESTDIR="$(CURDIR)/debian/runnerscope" cmake --install build-debian --prefix /usr
-	install -D -m 0644 runnerscope.py "$(CURDIR)/debian/runnerscope/usr/lib/runnerscope/runnerscope.py"
-	install -D -m 0755 packaging/runnerscope "$(CURDIR)/debian/runnerscope/usr/bin/runnerscope"
-	install -D -m 0644 packaging/runnerscope.desktop "$(CURDIR)/debian/runnerscope/usr/share/applications/runnerscope.desktop"
-	install -D -m 0644 packaging/runnerscope.svg "$(CURDIR)/debian/runnerscope/usr/share/icons/hicolor/scalable/apps/runnerscope.svg"
-	install -D -m 0644 packaging/runnerscope.png "$(CURDIR)/debian/runnerscope/usr/share/icons/hicolor/128x128/apps/runnerscope.png"
-	install -D -m 0644 README.md "$(CURDIR)/debian/runnerscope/usr/share/doc/runnerscope/README.md"
+	DESTDIR="$(CURDIR)/debian/infiltrator-runner-monitor" cmake --install build-debian --prefix /usr
+	install -D -m 0644 runnerscope.py "$(CURDIR)/debian/infiltrator-runner-monitor/usr/lib/runnerscope/runnerscope.py"
+	install -D -m 0755 packaging/runnerscope "$(CURDIR)/debian/infiltrator-runner-monitor/usr/bin/runnerscope"
+	install -D -m 0644 packaging/runnerscope.desktop "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/applications/runnerscope.desktop"
+	install -D -m 0644 packaging/runnerscope.svg "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/icons/hicolor/scalable/apps/runnerscope.svg"
+	install -D -m 0644 packaging/runnerscope.png "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/icons/hicolor/128x128/apps/runnerscope.png"
+	install -D -m 0644 README.md "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/doc/infiltrator-runner-monitor/README.md"
