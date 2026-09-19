@@ -6,7 +6,7 @@ Runner Monitor 1.1 begins the native Infiltrator migration without discarding th
 
 ### Compatibility naming
 
-The user-facing product remains **Runner Monitor**. The Debian/APT package identity is `infiltrator-runner-monitor` so it cannot collide with a future distribution package, while the existing `runnerscope` executable, desktop identity and per-user configuration paths remain stable. Existing `runnerscope` package installations migrate through the central Infiltrator repository transition package.
+The user-facing product remains **Runner Monitor**. The Debian/APT package identity is `infiltrator-runner-monitor` so it cannot collide with a future distribution package, while the existing `runnerscope` executable, desktop identity and per-user configuration paths remain stable. Existing `runnerscope` package installations migrate through the central Infiltrator repository transition package; the release asset may retain its `runnerscope_...deb` filename without changing the package identity stored inside the Debian archive.
 
 ## Engineering ethos
 
