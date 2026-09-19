@@ -4,6 +4,10 @@ Runner Monitor is a cross-platform desktop monitor for GitHub Actions self-hoste
 
 Runner Monitor 1.1 begins the native Infiltrator migration without discarding the proven monitor UI. The Windows and Linux launchers still share the same `runnerscope.py` application, while packaged Linux builds add a native C bridge linked to an exact Infiltratr Common release. Common owns the canonical semantic palette and durable atomic publication used for configuration/history; GitHub credentials remain owned by the authenticated `gh` CLI.
 
+### Compatibility naming
+
+The user-facing product remains **Runner Monitor**. The Debian/APT package identity is `infiltrator-runner-monitor` so it cannot collide with a future distribution package, while the existing `runnerscope` executable, desktop identity and per-user configuration paths remain stable. Existing `runnerscope` package installations migrate through the central Infiltrator repository transition package.
+
 ## Features
 
 - Live organisation runner status: running, idle and offline
