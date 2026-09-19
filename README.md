@@ -2,7 +2,7 @@
 
 Runner Monitor is a cross-platform desktop monitor for GitHub Actions self-hosted runners. It shows runner connectivity and busy state, resolves active workflow jobs, records session history, exports CSV data, and can inspect the local runner service on Windows and Linux.
 
-Runner Monitor 1.1 begins the native Infiltrator migration without discarding the proven monitor UI. The Windows and Linux launchers still share the same `runnerscope.py` application, while packaged Linux builds add a native C bridge linked to an exact Infiltratr Common release. Common owns the canonical semantic palette and durable atomic publication used for configuration/history; GitHub credentials remain owned by the authenticated `gh` CLI.
+Runner Monitor 1.1 continues the native Infiltrator migration without discarding the proven monitor UI. The Windows and Linux launchers still share the same `runnerscope.py` application, while packaged Linux builds add a native C bridge linked to an exact Infiltratr Common release. Common owns the canonical semantic palette and durable atomic publication used for configuration/history; GitHub credentials remain owned by the authenticated `gh` CLI.
 
 ### Compatibility naming
 
@@ -16,7 +16,12 @@ The current application is partway through a native migration, so Python, the au
 
 The objective is a monitor whose state transitions and history can be explained and tested independently of incidental command output. New dependencies are justified by stronger reliability or maintainability, not by novelty alone.
 
+## Appearance
+
+Runner Monitor supports **Follow system**, **Day** and **Night**. Day uses the white Infiltrator palette; Night uses the MB graphite/black palette with the canonical `#00ADEF` blue accent. Follow system detects the host light/dark preference and selects exactly Day or Night, updating while the application is running rather than inheriting a third toolkit palette.
+
 ## Features
+
 
 - Live organisation runner status: running, idle and offline
 - Active workflow/job discovery, including current step where GitHub exposes it
