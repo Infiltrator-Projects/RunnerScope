@@ -1,5 +1,7 @@
 # Runner Monitor
 
+**Project copyright:** © 2000–2026 Shannon Smith
+
 Runner Monitor is a cross-platform desktop monitor for GitHub Actions self-hosted runners. It shows runner connectivity and busy state, resolves active workflow jobs, records session history, exports CSV data, and can inspect the local runner service on Windows and Linux.
 
 Runner Monitor 1.1 continues the native Infiltrator migration without discarding the proven monitor UI. The Windows and Linux launchers still share the same `runnerscope.py` application, while packaged Linux builds add a native C bridge linked to an exact Infiltratr Common release. Common owns the canonical semantic palette and durable atomic publication used for configuration/history; GitHub credentials remain owned by the authenticated `gh` CLI.
