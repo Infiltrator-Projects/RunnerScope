@@ -1,6 +1,6 @@
 # Runner Monitor
 
-**Project copyright:** © 2000–2026 Shannon Smith
+**Project copyright:** © 2000-2026 Shannon Smith
 
 Runner Monitor is a cross-platform desktop monitor for GitHub Actions self-hosted runners. It shows runner connectivity and busy state, resolves active workflow jobs, records session history, exports CSV data, and can inspect the local runner service on Windows and Linux.
 
@@ -119,7 +119,7 @@ The local config contains monitoring preferences and the organisation name only.
 
 ## Licence
 
-Copyright © 2026 Shannon Smith.
+Copyright © 2000-2026 Shannon Smith.
 
 Runner Monitor is free software licensed under the GNU General Public License v3.0 or later. See `LICENSE`.
 

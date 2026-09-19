@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2026 Shannon Smith
+# Copyright (C) 2000-2026 Shannon Smith
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Linux launcher for Runner Monitor."""
 from runnerscope import main

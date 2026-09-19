@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Runner Monitor - cross-platform GitHub Actions runner monitor
-# Copyright (C) 2026 Shannon Smith
+# Copyright (C) 2000-2026 Shannon Smith
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Runner Monitor - cross-platform desktop monitor for GitHub Actions self-hosted runners.
 
