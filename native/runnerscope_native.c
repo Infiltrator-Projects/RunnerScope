@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define RUNNERSCOPE_VERSION "1.1.5"
+#define RUNNERSCOPE_VERSION "1.1.6"
 #define RUNNERSCOPE_COMMON_VERSION "1.19.6"
 
 static InfiltratrProjectInfo project_info(void)
