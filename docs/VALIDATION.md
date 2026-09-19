@@ -1,26 +1,45 @@
 # Validation
 
-## Evidence model
+## Current automated evidence
 
-Compilation, deterministic tests, integration tests and human/physical-environment validation demonstrate different properties and must not be conflated.
+CMake builds and tests two native targets:
 
-## Automated gates
+- `runnerscope-native --self-test`;
+- `runnerscope-firstparty-core --self-test` plus `runnerscope-firstparty-contract`.
 
-- .github/workflows/ci.yml
-- .github/workflows/release.yml
+`tests/test_native_bridge.py` exercises the integration contract around the native bridge. CI/release workflows also build/package the current application.
 
-tests/ currently covers the first-party native core and the native bridge. CI also validates the packaged/runtime integration paths.
+Strict compiler warnings are treated as errors for native targets.
 
-## Manual/environment evidence
+## Compatibility-application evidence
 
-Real organisation permissions, live workflow timing, local runner services and privileged restarts require a configured GitHub account and host service environment.
+The Python application remains the user-facing reference while migration is incomplete. Changes that affect behaviour shared with the native path should be compared against the established runner/job/history semantics rather than treating a native self-test as full parity.
 
-Manual observations should record the environment and behaviour actually tested; they supplement rather than replace deterministic regression coverage.
+## Native evidence layers
+
+1. model/unit contract tests;
+2. HTTP/provider parsing tests with controlled responses;
+3. configuration/history migration tests;
+4. local service tests on real Linux/Windows hosts;
+5. provider integration using a real authenticated GitHub account;
+6. UI parity/interaction testing.
+
+A lower layer does not prove a higher one.
+
+## Provider testing
+
+Live GitHub behaviour is time-dependent and permission-dependent. Tests should separate deterministic parsing/correlation from live-provider qualification.
+
+A missing permission or API field must be surfaced as unavailable/error, not accepted as proof of no active job.
+
+## Local action testing
+
+Service restart tests must avoid interrupting unrelated production runners. Active-job detection and confirmation behaviour are part of action safety.
 
 ## Release criterion
 
-The exact revision intended for release must satisfy its required automated checks and must not document planned or unverified behaviour as complete.
+Until native parity is established, release validation must cover the compatibility product plus any packaged native bridge used by it. A future native-only release requires explicit evidence for provider, persistence and local-service parity.
 
 ## Regression rule
 
-Reproducible defects should become permanent tests at the narrowest useful layer. As the product grows, validation should grow with the owned behaviour rather than becoming a separate afterthought.
+Every migration defect that changes runner/job interpretation, history, configuration or restart safety should become a permanent cross-implementation regression test where practical.

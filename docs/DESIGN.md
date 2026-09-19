@@ -2,27 +2,44 @@
 
 ## First-principles position
 
-Runner Monitor starts from the behaviour it must own. Existing products, research, provider APIs and tools are studied as evidence, then accepted, changed or rejected according to the needs of this project.
+Runner Monitor asks what must be owned for a runner-monitoring application to remain dependable even if a helper command, UI toolkit or provider response changes.
+
+The project therefore separates provider facts from application interpretation and is progressively moving critical behaviour into first-party native code.
 
 ## Goals
 
-- make runner state and active-job interpretation predictable
-- keep credentials owned by the authenticated GitHub CLI rather than stored by the app
-- migrate critical mechanics toward first-party native code without throwing away proven UI behaviour
-- persist configuration/history durably
+- accurate runner connectivity/busy/active-job interpretation;
+- explicit unavailable/error state rather than plausible guesses;
+- durable per-user configuration and session history;
+- local runner health that is distinct from cloud/provider state;
+- no application-owned GitHub token in the compatibility product;
+- a native target with minimal external runtime dependencies;
+- cross-platform behaviour defined by shared product contracts rather than toolkit quirks.
 
-## Non-goals
+## Migration philosophy
 
-The monitor is not a replacement for GitHub Actions itself and does not claim that every GitHub API field is always available. Missing provider data remains unavailable rather than invented.
+Rewriting is not automatically improvement. The Python/Tk implementation is retained while it is the proven product. Native code replaces a capability only when it is at least as correct and maintainable and has regression evidence.
 
-## Dependency and language policy
+The intended end state is first-party native code because it gives the project stronger ownership of protocol/state semantics and reduces dependence on command-output/toolkit/runtime changes.
 
-Prefer first-party C/C++ implementation for native/core behaviour where suitable. Use platform-native services where they provide a stronger documented contract. A dependency or external source must not become an undocumented source of semantic truth.
+## Provider semantics
 
-## Failure and uncertainty
+GitHub is the authority for GitHub runner/workflow facts. Runner Monitor is the authority for how those facts are cached, correlated, timed, displayed and stored.
 
-Unavailable, unsupported, uncertain and failed are distinct. Prefer visible uncertainty or refusal to guessed success. Persistent or destructive operations require explicit preconditions and post-verification appropriate to their risk.
+A missing API field is not inferred from neighbouring fields unless the inference is explicitly defined and tested.
 
-## Decision quality
+## Local service safety
 
-A change should improve correctness, safety, fidelity, performance, usability or maintainability and include a validation method. Newness alone is not a design argument.
+Restarting a local runner is an action, not telemetry. It must remain separate from passive monitoring and should require explicit operator intent, particularly when a job may be active.
+
+## Persistence
+
+History/configuration writes use durable publication. Corrupt or unreadable state should fail explicitly or fall back through a documented recovery path; silent truncation is not acceptable.
+
+## Dependency rule
+
+Common may provide genuinely generic primitives. Runner Monitor-specific HTTP/provider/TLS/service behaviour must not be pushed into Common merely to reduce local code.
+
+## UI rule
+
+Presentation should consume the same runner/job/session model on each platform. Toolkit or native-shell differences must not redefine the meaning of running, idle, offline, queued or active.

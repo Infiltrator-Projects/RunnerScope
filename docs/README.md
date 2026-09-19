@@ -1,28 +1,19 @@
 # Documentation
 
-This directory is the canonical documentation entry point for Runner Monitor. The Infiltrator project family uses the same baseline document roles in every repository so readers can move between projects without relearning the structure.
+Runner Monitor follows the common Infiltrator documentation baseline.
 
-## Canonical baseline
+- [Architecture](ARCHITECTURE.md) — compatibility/native components and ownership.
+- [Design](DESIGN.md) — first-party migration philosophy and state semantics.
+- [Decisions](DECISIONS.md) — durable migration/dependency choices.
+- [Roadmap](ROADMAP.md) — capability-by-capability native migration.
+- [Validation](VALIDATION.md) — parity and evidence levels.
+- [Project README](../README.md) — user-facing overview.
+- [Changelog](../CHANGELOG.md) — history.
+- [Contributing](../CONTRIBUTING.md) — engineering rules.
+- [Security](../SECURITY.md) — vulnerability policy.
 
-- [Architecture](ARCHITECTURE.md) — ownership, layers, dependencies and system boundaries.
-- [Design](DESIGN.md) — first-principles goals, non-goals, trade-offs and failure philosophy.
-- [Roadmap](ROADMAP.md) — current foundation, near-term priorities and longer-term direction.
-- [Validation](VALIDATION.md) — automated, manual and environment-specific evidence boundaries.
-- [Project README](../README.md) — product overview, capabilities, build/use entry point and engineering ethos.
-- [Changelog](../CHANGELOG.md) — user-visible and contract-relevant change history.
-- [Contributing](../CONTRIBUTING.md) — development, ownership and verification rules.
-- [Security](../SECURITY.md) — vulnerability scope, reporting and response policy.
+Specialist document:
 
-## Documentation authority
+- [First-party native boundary](FIRST_PARTY_NATIVE.md) — explicit allowed/prohibited dependencies for the native target.
 
-The baseline files have distinct responsibilities and should not compete as alternate sources of truth. Architecture describes where behaviour belongs; Design explains why; Roadmap describes direction; Validation records what evidence is required. Code and tests remain authoritative for executable behaviour, while immutable tags/releases identify historical source.
-
-Specialist documents may go deeper into one subsystem, protocol, platform, research area or historical investigation. They should link back to the canonical baseline when a reader needs the wider project context.
-
-## Specialist documentation
-
-- docs/FIRST_PARTY_NATIVE.md — specialist or historical detail retained alongside the canonical baseline.
-
-## Maintenance rule
-
-When a change moves an ownership boundary, support boundary, validation claim or major design decision, update the corresponding canonical document in the same change. Avoid copying the same status statement into several files; link to the authoritative document instead.
+The compatibility application remains a supported implementation fact until the roadmap/validation criteria for replacement are satisfied.
