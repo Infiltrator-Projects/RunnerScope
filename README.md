@@ -8,6 +8,14 @@ Runner Monitor 1.1 begins the native Infiltrator migration without discarding th
 
 The user-facing product remains **Runner Monitor**. The Debian/APT package identity is `infiltrator-runner-monitor` so it cannot collide with a future distribution package, while the existing `runnerscope` executable, desktop identity and per-user configuration paths remain stable. Existing `runnerscope` package installations migrate through the central Infiltrator repository transition package.
 
+## Engineering ethos
+
+What does a runner monitor need to own so that a change in a helper tool does not redefine what the application means? Runner Monitor treats GitHub's runner and workflow state as input, while session history, interpretation, presentation and local-runner behaviour remain project-owned.
+
+The current application is partway through a native migration, so Python, the authenticated GitHub CLI and platform services are still practical adapters. They are not intended to become semantic sources of truth. Critical behaviour is moved into first-party native code when doing so makes the contract clearer or more dependable, while proven parts are not rewritten merely for fashion.
+
+The objective is a monitor whose state transitions and history can be explained and tested independently of incidental command output. New dependencies are justified by stronger reliability or maintainability, not by novelty alone.
+
 ## Features
 
 - Live organisation runner status: running, idle and offline
