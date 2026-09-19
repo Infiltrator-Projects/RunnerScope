@@ -66,7 +66,7 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 APP_NAME = "Runner Monitor"
 LEGACY_STORAGE_NAME = "RunnerScope"
-VERSION = "1.1.2"
+VERSION = "1.1.5"
 
 
 def _application_icon_path() -> Path | None:
@@ -129,14 +129,82 @@ def _native_helper_path() -> Path | None:
     return None
 
 
-def _native_palette() -> dict[str, str]:
-    """Read the canonical Common Night palette when the native bridge is available."""
+def _system_prefers_dark() -> bool:
+    """Return the host application's current light/dark preference."""
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            ) as key:
+                value, _kind = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                return int(value) == 0
+        except (OSError, ValueError, TypeError):
+            return False
+
+    if sys.platform.startswith("linux"):
+        try:
+            completed = subprocess.run(
+                [
+                    "gsettings", "get",
+                    "org.cinnamon.desktop.interface", "gtk-theme",
+                ],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=2,
+            )
+            if completed.returncode == 0:
+                return "dark" in completed.stdout.casefold()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return False
+
+
+def _fallback_palette(dark: bool) -> dict[str, str]:
+    if dark:
+        return {
+            "background": "#050608", "panel": "#101318", "card": "#171b20",
+            "surface": "#0d1014", "input": "#0e1115", "border": "#353a40",
+            "text": "#e8ecef", "title": "#eef1f3", "muted": "#aeb6bd",
+            "subtle": "#899198", "button_background": "#d7dde2",
+            "button_foreground": "#111418", "selection_background": "#2b3137",
+            "selection_foreground": "#eef1f3", "neutral_accent": "#00adef",
+            "success": "#63ab7c", "warning": "#d19e47", "fault": "#c96b6b",
+            "info": "#7fa7c9", "operation": "#20252b",
+        }
+    return {
+        "background": "#ffffff", "panel": "#ffffff", "card": "#f8f9fa",
+        "surface": "#eceff2", "input": "#ffffff", "border": "#c7cdd3",
+        "text": "#20252b", "title": "#111418", "muted": "#59636c",
+        "subtle": "#737d86", "button_background": "#20252b",
+        "button_foreground": "#ffffff", "selection_background": "#dde2e7",
+        "selection_foreground": "#111418", "neutral_accent": "#00adef",
+        "success": "#3a8a58", "warning": "#9a6500", "fault": "#b54848",
+        "info": "#467aa3", "operation": "#e8ecef",
+    }
+
+
+def _effective_theme_mode(mode: str | None = None) -> str:
+    selected = (mode or THEME_MODE or "system").strip().casefold()
+    if selected == "system":
+        return "night" if _system_prefers_dark() else "day"
+    return selected if selected in {"day", "night"} else "day"
+
+
+def _native_palette(mode: str | None = None) -> dict[str, str]:
+    """Read the canonical Common palette for the selected appearance mode."""
+    effective = _effective_theme_mode(mode)
+    fallback = _fallback_palette(effective == "night")
     helper = _native_helper_path()
     if helper is None:
-        return {}
+        return fallback
     try:
         completed = subprocess.run(
-            [str(helper), "--palette", "night"],
+            [str(helper), "--palette", effective],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -144,14 +212,13 @@ def _native_palette() -> dict[str, str]:
             timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
-        return {}
-    palette: dict[str, str] = {}
+        return fallback
+    palette = dict(fallback)
     for raw in completed.stdout.splitlines():
         key, separator, value = raw.partition("=")
         if separator and key and re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
             palette[key] = value.lower()
     return palette
-
 
 def _durable_write_text(path: Path, text: str) -> None:
     """Publish UTF-8 text through Common's durable atomic writer when installed."""
@@ -182,6 +249,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "repository_cache_seconds": 300.0,
     "history_entries": 300,
     "local_health_seconds": 10.0,
+    "theme_mode": "system",
 }
 
 def config_dir() -> Path:
@@ -209,6 +277,7 @@ REPO_CACHE_SECONDS = 300.0
 MAX_HISTORY = 300
 EXPECTED_RUNNERS = 0
 LOCAL_HEALTH_SECONDS = 10.0
+THEME_MODE = "system"
 
 def load_config() -> dict[str, Any] | None:
     if not CONFIG_FILE.is_file():
@@ -229,7 +298,7 @@ def save_config(cfg: dict[str, Any]) -> None:
 
 def apply_config(cfg: dict[str, Any]) -> None:
     global ORG, REFRESH_SECONDS, ACTIVITY_SECONDS, REPO_LIMIT
-    global REPO_CACHE_SECONDS, MAX_HISTORY, EXPECTED_RUNNERS, LOCAL_HEALTH_SECONDS
+    global REPO_CACHE_SECONDS, MAX_HISTORY, EXPECTED_RUNNERS, LOCAL_HEALTH_SECONDS, THEME_MODE
     ORG = str(os.environ.get("GITHUB_RUNNER_ORG") or cfg.get("organisation") or "").strip()
     REFRESH_SECONDS = _env_float("GITHUB_RUNNER_REFRESH", float(cfg.get("runner_poll_seconds", 2.0)), 1.0)
     ACTIVITY_SECONDS = _env_float("GITHUB_RUNNER_ACTIVITY_REFRESH", float(cfg.get("activity_scan_seconds", 45.0)), 10.0)
@@ -238,31 +307,41 @@ def apply_config(cfg: dict[str, Any]) -> None:
     MAX_HISTORY = _env_int("GITHUB_RUNNER_HISTORY", int(cfg.get("history_entries", 300)), 50)
     EXPECTED_RUNNERS = _env_int("GITHUB_RUNNER_EXPECTED", int(cfg.get("expected_runners", 0)), 0)
     LOCAL_HEALTH_SECONDS = _env_float("GITHUB_RUNNER_LOCAL_HEALTH_REFRESH", float(cfg.get("local_health_seconds", 10.0)), 5.0)
+    requested_theme = str(cfg.get("theme_mode", "system")).strip().casefold()
+    THEME_MODE = requested_theme if requested_theme in {"system", "day", "night"} else "system"
 
-# Common is the source of truth for semantic colour roles when the native bridge
-# is installed. The literals are source-mode/Windows compatibility fallbacks.
-_COMMON_THEME = _native_palette()
-MB_BG = _COMMON_THEME.get("background", "#050608")
-MB_PANEL = _COMMON_THEME.get("panel", "#101318")
-MB_CARD = _COMMON_THEME.get("card", "#171b20")
-MB_SURFACE = _COMMON_THEME.get("surface", "#0d1014")
-MB_BORDER = _COMMON_THEME.get("border", "#353a40")
-MB_TEXT = _COMMON_THEME.get("text", "#e8ecef")
-MB_TITLE = _COMMON_THEME.get("title", "#eef1f3")
-MB_MUTED = _COMMON_THEME.get("muted", "#aeb6bd")
-MB_SUBTLE = _COMMON_THEME.get("subtle", "#899198")
-MB_BUTTON_BG = _COMMON_THEME.get("button_background", "#d7dde2")
-MB_BUTTON_FG = _COMMON_THEME.get("button_foreground", "#111418")
-MB_SELECT_BG = _COMMON_THEME.get("selection_background", "#2b3137")
-MB_SELECT_FG = _COMMON_THEME.get("selection_foreground", "#eef1f3")
+# Common is the source of truth for semantic colour roles. System is policy:
+# it resolves the host preference to exactly the Common Day or Night palette.
+def _activate_palette(mode: str | None = None) -> dict[str, str]:
+    global MB_BG, MB_PANEL, MB_CARD, MB_SURFACE, MB_BORDER, MB_TEXT, MB_TITLE
+    global MB_MUTED, MB_SUBTLE, MB_BUTTON_BG, MB_BUTTON_FG, MB_SELECT_BG
+    global MB_SELECT_FG, STATE_RED, STATE_GREEN, STATE_BLUE, STATE_AMBER
+    global STATE_PURPLE, STATE_GREY
 
-# Operational roles map directly onto Common's semantic state colours.
-STATE_RED = _COMMON_THEME.get("fault", "#c96b6b")
-STATE_GREEN = _COMMON_THEME.get("success", "#63ab7c")
-STATE_BLUE = _COMMON_THEME.get("info", "#9aa7b2")
-STATE_AMBER = _COMMON_THEME.get("warning", "#d19e47")
-STATE_PURPLE = _COMMON_THEME.get("operation", "#7fa7c9")
-STATE_GREY = _COMMON_THEME.get("subtle", "#899198")
+    palette = _native_palette(mode)
+    MB_BG = palette["background"]
+    MB_PANEL = palette["panel"]
+    MB_CARD = palette["card"]
+    MB_SURFACE = palette["surface"]
+    MB_BORDER = palette["border"]
+    MB_TEXT = palette["text"]
+    MB_TITLE = palette["title"]
+    MB_MUTED = palette["muted"]
+    MB_SUBTLE = palette["subtle"]
+    MB_BUTTON_BG = palette["button_background"]
+    MB_BUTTON_FG = palette["button_foreground"]
+    MB_SELECT_BG = palette["selection_background"]
+    MB_SELECT_FG = palette["selection_foreground"]
+    STATE_RED = palette["fault"]
+    STATE_GREEN = palette["success"]
+    STATE_BLUE = palette["info"]
+    STATE_AMBER = palette["warning"]
+    STATE_PURPLE = palette["operation"]
+    STATE_GREY = palette["subtle"]
+    return palette
+
+
+_activate_palette("system")
 
 MB_BODY_FONT = "MB Corpo S Title WEB"
 MB_BRAND_FONT = "MB Corpo A Title Cond WEB"
@@ -301,8 +380,8 @@ def register_optional_brand_fonts() -> None:
         pass
 
 
-def apply_windows_dark_titlebar(window: tk.Tk) -> None:
-    """Ask modern Windows to render the native title bar in dark mode."""
+def apply_windows_dark_titlebar(window: tk.Misc, dark: bool | None = None) -> None:
+    """Render the native Windows title bar to match the effective app theme."""
     if sys.platform != "win32":
         return
     try:
@@ -310,7 +389,9 @@ def apply_windows_dark_titlebar(window: tk.Tk) -> None:
 
         window.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(window.winfo_id()) or window.winfo_id()
-        value = ctypes.c_int(1)
+        if dark is None:
+            dark = _effective_theme_mode() == "night"
+        value = ctypes.c_int(1 if dark else 0)
         for attribute in (20, 19):  # Windows 10/11 variants.
             result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)
@@ -405,11 +486,12 @@ class ConfigDialog(tk.Toplevel):
         if cfg:
             source.update(cfg)
         self.vars = {key: tk.StringVar(value=str(source[key])) for key, _, _ in self.FIELDS}
+        self.theme_var = tk.StringVar(value={"system": "Follow system", "day": "Day", "night": "Night"}.get(str(source.get("theme_mode", "system")), "Follow system"))
         self.title(title)
         _apply_window_icon(self)
         self.resizable(False, False)
-        configure_shared_theme(self)
-        apply_windows_dark_titlebar(self)
+        configure_shared_theme(self, str(source.get("theme_mode", "system")))
+        apply_windows_dark_titlebar(self, _effective_theme_mode(str(source.get("theme_mode", "system"))) == "night")
         if parent.winfo_viewable():
             self.transient(parent)
         self.grab_set()
@@ -429,11 +511,16 @@ class ConfigDialog(tk.Toplevel):
             if first_entry is None:
                 first_entry = entry
 
-        ttk.Label(outer, text="Authentication stays in GitHub CLI (gh auth login); Runner Monitor never stores your token.", style="Meta.TLabel").grid(row=8, column=0, columnspan=3, sticky="w", pady=(12, 4))
+        ttk.Label(outer, text="Appearance").grid(row=8, column=0, sticky="w", padx=(0, 12), pady=5)
+        theme_box = ttk.Combobox(outer, textvariable=self.theme_var, state="readonly", width=28, values=("Follow system", "Day", "Night"))
+        theme_box.grid(row=8, column=1, sticky="ew", pady=5)
+        ttk.Label(outer, text="System follows the OS; Day is white and Night is the MB graphite theme.", style="Meta.TLabel").grid(row=8, column=2, sticky="w", padx=(12, 0), pady=5)
+
+        ttk.Label(outer, text="Authentication stays in GitHub CLI (gh auth login); Runner Monitor never stores your token.", style="Meta.TLabel").grid(row=9, column=0, columnspan=3, sticky="w", pady=(12, 4))
         self.test_status = tk.StringVar(value="")
-        ttk.Label(outer, textvariable=self.test_status, style="Meta.TLabel").grid(row=9, column=0, columnspan=2, sticky="w")
+        ttk.Label(outer, textvariable=self.test_status, style="Meta.TLabel").grid(row=10, column=0, columnspan=2, sticky="w")
         buttons = ttk.Frame(outer)
-        buttons.grid(row=9, column=2, sticky="e", pady=(8, 0))
+        buttons.grid(row=10, column=2, sticky="e", pady=(8, 0))
         ttk.Button(buttons, text="Test GitHub access", command=self._test_access).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(buttons, text="Save", command=self._save).pack(side=tk.LEFT)
@@ -460,6 +547,7 @@ class ConfigDialog(tk.Toplevel):
                 activity_scan_seconds=max(10.0, float(self.vars["activity_scan_seconds"].get())),
                 repository_scan_limit=max(1, int(self.vars["repository_scan_limit"].get())),
                 local_health_seconds=max(5.0, float(self.vars["local_health_seconds"].get())),
+                theme_mode={"Follow system": "system", "Day": "day", "Night": "night"}.get(self.theme_var.get(), "system"),
             )
         except ValueError:
             messagebox.showerror(APP_NAME, "One of the numeric settings is invalid.", parent=self)
@@ -643,6 +731,7 @@ class RunnerMonitor(tk.Tk):
         self.last_local_health_update = 0.0
         self.last_local_health_error = ""
         self.sort_state: dict[str, tuple[str, bool]] = {}
+        self._last_system_dark = _system_prefers_dark()
         self.tree_row_maps: dict[str, dict[str, dict[str, Any]]] = {
             "runners": {},
             "activity": {},
@@ -658,6 +747,7 @@ class RunnerMonitor(tk.Tk):
         if sys.platform == "win32" or sys.platform.startswith("linux"):
             self.after(int(LOCAL_HEALTH_SECONDS * 1000), self._local_health_timer)
         self.after(1000, self._tick_timer)
+        self.after(2000, self._theme_timer)
 
         self.request_runner_refresh()
         self.request_activity_refresh(force=True)
@@ -666,13 +756,35 @@ class RunnerMonitor(tk.Tk):
     # ---------- UI ----------
 
     def _configure_style(self) -> None:
-        fonts = configure_shared_theme(self)
+        fonts = configure_shared_theme(self, THEME_MODE)
         self.font_body = fonts["body"]
         self.font_body_bold = fonts["body_bold"]
         self.font_small = fonts["small"]
         self.font_small_bold = fonts["small_bold"]
         self.font_counter = fonts["counter"]
         self.font_brand = fonts["brand"]
+        apply_windows_dark_titlebar(self, _effective_theme_mode(THEME_MODE) == "night")
+
+    def _apply_tree_theme(self, tree: ttk.Treeview) -> None:
+        self._apply_tree_theme(tree)
+
+    def _refresh_theme(self) -> None:
+        self._configure_style()
+        for name in ("runner_tree", "activity_tree", "history_tree", "local_tree"):
+            tree = getattr(self, name, None)
+            if tree is not None:
+                self._apply_tree_theme(tree)
+
+    def _theme_timer(self) -> None:
+        if self.stop_event.is_set():
+            return
+        current_dark = _system_prefers_dark()
+        if THEME_MODE == "system" and current_dark != self._last_system_dark:
+            self._last_system_dark = current_dark
+            self._refresh_theme()
+        else:
+            self._last_system_dark = current_dark
+        self.after(2000, self._theme_timer)
 
     def _build_ui(self) -> None:
         outer = ttk.Frame(self, padding=12)
@@ -806,6 +918,8 @@ class RunnerMonitor(tk.Tk):
         save_config(dialog.result)
         self.config_data = dict(dialog.result)
         apply_config(self.config_data)
+        self._last_system_dark = _system_prefers_dark()
+        self._refresh_theme()
         self.history = deque(self.history, maxlen=MAX_HISTORY)
         self.repo_cache = []
         self.repo_cache_at = 0.0
@@ -2212,9 +2326,15 @@ def run_self_test() -> int:
     assert DEFAULT_CONFIG["organisation"] == ""
     helper = _native_helper_path()
     if helper is not None:
-        palette = _native_palette()
-        for key in ("background", "text", "success", "warning", "fault"):
-            assert re.fullmatch(r"#[0-9a-f]{6}", palette[key])
+        day_palette = _native_palette("day")
+        night_palette = _native_palette("night")
+        assert day_palette["background"] == "#ffffff"
+        assert night_palette["background"] == "#050608"
+        assert day_palette["neutral_accent"] == "#00adef"
+        assert night_palette["neutral_accent"] == "#00adef"
+        for palette in (day_palette, night_palette):
+            for key in ("background", "text", "success", "warning", "fault"):
+                assert re.fullmatch(r"#[0-9a-f]{6}", palette[key])
     print(f"Runner Monitor {VERSION} self-test passed")
     return 0
 
@@ -2229,7 +2349,7 @@ def main() -> int:
         setup_root = tk.Tk(className="RunnerScope")
         _apply_window_icon(setup_root)
         setup_root.withdraw()
-        configure_shared_theme(setup_root)
+        configure_shared_theme(setup_root, str((cfg or DEFAULT_CONFIG).get("theme_mode", "system")))
         setup = ConfigDialog(setup_root, cfg)
         setup_root.wait_window(setup)
         cfg = setup.result
