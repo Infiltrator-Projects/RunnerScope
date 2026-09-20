@@ -1135,7 +1135,7 @@ class RunnerMonitor(tk.Tk):
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(className="RunnerScope")
         self.config_data = dict(config)
-        self.title(f"Runner Monitor {VERSION}")
+        self.title("Runner Monitor")
         _apply_window_icon(self)
         self.geometry("1480x780")
         self.minsize(1050, 600)
