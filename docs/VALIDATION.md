@@ -15,6 +15,8 @@ Strict compiler warnings are treated as errors for native targets.
 
 The Python application remains the user-facing reference while migration is incomplete. Changes that affect behaviour shared with the native path should be compared against the established runner/job/history semantics rather than treating a native self-test as full parity.
 
+UI releases additionally require the Python source to compile, the shared Common palette/typography bridge to self-test, and the packaged application to retain the navigation-backed runner/job/history/local-service views and selection actions. Visual-shell changes must not remove the underlying monitoring or restart-safety paths.
+
 ## Native evidence layers
 
 1. model/unit contract tests;
