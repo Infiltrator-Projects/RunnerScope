@@ -66,7 +66,7 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 APP_NAME = "Runner Monitor"
 LEGACY_STORAGE_NAME = "RunnerScope"
-VERSION = "1.1.6"
+VERSION = "1.1.7"
 
 
 def _application_icon_path() -> Path | None:
@@ -451,55 +451,369 @@ def enable_windows_dpi_awareness() -> None:
 
 
 def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str, tuple[Any, ...]]:
-    """Apply the selected Common Day/Night palette to any Tk or Toplevel window."""
+    """Apply the selected Common Day/Night palette and the shared product-shell visual language."""
     _activate_palette(mode)
     families = {str(name) for name in tkfont.families(window)}
-    body_family = MB_BODY_FONT if MB_BODY_FONT in families else ("Segoe UI" if sys.platform == "win32" else "TkDefaultFont")
-    brand_family = MB_BRAND_FONT if MB_BRAND_FONT in families else body_family
+
+    def available(*names: str) -> str:
+        for name in names:
+            if name in families:
+                return name
+        return "TkDefaultFont"
+
+    body_family = available(
+        MB_BODY_FONT,
+        "Segoe UI" if sys.platform == "win32" else "DejaVu Sans",
+        "Arial",
+    )
+    brand_family = available(
+        MB_BRAND_FONT,
+        "DejaVu Sans Condensed",
+        body_family,
+    )
     fonts = {
         "body": (body_family, 10),
         "body_bold": (body_family, 10, "bold"),
         "small": (body_family, 9),
         "small_bold": (body_family, 9, "bold"),
-        "counter": (body_family, 10, "bold"),
-        "brand": (brand_family, 19),
+        "counter": (body_family, 22, "bold"),
+        "brand": (brand_family, 20),
+        "hero": (brand_family, 18),
         "section": (body_family, 12, "bold"),
+        "kicker": (body_family, 8, "bold"),
+        "nav": (body_family, 10, "bold"),
     }
     try:
         window.configure(background=MB_BG)
         window.option_add("*Font", fonts["body"])
     except tk.TclError:
         pass
+
     style = ttk.Style(window)
     if "clam" in style.theme_names():
         style.theme_use("clam")
-    style.configure(".", background=MB_BG, foreground=MB_TEXT, font=fonts["body"], bordercolor=MB_BORDER, darkcolor=MB_BORDER, lightcolor=MB_BORDER, troughcolor=MB_SURFACE, focuscolor=MB_BORDER)
+
+    # Baseline controls.
+    style.configure(
+        ".",
+        background=MB_BG,
+        foreground=MB_TEXT,
+        font=fonts["body"],
+        bordercolor=MB_BORDER,
+        darkcolor=MB_BORDER,
+        lightcolor=MB_BORDER,
+        troughcolor=MB_SURFACE,
+        focuscolor=MB_BORDER,
+    )
     style.configure("TFrame", background=MB_BG)
     style.configure("TLabel", background=MB_BG, foreground=MB_TEXT)
     style.configure("Title.TLabel", font=fonts["brand"], foreground=MB_HEADING)
     style.configure("Section.TLabel", font=fonts["section"], foreground=MB_HEADING)
     style.configure("Meta.TLabel", foreground=MB_NOTE, font=fonts["small"])
+    style.configure("Kicker.TLabel", foreground=MB_KICKER, font=fonts["kicker"])
+    style.configure("Detail.TLabel", foreground=MB_DETAIL, font=fonts["small"])
+
+    style.configure(
+        "TButton",
+        background=MB_BUTTON_BG,
+        foreground=MB_BUTTON_FG,
+        bordercolor=MB_BORDER,
+        font=fonts["body_bold"],
+        padding=(12, 7),
+        relief="flat",
+    )
+    style.map(
+        "TButton",
+        background=[
+            ("disabled", MB_PANEL),
+            ("pressed", MB_SELECT_BG),
+            ("active", MB_CARD_HOVER),
+        ],
+        foreground=[
+            ("disabled", MB_SUBTLE),
+            ("pressed", MB_SELECT_FG),
+            ("active", MB_TEXT),
+        ],
+        bordercolor=[("active", MB_ACCENT_HOVER)],
+    )
+    style.configure(
+        "Secondary.TButton",
+        background=MB_OPERATION_HOVER if _effective_theme_mode(mode) == "night" else MB_SURFACE,
+        foreground=MB_TEXT,
+        bordercolor=MB_BORDER,
+        font=fonts["body_bold"],
+        padding=(11, 7),
+        relief="flat",
+    )
+    style.map(
+        "Secondary.TButton",
+        background=[("pressed", MB_SELECT_BG), ("active", MB_CARD_HOVER)],
+        foreground=[("pressed", MB_SELECT_FG), ("active", MB_HEADING)],
+        bordercolor=[("active", MB_ACCENT_HOVER)],
+    )
+    style.configure(
+        "TEntry",
+        fieldbackground=MB_SURFACE,
+        foreground=MB_TEXT,
+        insertcolor=MB_TEXT,
+        bordercolor=MB_BORDER,
+        lightcolor=MB_BORDER,
+        darkcolor=MB_BORDER,
+        padding=(10, 7),
+    )
+    style.map(
+        "TEntry",
+        fieldbackground=[("focus", MB_PANEL), ("disabled", MB_PANEL)],
+        foreground=[("disabled", MB_SUBTLE)],
+        bordercolor=[("focus", MB_ACCENT_HOVER)],
+    )
+    style.configure(
+        "TCombobox",
+        fieldbackground=MB_SURFACE,
+        background=MB_BUTTON_BG,
+        foreground=MB_TEXT,
+        arrowcolor=MB_TEXT,
+        bordercolor=MB_BORDER,
+        padding=(8, 6),
+    )
+
+    # Shared Infiltrator application shell.
+    style.configure("App.TFrame", background=MB_BG)
+    style.configure(
+        "Topbar.TFrame",
+        background=MB_TITLEBAR,
+        bordercolor=MB_STATUS_BORDER,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "TopbarTitle.TLabel",
+        background=MB_TITLEBAR,
+        foreground=MB_HEADING,
+        font=fonts["brand"],
+    )
+    style.configure(
+        "TopbarMeta.TLabel",
+        background=MB_TITLEBAR,
+        foreground=MB_SUMMARY,
+        font=fonts["small"],
+    )
+    style.configure(
+        "Sidebar.TFrame",
+        background=MB_PANEL,
+        bordercolor=MB_STATUS_BORDER,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "SidebarKicker.TLabel",
+        background=MB_PANEL,
+        foreground=MB_KICKER,
+        font=fonts["kicker"],
+    )
+    style.configure(
+        "SidebarMeta.TLabel",
+        background=MB_PANEL,
+        foreground=MB_SUBTLE,
+        font=fonts["small"],
+    )
+    style.configure(
+        "Nav.TButton",
+        background=MB_PANEL,
+        foreground=MB_MUTED,
+        bordercolor=MB_PANEL,
+        font=fonts["nav"],
+        padding=(14, 10),
+        relief="flat",
+        anchor="w",
+    )
+    style.map(
+        "Nav.TButton",
+        background=[("active", MB_SURFACE_HOVER), ("pressed", MB_SELECT_BG)],
+        foreground=[("active", MB_HEADING), ("pressed", MB_SELECT_FG)],
+    )
+    style.configure(
+        "NavSelected.TButton",
+        background=MB_CARD,
+        foreground=MB_HEADING,
+        bordercolor=MB_ACCENT_HOVER,
+        font=fonts["nav"],
+        padding=(14, 10),
+        relief="solid",
+        borderwidth=1,
+        anchor="w",
+    )
+    style.map(
+        "NavSelected.TButton",
+        background=[("active", MB_CARD_HOVER), ("pressed", MB_SELECT_BG)],
+        foreground=[("active", MB_HEADING), ("pressed", MB_SELECT_FG)],
+    )
+
+    style.configure("Hero.TFrame", background=MB_BG)
+    style.configure(
+        "HeroTitle.TLabel",
+        background=MB_BG,
+        foreground=MB_HEADING,
+        font=fonts["hero"],
+    )
+    style.configure(
+        "HeroSubtitle.TLabel",
+        background=MB_BG,
+        foreground=MB_SUMMARY,
+        font=fonts["small"],
+    )
+    style.configure(
+        "Context.TFrame",
+        background=MB_SURFACE,
+        bordercolor=MB_BORDER,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "Context.TLabel",
+        background=MB_SURFACE,
+        foreground=MB_MUTED,
+        font=fonts["small"],
+    )
+    style.configure(
+        "SummaryCard.TFrame",
+        background=MB_CARD,
+        bordercolor=MB_STATUS_BORDER,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "SummaryKicker.TLabel",
+        background=MB_CARD,
+        foreground=MB_KICKER,
+        font=fonts["kicker"],
+    )
+    style.configure(
+        "SummaryValue.TLabel",
+        background=MB_CARD,
+        foreground=MB_HEADING,
+        font=fonts["counter"],
+    )
+    for style_name, colour in (
+        ("Green.SummaryValue.TLabel", STATE_GREEN),
+        ("Blue.SummaryValue.TLabel", STATE_BLUE),
+        ("Red.SummaryValue.TLabel", STATE_RED),
+        ("Amber.SummaryValue.TLabel", STATE_AMBER),
+        ("Purple.SummaryValue.TLabel", STATE_PURPLE),
+    ):
+        style.configure(style_name, background=MB_CARD, foreground=colour, font=fonts["counter"])
+
+    style.configure(
+        "Toolbar.TFrame",
+        background=MB_PANEL,
+        bordercolor=MB_BORDER,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "Toolbar.TLabel",
+        background=MB_PANEL,
+        foreground=MB_MUTED,
+        font=fonts["small"],
+    )
+    style.configure(
+        "TablePanel.TFrame",
+        background=MB_SURFACE,
+        bordercolor=MB_BORDER,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure("Content.TNotebook", background=MB_BG, borderwidth=0, padding=0)
+    try:
+        style.layout("Content.TNotebook.Tab", [])
+    except tk.TclError:
+        pass
+
+    style.configure(
+        "DetailBar.TFrame",
+        background=MB_PANEL,
+        bordercolor=MB_BORDER,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "DetailBar.TLabel",
+        background=MB_PANEL,
+        foreground=MB_DETAIL,
+        font=fonts["small"],
+    )
+    style.configure(
+        "StatusBar.TFrame",
+        background=MB_TITLEBAR,
+        bordercolor=MB_STATUS_BORDER,
+        borderwidth=1,
+        relief="solid",
+    )
+    style.configure(
+        "StatusBar.TLabel",
+        background=MB_TITLEBAR,
+        foreground=MB_SUMMARY,
+        font=fonts["small"],
+    )
+
+    # Legacy named styles are retained because counter/status code and dialogs
+    # still use them, but the main monitor now presents values as real cards.
     style.configure("Counter.TLabel", font=fonts["counter"], foreground=MB_HEADING)
     style.configure("Green.Counter.TLabel", font=fonts["counter"], foreground=STATE_GREEN)
     style.configure("Blue.Counter.TLabel", font=fonts["counter"], foreground=STATE_BLUE)
     style.configure("Red.Counter.TLabel", font=fonts["counter"], foreground=STATE_RED)
     style.configure("Purple.Counter.TLabel", font=fonts["counter"], foreground=STATE_PURPLE)
     style.configure("Amber.Counter.TLabel", font=fonts["counter"], foreground=STATE_AMBER)
-    style.configure("CounterCard.TFrame", background=MB_CARD, bordercolor=MB_STATUS_BORDER, relief="solid", borderwidth=1)
-    style.configure("Detail.TLabel", foreground=MB_DETAIL, font=fonts["small"])
-    style.configure("TButton", background=MB_BUTTON_BG, foreground=MB_BUTTON_FG, bordercolor=MB_BORDER, font=fonts["body_bold"], padding=(12, 6), relief="flat")
-    style.map("TButton", background=[("disabled", MB_PANEL), ("pressed", MB_SELECT_BG), ("active", MB_CARD_HOVER)], foreground=[("disabled", MB_SUBTLE), ("pressed", MB_SELECT_FG), ("active", MB_TEXT)], bordercolor=[("active", MB_ACCENT_HOVER)])
-    style.configure("TEntry", fieldbackground=MB_SURFACE, foreground=MB_TEXT, insertcolor=MB_TEXT, bordercolor=MB_BORDER, lightcolor=MB_BORDER, darkcolor=MB_BORDER, padding=(7, 5))
-    style.map("TEntry", fieldbackground=[("focus", MB_PANEL), ("disabled", MB_PANEL)], foreground=[("disabled", MB_SUBTLE)], bordercolor=[("focus", MB_MUTED)])
-    style.configure("TNotebook", background=MB_BG, bordercolor=MB_BORDER, tabmargins=(0, 5, 0, 0))
-    style.configure("TNotebook.Tab", background=MB_PANEL, foreground=MB_MUTED, bordercolor=MB_BORDER, font=fonts["body_bold"], padding=(16, 8))
-    style.map("TNotebook.Tab", background=[("selected", MB_CARD), ("active", MB_SURFACE_HOVER)], foreground=[("selected", MB_HEADING), ("active", MB_TEXT)])
-    style.configure("Treeview", background=MB_SURFACE, fieldbackground=MB_SURFACE, foreground=MB_TEXT, bordercolor=MB_BORDER, rowheight=28, font=fonts["small"])
-    style.map("Treeview", background=[("selected", MB_SELECT_BG)], foreground=[("selected", MB_SELECT_FG)])
-    style.configure("Treeview.Heading", background=MB_TITLEBAR, foreground=MB_HEADING, bordercolor=MB_STATUS_BORDER, font=fonts["small_bold"], padding=(7, 7), relief="flat")
-    style.map("Treeview.Heading", background=[("active", MB_CARD_HOVER)], foreground=[("active", MB_HEADING)])
-    style.configure("Vertical.TScrollbar", background=MB_PANEL, troughcolor=MB_SURFACE, bordercolor=MB_BORDER, arrowcolor=MB_MUTED)
-    style.configure("Horizontal.TScrollbar", background=MB_PANEL, troughcolor=MB_SURFACE, bordercolor=MB_BORDER, arrowcolor=MB_MUTED)
+    style.configure(
+        "CounterCard.TFrame",
+        background=MB_CARD,
+        bordercolor=MB_STATUS_BORDER,
+        relief="solid",
+        borderwidth=1,
+    )
+
+    style.configure(
+        "Treeview",
+        background=MB_SURFACE,
+        fieldbackground=MB_SURFACE,
+        foreground=MB_TEXT,
+        bordercolor=MB_BORDER,
+        rowheight=32,
+        font=fonts["small"],
+    )
+    style.map(
+        "Treeview",
+        background=[("selected", MB_SELECT_BG)],
+        foreground=[("selected", MB_SELECT_FG)],
+    )
+    style.configure(
+        "Treeview.Heading",
+        background=MB_TITLEBAR,
+        foreground=MB_HEADING,
+        bordercolor=MB_STATUS_BORDER,
+        font=fonts["small_bold"],
+        padding=(9, 8),
+        relief="flat",
+    )
+    style.map(
+        "Treeview.Heading",
+        background=[("active", MB_CARD_HOVER)],
+        foreground=[("active", MB_HEADING)],
+    )
+    style.configure(
+        "Vertical.TScrollbar",
+        background=MB_PANEL,
+        troughcolor=MB_SURFACE,
+        bordercolor=MB_BORDER,
+        arrowcolor=MB_MUTED,
+    )
+    style.configure(
+        "Horizontal.TScrollbar",
+        background=MB_PANEL,
+        troughcolor=MB_SURFACE,
+        bordercolor=MB_BORDER,
+        arrowcolor=MB_MUTED,
+    )
     return fonts
 
 
@@ -817,6 +1131,8 @@ class RunnerMonitor(tk.Tk):
             tree = getattr(self, name, None)
             if tree is not None:
                 self._apply_tree_theme(tree)
+        if hasattr(self, "nav_buttons"):
+            self._sync_navigation()
 
     def _theme_timer(self) -> None:
         if self.stop_event.is_set():
@@ -830,78 +1146,225 @@ class RunnerMonitor(tk.Tk):
         self.after(2000, self._theme_timer)
 
     def _build_ui(self) -> None:
-        outer = ttk.Frame(self, padding=12)
-        outer.pack(fill=tk.BOTH, expand=True)
+        shell = ttk.Frame(self, style="App.TFrame")
+        shell.pack(fill=tk.BOTH, expand=True)
 
-        heading = ttk.Frame(outer)
-        heading.pack(fill=tk.X)
+        # Product header: keep high-frequency controls out of the data table.
+        topbar = ttk.Frame(shell, style="Topbar.TFrame", padding=(18, 9))
+        topbar.pack(fill=tk.X)
+        brand = ttk.Frame(topbar, style="Topbar.TFrame")
+        brand.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(brand, text="Runner Monitor", style="TopbarTitle.TLabel").pack(anchor=tk.W)
         ttk.Label(
-            heading,
-            text="RunnerScope",
-            style="Title.TLabel",
+            brand,
+            text="GitHub Actions runner operations & health",
+            style="TopbarMeta.TLabel",
+        ).pack(anchor=tk.W, pady=(0, 1))
+
+        top_actions = ttk.Frame(topbar, style="Topbar.TFrame")
+        top_actions.pack(side=tk.RIGHT)
+        ttk.Button(
+            top_actions,
+            text="Appearance",
+            style="Secondary.TButton",
+            command=self._open_settings,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(
+            top_actions,
+            text="Refresh",
+            command=self._manual_refresh,
         ).pack(side=tk.LEFT)
-        self.updated_var = tk.StringVar(value="Runner data: —    Activity: —")
-        ttk.Label(heading, textvariable=self.updated_var, style="Meta.TLabel").pack(
-            side=tk.RIGHT, anchor=tk.S
+
+        body = ttk.Frame(shell, style="App.TFrame")
+        body.pack(fill=tk.BOTH, expand=True)
+
+        # Left navigation mirrors the rest of the Infiltrator desktop family.
+        sidebar = ttk.Frame(body, style="Sidebar.TFrame", width=205, padding=(12, 17))
+        sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        sidebar.pack_propagate(False)
+        ttk.Label(sidebar, text="MONITOR", style="SidebarKicker.TLabel").pack(
+            fill=tk.X, padx=3, pady=(2, 8)
         )
 
-        meta = ttk.Frame(outer)
-        meta.pack(fill=tk.X, pady=(5, 7))
+        self.nav_buttons: dict[int, ttk.Button] = {}
+        nav_items = (
+            (0, "●  Runners"),
+            (1, "▶  Active jobs"),
+            (2, "◷  History"),
+            (3, "◆  Local service"),
+        )
+        for index, label in nav_items:
+            button = ttk.Button(
+                sidebar,
+                text=label,
+                style="Nav.TButton",
+                command=lambda tab=index: self._select_section(tab),
+            )
+            button.pack(fill=tk.X, pady=(0, 5))
+            self.nav_buttons[index] = button
+
+        ttk.Frame(sidebar, style="Sidebar.TFrame").pack(fill=tk.BOTH, expand=True)
+        ttk.Label(sidebar, text="SYSTEM", style="SidebarKicker.TLabel").pack(
+            fill=tk.X, padx=3, pady=(0, 8)
+        )
+        ttk.Button(
+            sidebar,
+            text="⚙  Settings",
+            style="Nav.TButton",
+            command=self._open_settings,
+        ).pack(fill=tk.X, pady=(0, 12))
+        ttk.Label(
+            sidebar,
+            text="Common 1.19.10",
+            style="SidebarMeta.TLabel",
+        ).pack(fill=tk.X, padx=3)
+        ttk.Label(
+            sidebar,
+            text=f"Runner Monitor {VERSION}",
+            style="SidebarMeta.TLabel",
+        ).pack(fill=tk.X, padx=3, pady=(2, 0))
+
+        content = ttk.Frame(body, style="App.TFrame", padding=(22, 18, 18, 14))
+        content.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        hero = ttk.Frame(content, style="Hero.TFrame")
+        hero.pack(fill=tk.X, pady=(0, 12))
+        hero_copy = ttk.Frame(hero, style="Hero.TFrame")
+        hero_copy.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.section_title_var = tk.StringVar(value="Runners")
+        self.section_subtitle_var = tk.StringVar(
+            value="Self-hosted runner connectivity, workload and health."
+        )
+        ttk.Label(
+            hero_copy,
+            textvariable=self.section_title_var,
+            style="HeroTitle.TLabel",
+        ).pack(anchor=tk.W)
+        ttk.Label(
+            hero_copy,
+            textvariable=self.section_subtitle_var,
+            style="HeroSubtitle.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 0))
+        self.updated_var = tk.StringVar(value="Runner data: —    Activity: —")
+        ttk.Label(
+            hero,
+            textvariable=self.updated_var,
+            style="HeroSubtitle.TLabel",
+        ).pack(side=tk.RIGHT, anchor=tk.S, pady=(0, 2))
+
+        context = ttk.Frame(content, style="Context.TFrame", padding=(12, 9))
+        context.pack(fill=tk.X, pady=(0, 12))
         self.org_var = tk.StringVar(value=f"Organisation: {ORG}")
-        ttk.Label(meta, textvariable=self.org_var).pack(side=tk.LEFT)
+        ttk.Label(context, textvariable=self.org_var, style="Context.TLabel").pack(
+            side=tk.LEFT
+        )
         self.scan_var = tk.StringVar(
             value=(
                 f"Runner poll {REFRESH_SECONDS:g}s  •  Activity scan "
                 f"{ACTIVITY_SECONDS:g}s  •  Up to {REPO_LIMIT} active repositories"
             )
         )
-        ttk.Label(meta, textvariable=self.scan_var, style="Meta.TLabel").pack(
-            side=tk.LEFT, padx=(22, 0)
+        ttk.Label(context, textvariable=self.scan_var, style="Context.TLabel").pack(
+            side=tk.RIGHT
         )
 
-        counters = ttk.Frame(outer)
-        counters.pack(fill=tk.X, pady=(0, 8))
         self.counter_vars: dict[str, tk.StringVar] = {}
-        counter_specs = (
-            ("TOTAL", "Counter.TLabel"),
-            ("RUNNING", "Green.Counter.TLabel"),
-            ("IDLE", "Blue.Counter.TLabel"),
-            ("OFFLINE", "Red.Counter.TLabel"),
-            ("LOCAL ACTIVE", "Green.Counter.TLabel"),
-            ("GITHUB ACTIVE", "Purple.Counter.TLabel"),
-            ("QUEUED", "Amber.Counter.TLabel"),
+        summary = ttk.Frame(content, style="App.TFrame")
+        summary.pack(fill=tk.X, pady=(0, 10))
+        primary_specs = (
+            ("TOTAL", "RUNNERS", "SummaryValue.TLabel"),
+            ("RUNNING", "RUNNING", "Green.SummaryValue.TLabel"),
+            ("IDLE", "IDLE", "Blue.SummaryValue.TLabel"),
+            ("OFFLINE", "OFFLINE", "Red.SummaryValue.TLabel"),
         )
-        for name, label_style in counter_specs:
-            card = ttk.Frame(counters, style="CounterCard.TFrame", padding=(10, 6))
-            card.pack(side=tk.LEFT, padx=(0, 7))
-            variable = tk.StringVar(value=f"{name}  0")
+        for column, (name, caption, value_style) in enumerate(primary_specs):
+            summary.columnconfigure(column, weight=1, uniform="runner-summary")
+            card = ttk.Frame(
+                summary,
+                style="SummaryCard.TFrame",
+                padding=(14, 10),
+                cursor="hand2",
+            )
+            card.grid(
+                row=0,
+                column=column,
+                sticky="nsew",
+                padx=(0 if column == 0 else 5, 0 if column == len(primary_specs) - 1 else 5),
+            )
+            ttk.Label(card, text=caption, style="SummaryKicker.TLabel").pack(anchor=tk.W)
+            variable = tk.StringVar(value="0")
             self.counter_vars[name] = variable
-            label = ttk.Label(card, textvariable=variable, style=label_style, cursor="hand2")
-            label.pack()
+            value = ttk.Label(
+                card,
+                textvariable=variable,
+                style=value_style,
+                cursor="hand2",
+            )
+            value.pack(anchor=tk.W, pady=(2, 0))
             card.bind("<Button-1>", lambda _e, n=name: self._counter_filter(n))
-            label.bind("<Button-1>", lambda _e, n=name: self._counter_filter(n))
+            value.bind("<Button-1>", lambda _e, n=name: self._counter_filter(n))
+
+        activity_summary = ttk.Frame(content, style="App.TFrame")
+        activity_summary.pack(fill=tk.X, pady=(0, 8))
+        activity_specs = (
+            ("LOCAL ACTIVE", "SELF-HOSTED ACTIVE", "Green.SummaryValue.TLabel"),
+            ("GITHUB ACTIVE", "GITHUB-HOSTED ACTIVE", "Purple.SummaryValue.TLabel"),
+            ("QUEUED", "QUEUED", "Amber.SummaryValue.TLabel"),
+        )
+        for column, (name, caption, value_style) in enumerate(activity_specs):
+            activity_summary.columnconfigure(column, weight=1, uniform="activity-summary")
+            card = ttk.Frame(
+                activity_summary,
+                style="SummaryCard.TFrame",
+                padding=(14, 8),
+                cursor="hand2",
+            )
+            card.grid(
+                row=0,
+                column=column,
+                sticky="nsew",
+                padx=(0 if column == 0 else 5, 0 if column == len(activity_specs) - 1 else 5),
+            )
+            ttk.Label(card, text=caption, style="SummaryKicker.TLabel").pack(side=tk.LEFT)
+            variable = tk.StringVar(value="0")
+            self.counter_vars[name] = variable
+            value = ttk.Label(
+                card,
+                textvariable=variable,
+                style=value_style,
+                cursor="hand2",
+            )
+            value.pack(side=tk.RIGHT)
+            card.bind("<Button-1>", lambda _e, n=name: self._counter_filter(n))
+            value.bind("<Button-1>", lambda _e, n=name: self._counter_filter(n))
 
         self.session_var = tk.StringVar(value="Observed this session: —")
-        ttk.Label(outer, textvariable=self.session_var).pack(fill=tk.X, pady=(0, 7))
-
-        filter_bar = ttk.Frame(outer)
-        filter_bar.pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(filter_bar, text="Filter:").pack(side=tk.LEFT)
-        self.filter_var = tk.StringVar()
-        filter_entry = ttk.Entry(filter_bar, textvariable=self.filter_var, width=38)
-        self.filter_entry = filter_entry
-        filter_entry.pack(side=tk.LEFT, padx=(6, 6))
-        self.filter_var.trace_add("write", lambda *_: self._apply_current_filter())
-        ttk.Button(filter_bar, text="Clear", command=lambda: self.filter_var.set("")).pack(
-            side=tk.LEFT
-        )
         ttk.Label(
-            filter_bar,
-            text="Filters the selected tab. Click a column heading to sort.",
-            style="Meta.TLabel",
-        ).pack(side=tk.LEFT, padx=(14, 0))
+            content,
+            textvariable=self.session_var,
+            style="HeroSubtitle.TLabel",
+        ).pack(fill=tk.X, pady=(0, 10))
 
-        self.notebook = ttk.Notebook(outer)
+        toolbar = ttk.Frame(content, style="Toolbar.TFrame", padding=(10, 8))
+        toolbar.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(toolbar, text="SEARCH", style="Toolbar.TLabel").pack(side=tk.LEFT)
+        self.filter_var = tk.StringVar()
+        self.filter_entry = ttk.Entry(toolbar, textvariable=self.filter_var)
+        self.filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 8))
+        self.filter_var.trace_add("write", lambda *_: self._apply_current_filter())
+        ttk.Button(
+            toolbar,
+            text="Clear",
+            style="Secondary.TButton",
+            command=lambda: self.filter_var.set(""),
+        ).pack(side=tk.LEFT)
+        ttk.Label(
+            toolbar,
+            text="Click a column heading to sort",
+            style="Toolbar.TLabel",
+        ).pack(side=tk.LEFT, padx=(12, 2))
+
+        self.notebook = ttk.Notebook(content, style="Content.TNotebook")
         self.notebook.pack(fill=tk.BOTH, expand=True)
         self.notebook.bind("<<NotebookTabChanged>>", self._notebook_tab_changed)
 
@@ -910,48 +1373,85 @@ class RunnerMonitor(tk.Tk):
         self.history_tree = self._build_history_tab()
         self.local_tree = self._build_local_health_tab()
 
+        detail_bar = ttk.Frame(content, style="DetailBar.TFrame", padding=(10, 8))
+        detail_bar.pack(fill=tk.X, pady=(10, 0))
         self.detail_var = tk.StringVar(value="Select a runner, job, or local service for details.")
-        ttk.Label(outer, textvariable=self.detail_var, style="Detail.TLabel").pack(
-            fill=tk.X, pady=(7, 0)
-        )
-
-        footer = ttk.Frame(outer)
-        footer.pack(fill=tk.X, pady=(8, 0))
-        self.status_var = tk.StringVar(value="Starting…")
-        self.status_label = ttk.Label(footer, textvariable=self.status_var)
-        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(footer, text="Refresh now", command=self._manual_refresh).pack(
-            side=tk.RIGHT
-        )
-        ttk.Button(footer, text="Settings", command=self._open_settings).pack(
-            side=tk.RIGHT, padx=(0, 8)
-        )
-        ttk.Button(footer, text="Export CSV", command=self._export_selected_tab).pack(
-            side=tk.RIGHT, padx=(0, 8)
-        )
-        self.restart_button = ttk.Button(
-            footer,
-            text="Restart selected runner",
-            command=self._restart_selected_runner,
-            state=tk.DISABLED,
-        )
-        self.restart_button.pack(side=tk.RIGHT, padx=(0, 8))
-        self.diag_button = ttk.Button(
-            footer, text="Open _diag", command=self._open_selected_diag, state=tk.DISABLED
-        )
-        self.diag_button.pack(side=tk.RIGHT, padx=(0, 8))
+        ttk.Label(
+            detail_bar,
+            textvariable=self.detail_var,
+            style="DetailBar.TLabel",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.open_button = ttk.Button(
-            footer,
-            text="Open selected job",
+            detail_bar,
+            text="Open job",
+            style="Secondary.TButton",
             command=self._open_selected_job,
             state=tk.DISABLED,
         )
-        self.open_button.pack(side=tk.RIGHT, padx=(0, 8))
+        self.open_button.pack(side=tk.RIGHT, padx=(8, 0))
+        self.diag_button = ttk.Button(
+            detail_bar,
+            text="Open _diag",
+            style="Secondary.TButton",
+            command=self._open_selected_diag,
+            state=tk.DISABLED,
+        )
+        self.diag_button.pack(side=tk.RIGHT, padx=(8, 0))
+        self.restart_button = ttk.Button(
+            detail_bar,
+            text="Restart runner",
+            command=self._restart_selected_runner,
+            state=tk.DISABLED,
+        )
+        self.restart_button.pack(side=tk.RIGHT, padx=(8, 0))
+
+        status_bar = ttk.Frame(shell, style="StatusBar.TFrame", padding=(12, 7))
+        status_bar.pack(fill=tk.X)
+        self.status_var = tk.StringVar(value="Starting…")
+        self.status_label = ttk.Label(
+            status_bar,
+            textvariable=self.status_var,
+            style="StatusBar.TLabel",
+        )
+        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(
+            status_bar,
+            text="Export CSV",
+            style="Secondary.TButton",
+            command=self._export_selected_tab,
+        ).pack(side=tk.RIGHT)
 
         self.bind("<F5>", lambda _e: self._manual_refresh())
         self.bind("<Control-f>", lambda _e: self.filter_entry.focus_set())
         self.bind("<Control-e>", lambda _e: self._export_selected_tab())
         self.bind("<Control-comma>", lambda _e: self._open_settings())
+        self._sync_navigation()
+
+    def _select_section(self, index: int) -> None:
+        if not 0 <= index < len(self.nav_buttons):
+            return
+        self.notebook.select(index)
+        self._sync_navigation()
+
+    def _sync_navigation(self) -> None:
+        try:
+            selected = self.notebook.index(self.notebook.select())
+        except (tk.TclError, AttributeError):
+            selected = 0
+
+        sections = (
+            ("Runners", "Self-hosted runner connectivity, workload and health."),
+            ("Active jobs", "Current workflow jobs, queue state and runner assignment."),
+            ("History", "Session activity and completed runner/job observations."),
+            ("Local service", "Local runner service health, diagnostics and recovery actions."),
+        )
+        title, subtitle = sections[selected] if selected < len(sections) else sections[0]
+        if hasattr(self, "section_title_var"):
+            self.section_title_var.set(title)
+            self.section_subtitle_var.set(subtitle)
+
+        for index, button in getattr(self, "nav_buttons", {}).items():
+            button.configure(style="NavSelected.TButton" if index == selected else "Nav.TButton")
 
     def _open_settings(self) -> None:
         dialog = ConfigDialog(self, self.config_data, title="Runner Monitor settings")
@@ -1008,7 +1508,7 @@ class RunnerMonitor(tk.Tk):
         return tree
 
     def _build_runner_tab(self) -> ttk.Treeview:
-        frame = ttk.Frame(self.notebook)
+        frame = ttk.Frame(self.notebook, style="TablePanel.TFrame", padding=1)
         self.notebook.add(frame, text="Runners")
         columns = (
             ("name", "Runner", 190, tk.W),
@@ -1027,7 +1527,7 @@ class RunnerMonitor(tk.Tk):
         return tree
 
     def _build_activity_tab(self) -> ttk.Treeview:
-        frame = ttk.Frame(self.notebook)
+        frame = ttk.Frame(self.notebook, style="TablePanel.TFrame", padding=1)
         self.notebook.add(frame, text="Active jobs")
         columns = (
             ("environment", "Where", 115, tk.W),
@@ -1047,7 +1547,7 @@ class RunnerMonitor(tk.Tk):
         return tree
 
     def _build_history_tab(self) -> ttk.Treeview:
-        frame = ttk.Frame(self.notebook)
+        frame = ttk.Frame(self.notebook, style="TablePanel.TFrame", padding=1)
         self.notebook.add(frame, text="History")
         columns = (
             ("time_text", "Time", 95, tk.W),
@@ -1058,7 +1558,7 @@ class RunnerMonitor(tk.Tk):
         return self._new_tree(frame, "history", columns)
 
     def _build_local_health_tab(self) -> ttk.Treeview:
-        frame = ttk.Frame(self.notebook)
+        frame = ttk.Frame(self.notebook, style="TablePanel.TFrame", padding=1)
         local_label = "Local Windows health" if sys.platform == "win32" else "Local Linux health"
         self.notebook.add(frame, text=local_label)
         columns = (
@@ -1703,7 +2203,7 @@ class RunnerMonitor(tk.Tk):
         self._update_summary()
 
     def _set_counter(self, name: str, value: int) -> None:
-        self.counter_vars[name].set(f"{name}  {value}")
+        self.counter_vars[name].set(str(value))
 
     def _filtered(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         needle = self.filter_var.get().strip().casefold()
@@ -1884,6 +2384,7 @@ class RunnerMonitor(tk.Tk):
             self.filter_var.set(mapping.get(name, ""))
 
     def _notebook_tab_changed(self, _event: tk.Event[Any] | None = None) -> None:
+        self._sync_navigation()
         self._apply_current_filter()
         self._update_restart_button()
 
