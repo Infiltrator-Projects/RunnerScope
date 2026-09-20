@@ -35,8 +35,8 @@ jobs:
               exit 1
             }
           done
-          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.6"
-          test "$(git -C infiltratr-common rev-parse HEAD)" = "a0e26896cc2a5674a138b29f009a7b30f0d636c6"
+          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.10"
+          test "$(git -C infiltratr-common rev-parse HEAD)" = "33e69c0a462b56d388881d89c4eb49f72fa0b0fe"
 
       - name: Enforce first-party native boundary
         run: ./tools/check-first-party-native.sh
@@ -76,8 +76,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.6"
-          test "$(git -C infiltratr-common rev-parse HEAD)" = "a0e26896cc2a5674a138b29f009a7b30f0d636c6"
+          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.10"
+          test "$(git -C infiltratr-common rev-parse HEAD)" = "33e69c0a462b56d388881d89c4eb49f72fa0b0fe"
 
       - name: Build Debian package
         run: |
