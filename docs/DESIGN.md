@@ -43,3 +43,5 @@ Common may provide genuinely generic primitives. Runner Monitor-specific HTTP/pr
 ## UI rule
 
 Presentation should consume the same runner/job/session model on each platform. Toolkit or native-shell differences must not redefine the meaning of running, idle, offline, queued or active.
+
+The compatibility UI uses the shared Infiltrator operations-console hierarchy: product header, left navigation, semantic summary cards, a focused data work surface, contextual selection actions and a compact status footer. Common owns palette, typography and structural roles; Runner Monitor owns runner/job semantics and table content. Monospace is reserved for genuinely technical fragments rather than used as the application-wide visual identity.
