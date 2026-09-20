@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.1.9 - 2026-09-20
+
+- Retune Runner Monitor to the full Common/MBLINK Night hierarchy instead of using mostly generic dark surfaces.
+- Match Infiltrator Software's 44px-class titlebar composition: centred product title/subtitle with About, live Theme and Refresh controls.
+- Use the canonical cyan accent for selected navigation, focus and primary actions; selected-summary cyan for highlighted state; green/success borders for healthy states; amber/warning borders for queued and restart actions; red for faults/offline.
+- Move context, detail and status strips onto the MBLINK connection/connection-border roles for clearer graphite layering.
+- Preserve native window-manager chrome on the Python/Tk compatibility UI rather than replacing it with fragile custom move/resize code.
+- Add regression coverage for titlebar controls and the MBLINK semantic role mappings.
+
 ## 1.1.8 - 2026-09-20
 
 - Replace the generic monitor-screen artwork with a dedicated workflow/pipeline glyph so Runner Monitor is immediately distinguishable from System Monitor.
