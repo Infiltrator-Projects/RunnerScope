@@ -26,7 +26,7 @@ static InfiltratrProjectInfo project_info(void)
     info.license_id = "GPL-3.0-or-later";
     info.comments = "GitHub Actions self-hosted runner monitor native bridge";
     info.icon_name = "runnerscope";
-    info.copyright_text = "Copyright (c) 2000-2026 Shannon Smith";
+    info.copyright_text = "Copyright (c) 1993-2026 Shannon Smith";
     return info;
 }
 
