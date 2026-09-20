@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(RunnerMonitor VERSION 1.1.9 LANGUAGES C)
+project(RunnerMonitor VERSION 1.1.10 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
