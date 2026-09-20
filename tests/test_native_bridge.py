@@ -21,12 +21,12 @@ def main() -> int:
     helper = sys.argv[1]
 
     assert run(helper, "--version").stdout.strip() == b"1.1.6"
-    assert run(helper, "--common-version").stdout.strip() == b"1.19.6"
+    assert run(helper, "--common-version").stdout.strip() == b"1.19.10"
 
     info = run(helper, "--project-info").stdout.decode("utf-8")
     assert "name=Runner Monitor" in info
     assert "version=1.1.6" in info
-    assert "common-library=infiltratr-common-1.19.6" in info
+    assert "common-library=infiltratr-common-1.19.10" in info
     assert "source-id=Infiltrator-Projects/RunnerScope" in info
 
     palette = {}
