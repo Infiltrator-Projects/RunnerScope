@@ -5,7 +5,7 @@ from pathlib import Path
 source = Path("runnerscope.py").read_text(encoding="utf-8")
 
 required = (
-    'VERSION = "1.1.9"',
+    'VERSION = "1.1.10"',
     '"Topbar.TFrame"',
     '"Titlebar.TButton"',
     '"TitlebarIcon.TButton"',
@@ -74,3 +74,6 @@ assert 'height=44, padding=(6, 0)' in source
 assert '"titlebar_subtitle": (body_family, 12, "bold")' in source
 assert 'tree.tag_configure("RUNNING", foreground=MB_ACCENT' in source
 assert 'tree.tag_configure("IDLE", foreground=STATE_GREEN)' in source
+
+assert '_blend_hex(MB_PANEL, MB_ACCENT, 0.075)' in source
+assert '_blend_hex(MB_CARD, STATE_AMBER, 0.08)' in source
