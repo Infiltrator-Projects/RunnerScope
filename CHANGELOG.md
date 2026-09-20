@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.1.10 - 2026-09-20
+
+- Reproduce MBLINK's low-alpha semantic surfaces in Tk by preblending Common graphite with the exact accent/state roles.
+- Lock the product header to the same 44px-class height used by Infiltrator Software.
+- Make selected navigation use the MBLINK cyan-tinted surface and border treatment rather than a flat selection block.
+- Tint summary cards subtly by semantic state while keeping the graphite base dominant.
+- Clarify state meaning: running/self-hosted activity cyan, healthy idle green, GitHub-hosted activity blue, queued amber, offline/fault red.
+- Repair the UI regression contract to validate the blended navigation surface.
+
 ## 1.1.9 - 2026-09-20
 
 - Retune Runner Monitor to the full Common/MBLINK Night hierarchy instead of using mostly generic dark surfaces.
