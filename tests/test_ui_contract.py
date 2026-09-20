@@ -27,6 +27,7 @@ required = (
     '"StatusBar.TFrame"',
     '"Content.TNotebook"',
     'text="Runner Monitor"',
+    'self.title("Runner Monitor")',
     'text="GitHub Actions runner operations & health"',
     '(0, "●  Runners")',
     '(1, "▶  Active jobs")',
