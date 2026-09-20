@@ -1,3 +1,12 @@
+infiltrator-runner-monitor (1.1.9) unstable; urgency=medium
+
+  * Tune the compatibility UI against the full Common/MBLINK Night semantic palette.
+  * Match Infiltrator Software's compact titlebar hierarchy with centred product title/subtitle and About, Theme and Refresh controls.
+  * Use cyan selection/accent roles, graphite connection strips, semantic card borders, amber warnings and green success states.
+  * Keep native window-manager move/resize controls intact while the compatibility product remains Tk-based.
+
+ -- Shannon Smith <noreply@github.com>  Sun, 20 Sep 2026 18:35:00 +1000
+
 infiltrator-runner-monitor (1.1.8) unstable; urgency=medium
 
   * Give Runner Monitor a dedicated workflow/pipeline icon instead of sharing System Monitor's display glyph.
