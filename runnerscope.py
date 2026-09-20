@@ -66,7 +66,7 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 APP_NAME = "Runner Monitor"
 LEGACY_STORAGE_NAME = "RunnerScope"
-VERSION = "1.1.8"
+VERSION = "1.1.9"
 
 
 def _application_icon_path() -> Path | None:
@@ -339,6 +339,9 @@ def _activate_palette(mode: str | None = None) -> dict[str, str]:
     global STATE_PURPLE, STATE_GREY, MB_TITLEBAR, MB_HEADING, MB_SUMMARY
     global MB_KICKER, MB_DETAIL, MB_NOTE, MB_STATUS_BORDER, MB_ACCENT_HOVER
     global MB_CARD_HOVER, MB_SURFACE_HOVER, MB_OPERATION_HOVER
+    global MB_ACCENT, MB_ACCENT_FG, MB_CONNECTION, MB_CONNECTION_BORDER
+    global MB_SELECTED_SUMMARY, MB_WARNING_MUTED, MB_WARNING_BORDER
+    global MB_SUCCESS_BORDER, MB_INPUT
 
     palette = _native_palette(mode)
     MB_BG = palette["background"]
@@ -371,6 +374,15 @@ def _activate_palette(mode: str | None = None) -> dict[str, str]:
     MB_CARD_HOVER = palette["card_hover"]
     MB_SURFACE_HOVER = palette["surface_hover"]
     MB_OPERATION_HOVER = palette["operation_hover"]
+    MB_ACCENT = palette["neutral_accent"]
+    MB_ACCENT_FG = palette["accent_foreground"]
+    MB_CONNECTION = palette["connection"]
+    MB_CONNECTION_BORDER = palette["connection_border"]
+    MB_SELECTED_SUMMARY = palette["selected_summary"]
+    MB_WARNING_MUTED = palette["warning_muted"]
+    MB_WARNING_BORDER = palette["warning_border"]
+    MB_SUCCESS_BORDER = palette["success_border"]
+    MB_INPUT = palette["input"]
     return palette
 
 
@@ -451,7 +463,7 @@ def enable_windows_dpi_awareness() -> None:
 
 
 def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str, tuple[Any, ...]]:
-    """Apply the selected Common Day/Night palette and the shared product-shell visual language."""
+    """Apply Common/MBLINK semantic roles to the compatibility Tk shell."""
     _activate_palette(mode)
     families = {str(name) for name in tkfont.families(window)}
 
@@ -477,12 +489,14 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         "small": (body_family, 9),
         "small_bold": (body_family, 9, "bold"),
         "counter": (body_family, 22, "bold"),
-        "brand": (brand_family, 20),
-        "hero": (brand_family, 18),
+        "brand": (brand_family, 18),
+        "hero": (brand_family, 20),
         "section": (body_family, 12, "bold"),
         "kicker": (body_family, 8, "bold"),
         "nav": (body_family, 10, "bold"),
+        "titlebar_subtitle": (body_family, 9, "bold"),
     }
+
     try:
         window.configure(background=MB_BG)
         window.option_add("*Font", fonts["body"])
@@ -493,7 +507,6 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     if "clam" in style.theme_names():
         style.theme_use("clam")
 
-    # Baseline controls.
     style.configure(
         ".",
         background=MB_BG,
@@ -503,7 +516,7 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         darkcolor=MB_BORDER,
         lightcolor=MB_BORDER,
         troughcolor=MB_SURFACE,
-        focuscolor=MB_BORDER,
+        focuscolor=MB_ACCENT,
     )
     style.configure("TFrame", background=MB_BG)
     style.configure("TLabel", background=MB_BG, foreground=MB_TEXT)
@@ -513,13 +526,15 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     style.configure("Kicker.TLabel", foreground=MB_KICKER, font=fonts["kicker"])
     style.configure("Detail.TLabel", foreground=MB_DETAIL, font=fonts["small"])
 
+    # Normal controls keep the Common graphite/silver relationship. Primary
+    # operational actions get the MBLINK cyan only when that emphasis matters.
     style.configure(
         "TButton",
         background=MB_BUTTON_BG,
         foreground=MB_BUTTON_FG,
         bordercolor=MB_BORDER,
         font=fonts["body_bold"],
-        padding=(12, 7),
+        padding=(12, 6),
         relief="flat",
     )
     style.map(
@@ -527,14 +542,14 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         background=[
             ("disabled", MB_PANEL),
             ("pressed", MB_SELECT_BG),
-            ("active", MB_CARD_HOVER),
+            ("active", MB_OPERATION_HOVER),
         ],
         foreground=[
             ("disabled", MB_SUBTLE),
             ("pressed", MB_SELECT_FG),
             ("active", MB_TEXT),
         ],
-        bordercolor=[("active", MB_ACCENT_HOVER)],
+        bordercolor=[("active", MB_ACCENT)],
     )
     style.configure(
         "Secondary.TButton",
@@ -542,18 +557,49 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         foreground=MB_TEXT,
         bordercolor=MB_BORDER,
         font=fonts["body_bold"],
-        padding=(11, 7),
+        padding=(11, 6),
         relief="flat",
     )
     style.map(
         "Secondary.TButton",
         background=[("pressed", MB_SELECT_BG), ("active", MB_CARD_HOVER)],
         foreground=[("pressed", MB_SELECT_FG), ("active", MB_HEADING)],
-        bordercolor=[("active", MB_ACCENT_HOVER)],
+        bordercolor=[("active", MB_ACCENT)],
     )
     style.configure(
+        "Accent.TButton",
+        background=MB_ACCENT,
+        foreground=MB_ACCENT_FG,
+        bordercolor=MB_ACCENT,
+        font=fonts["body_bold"],
+        padding=(11, 6),
+        relief="flat",
+    )
+    style.map(
+        "Accent.TButton",
+        background=[("pressed", MB_ACCENT_HOVER), ("active", MB_ACCENT_HOVER), ("disabled", MB_PANEL)],
+        foreground=[("disabled", MB_SUBTLE)],
+        bordercolor=[("pressed", MB_ACCENT_HOVER), ("active", MB_ACCENT_HOVER)],
+    )
+    style.configure(
+        "Warning.TButton",
+        background=MB_SURFACE,
+        foreground=MB_WARNING_MUTED,
+        bordercolor=MB_WARNING_BORDER,
+        font=fonts["body_bold"],
+        padding=(11, 6),
+        relief="flat",
+    )
+    style.map(
+        "Warning.TButton",
+        background=[("pressed", MB_SELECT_BG), ("active", MB_CARD_HOVER), ("disabled", MB_PANEL)],
+        foreground=[("active", STATE_AMBER), ("disabled", MB_SUBTLE)],
+        bordercolor=[("active", STATE_AMBER)],
+    )
+
+    style.configure(
         "TEntry",
-        fieldbackground=MB_SURFACE,
+        fieldbackground=MB_INPUT,
         foreground=MB_TEXT,
         insertcolor=MB_TEXT,
         bordercolor=MB_BORDER,
@@ -563,13 +609,13 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     )
     style.map(
         "TEntry",
-        fieldbackground=[("focus", MB_PANEL), ("disabled", MB_PANEL)],
+        fieldbackground=[("focus", MB_SURFACE), ("disabled", MB_PANEL)],
         foreground=[("disabled", MB_SUBTLE)],
-        bordercolor=[("focus", MB_ACCENT_HOVER)],
+        bordercolor=[("focus", MB_ACCENT)],
     )
     style.configure(
         "TCombobox",
-        fieldbackground=MB_SURFACE,
+        fieldbackground=MB_INPUT,
         background=MB_BUTTON_BG,
         foreground=MB_TEXT,
         arrowcolor=MB_TEXT,
@@ -577,46 +623,65 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         padding=(8, 6),
     )
 
-    # Shared Infiltrator application shell.
+    # Software uses a 44px GTK headerbar. Tk cannot own the native WM buttons
+    # portably, so this in-client product bar mirrors the exact semantic roles,
+    # hierarchy and compact metrics without breaking native move/resize chrome.
     style.configure("App.TFrame", background=MB_BG)
-    style.configure(
-        "Topbar.TFrame",
-        background=MB_TITLEBAR,
-        bordercolor=MB_STATUS_BORDER,
-        borderwidth=1,
-        relief="solid",
-    )
-    style.configure(
-        "TopbarInner.TFrame",
-        background=MB_TITLEBAR,
-        borderwidth=0,
-        relief="flat",
-    )
+    style.configure("Topbar.TFrame", background=MB_TITLEBAR, borderwidth=0, relief="flat")
+    style.configure("TopbarInner.TFrame", background=MB_TITLEBAR, borderwidth=0, relief="flat")
     style.configure(
         "TopbarTitle.TLabel",
         background=MB_TITLEBAR,
-        foreground=MB_HEADING,
+        foreground=MB_TITLE,
         font=fonts["brand"],
     )
     style.configure(
         "TopbarMeta.TLabel",
         background=MB_TITLEBAR,
         foreground=MB_SUMMARY,
-        font=fonts["small"],
+        font=fonts["titlebar_subtitle"],
     )
+    style.configure("Titlebar.TSeparator", background=MB_BORDER)
+    style.configure(
+        "Titlebar.TButton",
+        background=MB_BUTTON_BG,
+        foreground=MB_BUTTON_FG,
+        bordercolor=MB_BORDER,
+        font=fonts["body_bold"],
+        padding=(12, 5),
+        relief="flat",
+    )
+    style.map(
+        "Titlebar.TButton",
+        background=[("pressed", MB_SELECT_BG), ("active", MB_ACCENT)],
+        foreground=[("pressed", MB_SELECT_FG), ("active", MB_ACCENT_FG)],
+        bordercolor=[("active", MB_ACCENT)],
+    )
+    style.configure(
+        "TitlebarIcon.TButton",
+        background=MB_BUTTON_BG,
+        foreground=MB_BUTTON_FG,
+        bordercolor=MB_BORDER,
+        font=fonts["body_bold"],
+        padding=(10, 5),
+        relief="flat",
+    )
+    style.map(
+        "TitlebarIcon.TButton",
+        background=[("pressed", MB_SELECT_BG), ("active", MB_ACCENT)],
+        foreground=[("pressed", MB_SELECT_FG), ("active", MB_ACCENT_FG)],
+        bordercolor=[("active", MB_ACCENT)],
+    )
+
+    # MBLINK navigation uses cyan as the selected identity, not generic grey.
     style.configure(
         "Sidebar.TFrame",
         background=MB_PANEL,
-        bordercolor=MB_STATUS_BORDER,
+        bordercolor=MB_BORDER,
         borderwidth=1,
         relief="solid",
     )
-    style.configure(
-        "SidebarFill.TFrame",
-        background=MB_PANEL,
-        borderwidth=0,
-        relief="flat",
-    )
+    style.configure("SidebarFill.TFrame", background=MB_PANEL, borderwidth=0, relief="flat")
     style.configure(
         "SidebarKicker.TLabel",
         background=MB_PANEL,
@@ -626,7 +691,7 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     style.configure(
         "SidebarMeta.TLabel",
         background=MB_PANEL,
-        foreground=MB_SUBTLE,
+        foreground=MB_SUMMARY,
         font=fonts["small"],
     )
     style.configure(
@@ -641,14 +706,15 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     )
     style.map(
         "Nav.TButton",
-        background=[("active", MB_SURFACE_HOVER), ("pressed", MB_SELECT_BG)],
+        background=[("active", MB_CARD_HOVER), ("pressed", MB_SELECT_BG)],
         foreground=[("active", MB_HEADING), ("pressed", MB_SELECT_FG)],
+        bordercolor=[("active", MB_CONNECTION_BORDER)],
     )
     style.configure(
         "NavSelected.TButton",
-        background=MB_CARD,
-        foreground=MB_HEADING,
-        bordercolor=MB_ACCENT_HOVER,
+        background=MB_SELECT_BG,
+        foreground=MB_ACCENT,
+        bordercolor=MB_ACCENT,
         font=fonts["nav"],
         padding=(14, 10),
         relief="solid",
@@ -658,14 +724,15 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     style.map(
         "NavSelected.TButton",
         background=[("active", MB_CARD_HOVER), ("pressed", MB_SELECT_BG)],
-        foreground=[("active", MB_HEADING), ("pressed", MB_SELECT_FG)],
+        foreground=[("active", MB_ACCENT_HOVER), ("pressed", MB_SELECTED_SUMMARY)],
+        bordercolor=[("active", MB_ACCENT_HOVER)],
     )
 
     style.configure("Hero.TFrame", background=MB_BG)
     style.configure(
         "HeroTitle.TLabel",
         background=MB_BG,
-        foreground=MB_HEADING,
+        foreground=MB_SELECTED_SUMMARY,
         font=fonts["hero"],
     )
     style.configure(
@@ -674,19 +741,23 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         foreground=MB_SUMMARY,
         font=fonts["small"],
     )
+
+    # Same connection-strip role used by MBLINK.
     style.configure(
         "Context.TFrame",
-        background=MB_SURFACE,
-        bordercolor=MB_BORDER,
+        background=MB_CONNECTION,
+        bordercolor=MB_CONNECTION_BORDER,
         borderwidth=1,
         relief="solid",
     )
     style.configure(
         "Context.TLabel",
-        background=MB_SURFACE,
-        foreground=MB_MUTED,
+        background=MB_CONNECTION,
+        foreground=MB_SUMMARY,
         font=fonts["small"],
     )
+
+    # Graphite cards are neutral; their border/value roles carry semantics.
     style.configure(
         "SummaryCard.TFrame",
         background=MB_CARD,
@@ -694,6 +765,22 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         borderwidth=1,
         relief="solid",
     )
+    for style_name, border in (
+        ("Accent.SummaryCard.TFrame", MB_ACCENT),
+        ("Info.SummaryCard.TFrame", STATE_BLUE),
+        ("Success.SummaryCard.TFrame", MB_SUCCESS_BORDER),
+        ("Warning.SummaryCard.TFrame", MB_WARNING_BORDER),
+        ("Fault.SummaryCard.TFrame", STATE_RED),
+        ("Selected.SummaryCard.TFrame", MB_SELECTED_SUMMARY),
+    ):
+        style.configure(
+            style_name,
+            background=MB_CARD,
+            bordercolor=border,
+            borderwidth=1,
+            relief="solid",
+        )
+
     style.configure(
         "SummaryKicker.TLabel",
         background=MB_CARD,
@@ -707,31 +794,32 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         font=fonts["counter"],
     )
     for style_name, colour in (
+        ("Accent.SummaryValue.TLabel", MB_ACCENT),
         ("Green.SummaryValue.TLabel", STATE_GREEN),
         ("Blue.SummaryValue.TLabel", STATE_BLUE),
         ("Red.SummaryValue.TLabel", STATE_RED),
         ("Amber.SummaryValue.TLabel", STATE_AMBER),
-        ("Purple.SummaryValue.TLabel", STATE_PURPLE),
+        ("Purple.SummaryValue.TLabel", MB_SELECTED_SUMMARY),
     ):
         style.configure(style_name, background=MB_CARD, foreground=colour, font=fonts["counter"])
 
     style.configure(
         "Toolbar.TFrame",
-        background=MB_PANEL,
-        bordercolor=MB_BORDER,
+        background=MB_SURFACE,
+        bordercolor=MB_STATUS_BORDER,
         borderwidth=1,
         relief="solid",
     )
     style.configure(
         "Toolbar.TLabel",
-        background=MB_PANEL,
-        foreground=MB_MUTED,
+        background=MB_SURFACE,
+        foreground=MB_SUMMARY,
         font=fonts["small"],
     )
     style.configure(
         "TablePanel.TFrame",
         background=MB_SURFACE,
-        bordercolor=MB_BORDER,
+        bordercolor=MB_STATUS_BORDER,
         borderwidth=1,
         relief="solid",
     )
@@ -743,38 +831,36 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
 
     style.configure(
         "DetailBar.TFrame",
-        background=MB_PANEL,
-        bordercolor=MB_BORDER,
+        background=MB_CONNECTION,
+        bordercolor=MB_CONNECTION_BORDER,
         borderwidth=1,
         relief="solid",
     )
     style.configure(
         "DetailBar.TLabel",
-        background=MB_PANEL,
-        foreground=MB_DETAIL,
+        background=MB_CONNECTION,
+        foreground=MB_NOTE,
         font=fonts["small"],
     )
     style.configure(
         "StatusBar.TFrame",
-        background=MB_TITLEBAR,
-        bordercolor=MB_STATUS_BORDER,
+        background=MB_CONNECTION,
+        bordercolor=MB_CONNECTION_BORDER,
         borderwidth=1,
         relief="solid",
     )
     style.configure(
         "StatusBar.TLabel",
-        background=MB_TITLEBAR,
+        background=MB_CONNECTION,
         foreground=MB_SUMMARY,
         font=fonts["small"],
     )
 
-    # Legacy named styles are retained because counter/status code and dialogs
-    # still use them, but the main monitor now presents values as real cards.
     style.configure("Counter.TLabel", font=fonts["counter"], foreground=MB_HEADING)
     style.configure("Green.Counter.TLabel", font=fonts["counter"], foreground=STATE_GREEN)
     style.configure("Blue.Counter.TLabel", font=fonts["counter"], foreground=STATE_BLUE)
     style.configure("Red.Counter.TLabel", font=fonts["counter"], foreground=STATE_RED)
-    style.configure("Purple.Counter.TLabel", font=fonts["counter"], foreground=STATE_PURPLE)
+    style.configure("Purple.Counter.TLabel", font=fonts["counter"], foreground=MB_SELECTED_SUMMARY)
     style.configure("Amber.Counter.TLabel", font=fonts["counter"], foreground=STATE_AMBER)
     style.configure(
         "CounterCard.TFrame",
@@ -789,14 +875,14 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         background=MB_SURFACE,
         fieldbackground=MB_SURFACE,
         foreground=MB_TEXT,
-        bordercolor=MB_BORDER,
+        bordercolor=MB_STATUS_BORDER,
         rowheight=32,
         font=fonts["small"],
     )
     style.map(
         "Treeview",
         background=[("selected", MB_SELECT_BG)],
-        foreground=[("selected", MB_SELECT_FG)],
+        foreground=[("selected", MB_SELECTED_SUMMARY)],
     )
     style.configure(
         "Treeview.Heading",
@@ -810,7 +896,8 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     style.map(
         "Treeview.Heading",
         background=[("active", MB_CARD_HOVER)],
-        foreground=[("active", MB_HEADING)],
+        foreground=[("active", MB_ACCENT)],
+        bordercolor=[("active", MB_ACCENT)],
     )
     style.configure(
         "Vertical.TScrollbar",
@@ -1161,31 +1248,58 @@ class RunnerMonitor(tk.Tk):
         shell = ttk.Frame(self, style="App.TFrame")
         shell.pack(fill=tk.BOTH, expand=True)
 
-        # Product header: keep high-frequency controls out of the data table.
-        topbar = ttk.Frame(shell, style="Topbar.TFrame", padding=(18, 9))
+        # Match Software's headerbar hierarchy: centered title/subtitle,
+        # About + Theme + Refresh on the right, 44px-class compact geometry.
+        topbar = ttk.Frame(shell, style="Topbar.TFrame", padding=(6, 4))
         topbar.pack(fill=tk.X)
+        topbar.columnconfigure(0, weight=1)
+        topbar.columnconfigure(1, weight=0)
+        topbar.columnconfigure(2, weight=1)
+
+        ttk.Frame(topbar, style="TopbarInner.TFrame").grid(
+            row=0, column=0, sticky="nsew"
+        )
+
         brand = ttk.Frame(topbar, style="TopbarInner.TFrame")
-        brand.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Label(brand, text="Runner Monitor", style="TopbarTitle.TLabel").pack(anchor=tk.W)
+        brand.grid(row=0, column=1)
+        ttk.Label(
+            brand,
+            text="Runner Monitor",
+            style="TopbarTitle.TLabel",
+            anchor=tk.CENTER,
+        ).pack(anchor=tk.CENTER)
         ttk.Label(
             brand,
             text="GitHub Actions runner operations & health",
             style="TopbarMeta.TLabel",
-        ).pack(anchor=tk.W, pady=(0, 1))
+            anchor=tk.CENTER,
+        ).pack(anchor=tk.CENTER)
 
         top_actions = ttk.Frame(topbar, style="TopbarInner.TFrame")
-        top_actions.pack(side=tk.RIGHT)
+        top_actions.grid(row=0, column=2, sticky="e")
         ttk.Button(
             top_actions,
-            text="Appearance",
-            style="Secondary.TButton",
-            command=self._open_settings,
-        ).pack(side=tk.LEFT, padx=(0, 8))
+            text="ⓘ",
+            width=3,
+            style="TitlebarIcon.TButton",
+            command=self._show_about,
+        ).pack(side=tk.LEFT, padx=(0, 4))
+        self.theme_button_var = tk.StringVar(value=self._theme_button_text())
         ttk.Button(
             top_actions,
-            text="Refresh",
+            textvariable=self.theme_button_var,
+            style="Titlebar.TButton",
+            command=self._cycle_theme,
+        ).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(
+            top_actions,
+            text="↻",
+            width=3,
+            style="TitlebarIcon.TButton",
             command=self._manual_refresh,
         ).pack(side=tk.LEFT)
+
+        ttk.Separator(shell, orient=tk.HORIZONTAL, style="Titlebar.TSeparator").pack(fill=tk.X)
 
         body = ttk.Frame(shell, style="App.TFrame")
         body.pack(fill=tk.BOTH, expand=True)
@@ -1284,16 +1398,16 @@ class RunnerMonitor(tk.Tk):
         summary = ttk.Frame(content, style="App.TFrame")
         summary.pack(fill=tk.X, pady=(0, 10))
         primary_specs = (
-            ("TOTAL", "RUNNERS", "SummaryValue.TLabel"),
-            ("RUNNING", "RUNNING", "Green.SummaryValue.TLabel"),
-            ("IDLE", "IDLE", "Blue.SummaryValue.TLabel"),
-            ("OFFLINE", "OFFLINE", "Red.SummaryValue.TLabel"),
+            ("TOTAL", "RUNNERS", "SummaryCard.TFrame", "SummaryValue.TLabel"),
+            ("RUNNING", "RUNNING", "Success.SummaryCard.TFrame", "Green.SummaryValue.TLabel"),
+            ("IDLE", "IDLE", "Info.SummaryCard.TFrame", "Blue.SummaryValue.TLabel"),
+            ("OFFLINE", "OFFLINE", "Fault.SummaryCard.TFrame", "Red.SummaryValue.TLabel"),
         )
-        for column, (name, caption, value_style) in enumerate(primary_specs):
+        for column, (name, caption, card_style, value_style) in enumerate(primary_specs):
             summary.columnconfigure(column, weight=1, uniform="runner-summary")
             card = ttk.Frame(
                 summary,
-                style="SummaryCard.TFrame",
+                style=card_style,
                 padding=(14, 10),
                 cursor="hand2",
             )
@@ -1319,15 +1433,15 @@ class RunnerMonitor(tk.Tk):
         activity_summary = ttk.Frame(content, style="App.TFrame")
         activity_summary.pack(fill=tk.X, pady=(0, 8))
         activity_specs = (
-            ("LOCAL ACTIVE", "SELF-HOSTED ACTIVE", "Green.SummaryValue.TLabel"),
-            ("GITHUB ACTIVE", "GITHUB-HOSTED ACTIVE", "Purple.SummaryValue.TLabel"),
-            ("QUEUED", "QUEUED", "Amber.SummaryValue.TLabel"),
+            ("LOCAL ACTIVE", "SELF-HOSTED ACTIVE", "Success.SummaryCard.TFrame", "Green.SummaryValue.TLabel"),
+            ("GITHUB ACTIVE", "GITHUB-HOSTED ACTIVE", "Accent.SummaryCard.TFrame", "Accent.SummaryValue.TLabel"),
+            ("QUEUED", "QUEUED", "Warning.SummaryCard.TFrame", "Amber.SummaryValue.TLabel"),
         )
-        for column, (name, caption, value_style) in enumerate(activity_specs):
+        for column, (name, caption, card_style, value_style) in enumerate(activity_specs):
             activity_summary.columnconfigure(column, weight=1, uniform="activity-summary")
             card = ttk.Frame(
                 activity_summary,
-                style="SummaryCard.TFrame",
+                style=card_style,
                 padding=(14, 8),
                 cursor="hand2",
             )
@@ -1396,7 +1510,7 @@ class RunnerMonitor(tk.Tk):
         self.open_button = ttk.Button(
             detail_bar,
             text="Open job",
-            style="Secondary.TButton",
+            style="Accent.TButton",
             command=self._open_selected_job,
             state=tk.DISABLED,
         )
@@ -1412,6 +1526,7 @@ class RunnerMonitor(tk.Tk):
         self.restart_button = ttk.Button(
             detail_bar,
             text="Restart runner",
+            style="Warning.TButton",
             command=self._restart_selected_runner,
             state=tk.DISABLED,
         )
@@ -1438,6 +1553,37 @@ class RunnerMonitor(tk.Tk):
         self.bind("<Control-e>", lambda _e: self._export_selected_tab())
         self.bind("<Control-comma>", lambda _e: self._open_settings())
         self._sync_navigation()
+
+    def _theme_button_text(self) -> str:
+        label = {
+            "system": "System",
+            "day": "Day",
+            "night": "Night",
+        }.get(str(self.config_data.get("theme_mode", "system")).casefold(), "System")
+        return f"Theme: {label}"
+
+    def _cycle_theme(self) -> None:
+        current = str(self.config_data.get("theme_mode", "system")).casefold()
+        next_mode = {"system": "day", "day": "night", "night": "system"}.get(current, "system")
+        self.config_data["theme_mode"] = next_mode
+        save_config(self.config_data)
+        apply_config(self.config_data)
+        self._last_system_dark = _system_prefers_dark()
+        self._refresh_theme()
+        if hasattr(self, "theme_button_var"):
+            self.theme_button_var.set(self._theme_button_text())
+
+    def _show_about(self) -> None:
+        messagebox.showinfo(
+            "Runner Monitor",
+            (
+                f"Runner Monitor {VERSION}\n"
+                "GitHub Actions self-hosted runner monitoring and local runner service health.\n\n"
+                "Common 1.19.10\n"
+                "Copyright © 1993-2026 Shannon Smith"
+            ),
+            parent=self,
+        )
 
     def _select_section(self, index: int) -> None:
         if not 0 <= index < len(self.nav_buttons):
@@ -1475,6 +1621,8 @@ class RunnerMonitor(tk.Tk):
         apply_config(self.config_data)
         self._last_system_dark = _system_prefers_dark()
         self._refresh_theme()
+        if hasattr(self, "theme_button_var"):
+            self.theme_button_var.set(self._theme_button_text())
         self.history = deque(self.history, maxlen=MAX_HISTORY)
         self.repo_cache = []
         self.repo_cache_at = 0.0
