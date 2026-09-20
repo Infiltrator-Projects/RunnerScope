@@ -51,6 +51,7 @@ jobs:
       - name: Run native and Python contracts
         run: |
           python3 tests/test_native_bridge.py ./build/runnerscope-native
+          python3 tests/test_ui_contract.py
           python3 -m py_compile runnerscope.py runnerscope_linux.py runnerscope_windows.py
 
   clean-package-install:
