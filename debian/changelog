@@ -1,3 +1,12 @@
+infiltrator-runner-monitor (1.1.7) unstable; urgency=medium
+
+  * Replace the dense utility layout with the shared Infiltrator operations-console shell.
+  * Add a real left navigation rail, semantic summary cards, layered graphite panels and a compact status footer.
+  * Keep monospace out of the application shell; technical tables retain structured data while headings and controls use Common typography roles.
+  * Preserve all runner monitoring, job, history, local-service and action behaviour.
+
+ -- Shannon Smith <noreply@github.com>  Sun, 20 Sep 2026 18:00:00 +1000
+
 infiltrator-runner-monitor (1.1.6) unstable; urgency=medium
 
   * Make Follow system resolve to the exact Common Day or Night palette and refresh when the host appearance changes.
