@@ -1,3 +1,11 @@
+infiltrator-runner-monitor (1.1.8) unstable; urgency=medium
+
+  * Give Runner Monitor a dedicated workflow/pipeline icon instead of sharing System Monitor's display glyph.
+  * Keep the established runnerscope desktop/icon identity so existing launchers and upgrades remain compatible.
+  * Publish matching SVG, 128px PNG and Software Centre/app-install artwork.
+
+ -- Shannon Smith <noreply@github.com>  Sun, 20 Sep 2026 18:15:00 +1000
+
 infiltrator-runner-monitor (1.1.7) unstable; urgency=medium
 
   * Replace the dense utility layout with the shared Infiltrator operations-console shell.
