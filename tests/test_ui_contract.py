@@ -5,7 +5,7 @@ from pathlib import Path
 source = Path("runnerscope.py").read_text(encoding="utf-8")
 
 required = (
-    'VERSION = "1.1.7"',
+    'VERSION = "1.1.8"',
     '"Topbar.TFrame"',
     '"Sidebar.TFrame"',
     '"SidebarFill.TFrame"',
