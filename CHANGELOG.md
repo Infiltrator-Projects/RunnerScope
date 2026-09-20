@@ -4,6 +4,12 @@
 
 No unreleased changes.
 
+## 1.1.8 - 2026-09-20
+
+- Replace the generic monitor-screen artwork with a dedicated workflow/pipeline glyph so Runner Monitor is immediately distinguishable from System Monitor.
+- Keep the stable `runnerscope` desktop/icon identity while updating both SVG and PNG package artwork.
+- Ensure the installed menu icon, app-install icon and repository-derived Software artwork all originate from the same Runner Monitor asset.
+
 ## 1.1.7 - 2026-09-20
 
 - Replace the dense utility-style window with the shared Infiltrator operations-console shell used across the desktop family.
