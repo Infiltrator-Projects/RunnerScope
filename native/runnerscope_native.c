@@ -10,7 +10,7 @@
 #include <string.h>
 
 #define RUNNERSCOPE_VERSION "1.1.6"
-#define RUNNERSCOPE_COMMON_VERSION "1.19.6"
+#define RUNNERSCOPE_COMMON_VERSION "1.19.10"
 
 static InfiltratrProjectInfo project_info(void)
 {
@@ -77,6 +77,25 @@ static int print_palette(const char *name)
     print_rgb("fault", palette->fault_rgb);
     print_rgb("info", palette->info_rgb);
     print_rgb("operation", palette->operation_rgb);
+    print_rgb("card_hover", palette->card_hover_rgb);
+    print_rgb("surface_hover", palette->surface_hover_rgb);
+    print_rgb("operation_hover", palette->operation_hover_rgb);
+    print_rgb("equals_hover", palette->equals_hover_rgb);
+    print_rgb("titlebar", palette->titlebar_rgb);
+    print_rgb("connection", palette->connection_rgb);
+    print_rgb("connection_border", palette->connection_border_rgb);
+    print_rgb("heading", palette->heading_rgb);
+    print_rgb("summary", palette->summary_rgb);
+    print_rgb("kicker", palette->kicker_rgb);
+    print_rgb("detail_label", palette->detail_label_rgb);
+    print_rgb("note", palette->note_rgb);
+    print_rgb("status_border", palette->status_border_rgb);
+    print_rgb("accent_foreground", palette->accent_foreground_rgb);
+    print_rgb("accent_hover", palette->accent_hover_rgb);
+    print_rgb("selected_summary", palette->selected_summary_rgb);
+    print_rgb("warning_muted", palette->warning_muted_rgb);
+    print_rgb("warning_border", palette->warning_border_rgb);
+    print_rgb("success_border", palette->success_border_rgb);
     return ferror(stdout) ? EIO : 0;
 }
 

@@ -175,6 +175,16 @@ def _fallback_palette(dark: bool) -> dict[str, str]:
             "selection_foreground": "#eef1f3", "neutral_accent": "#00adef",
             "success": "#63ab7c", "warning": "#d19e47", "fault": "#c96b6b",
             "info": "#7fa7c9", "operation": "#20252b",
+            "card_hover": "#22272d", "surface_hover": "#171b20",
+            "operation_hover": "#2b3137", "equals_hover": "#eef1f3",
+            "titlebar": "#202125", "connection": "#0e1115",
+            "connection_border": "#31363b", "heading": "#e7ebee",
+            "summary": "#98a1a9", "kicker": "#8c949b",
+            "detail_label": "#7e858c", "note": "#9ca4ab",
+            "status_border": "#3b4147", "accent_foreground": "#031018",
+            "accent_hover": "#25b8f0", "selected_summary": "#79cae8",
+            "warning_muted": "#c69a4c", "warning_border": "#72572f",
+            "success_border": "#365f45",
         }
     return {
         "background": "#ffffff", "panel": "#ffffff", "card": "#f8f9fa",
@@ -185,6 +195,16 @@ def _fallback_palette(dark: bool) -> dict[str, str]:
         "selection_foreground": "#111418", "neutral_accent": "#00adef",
         "success": "#3a8a58", "warning": "#9a6500", "fault": "#b54848",
         "info": "#467aa3", "operation": "#e8ecef",
+        "card_hover": "#eef1f3", "surface_hover": "#f1f3f5",
+        "operation_hover": "#dde2e7", "equals_hover": "#343b42",
+        "titlebar": "#eceff2", "connection": "#f8f9fa",
+        "connection_border": "#c7cdd3", "heading": "#111418",
+        "summary": "#59636c", "kicker": "#737d86",
+        "detail_label": "#737d86", "note": "#59636c",
+        "status_border": "#c7cdd3", "accent_foreground": "#031018",
+        "accent_hover": "#25b8f0", "selected_summary": "#467aa3",
+        "warning_muted": "#9a6500", "warning_border": "#9a6500",
+        "success_border": "#3a8a58",
     }
 
 
@@ -316,7 +336,9 @@ def _activate_palette(mode: str | None = None) -> dict[str, str]:
     global MB_BG, MB_PANEL, MB_CARD, MB_SURFACE, MB_BORDER, MB_TEXT, MB_TITLE
     global MB_MUTED, MB_SUBTLE, MB_BUTTON_BG, MB_BUTTON_FG, MB_SELECT_BG
     global MB_SELECT_FG, STATE_RED, STATE_GREEN, STATE_BLUE, STATE_AMBER
-    global STATE_PURPLE, STATE_GREY
+    global STATE_PURPLE, STATE_GREY, MB_TITLEBAR, MB_HEADING, MB_SUMMARY
+    global MB_KICKER, MB_DETAIL, MB_NOTE, MB_STATUS_BORDER, MB_ACCENT_HOVER
+    global MB_CARD_HOVER, MB_SURFACE_HOVER, MB_OPERATION_HOVER
 
     palette = _native_palette(mode)
     MB_BG = palette["background"]
@@ -338,6 +360,17 @@ def _activate_palette(mode: str | None = None) -> dict[str, str]:
     STATE_AMBER = palette["warning"]
     STATE_PURPLE = palette["operation"]
     STATE_GREY = palette["subtle"]
+    MB_TITLEBAR = palette["titlebar"]
+    MB_HEADING = palette["heading"]
+    MB_SUMMARY = palette["summary"]
+    MB_KICKER = palette["kicker"]
+    MB_DETAIL = palette["detail_label"]
+    MB_NOTE = palette["note"]
+    MB_STATUS_BORDER = palette["status_border"]
+    MB_ACCENT_HOVER = palette["accent_hover"]
+    MB_CARD_HOVER = palette["card_hover"]
+    MB_SURFACE_HOVER = palette["surface_hover"]
+    MB_OPERATION_HOVER = palette["operation_hover"]
     return palette
 
 
@@ -443,28 +476,28 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     style.configure(".", background=MB_BG, foreground=MB_TEXT, font=fonts["body"], bordercolor=MB_BORDER, darkcolor=MB_BORDER, lightcolor=MB_BORDER, troughcolor=MB_SURFACE, focuscolor=MB_BORDER)
     style.configure("TFrame", background=MB_BG)
     style.configure("TLabel", background=MB_BG, foreground=MB_TEXT)
-    style.configure("Title.TLabel", font=fonts["brand"], foreground=MB_TITLE)
-    style.configure("Section.TLabel", font=fonts["section"], foreground=MB_TITLE)
-    style.configure("Meta.TLabel", foreground=MB_MUTED, font=fonts["small"])
-    style.configure("Counter.TLabel", font=fonts["counter"], foreground=MB_TITLE)
+    style.configure("Title.TLabel", font=fonts["brand"], foreground=MB_HEADING)
+    style.configure("Section.TLabel", font=fonts["section"], foreground=MB_HEADING)
+    style.configure("Meta.TLabel", foreground=MB_NOTE, font=fonts["small"])
+    style.configure("Counter.TLabel", font=fonts["counter"], foreground=MB_HEADING)
     style.configure("Green.Counter.TLabel", font=fonts["counter"], foreground=STATE_GREEN)
     style.configure("Blue.Counter.TLabel", font=fonts["counter"], foreground=STATE_BLUE)
     style.configure("Red.Counter.TLabel", font=fonts["counter"], foreground=STATE_RED)
     style.configure("Purple.Counter.TLabel", font=fonts["counter"], foreground=STATE_PURPLE)
     style.configure("Amber.Counter.TLabel", font=fonts["counter"], foreground=STATE_AMBER)
-    style.configure("CounterCard.TFrame", background=MB_CARD, bordercolor=MB_BORDER, relief="solid", borderwidth=1)
-    style.configure("Detail.TLabel", foreground=MB_MUTED, font=fonts["small"])
+    style.configure("CounterCard.TFrame", background=MB_CARD, bordercolor=MB_STATUS_BORDER, relief="solid", borderwidth=1)
+    style.configure("Detail.TLabel", foreground=MB_DETAIL, font=fonts["small"])
     style.configure("TButton", background=MB_BUTTON_BG, foreground=MB_BUTTON_FG, bordercolor=MB_BORDER, font=fonts["body_bold"], padding=(12, 6), relief="flat")
-    style.map("TButton", background=[("disabled", MB_PANEL), ("pressed", MB_SELECT_BG), ("active", MB_CARD)], foreground=[("disabled", MB_SUBTLE), ("pressed", MB_SELECT_FG), ("active", MB_TEXT)])
+    style.map("TButton", background=[("disabled", MB_PANEL), ("pressed", MB_SELECT_BG), ("active", MB_CARD_HOVER)], foreground=[("disabled", MB_SUBTLE), ("pressed", MB_SELECT_FG), ("active", MB_TEXT)], bordercolor=[("active", MB_ACCENT_HOVER)])
     style.configure("TEntry", fieldbackground=MB_SURFACE, foreground=MB_TEXT, insertcolor=MB_TEXT, bordercolor=MB_BORDER, lightcolor=MB_BORDER, darkcolor=MB_BORDER, padding=(7, 5))
     style.map("TEntry", fieldbackground=[("focus", MB_PANEL), ("disabled", MB_PANEL)], foreground=[("disabled", MB_SUBTLE)], bordercolor=[("focus", MB_MUTED)])
     style.configure("TNotebook", background=MB_BG, bordercolor=MB_BORDER, tabmargins=(0, 5, 0, 0))
     style.configure("TNotebook.Tab", background=MB_PANEL, foreground=MB_MUTED, bordercolor=MB_BORDER, font=fonts["body_bold"], padding=(16, 8))
-    style.map("TNotebook.Tab", background=[("selected", MB_CARD), ("active", MB_SURFACE)], foreground=[("selected", MB_TITLE), ("active", MB_TEXT)])
+    style.map("TNotebook.Tab", background=[("selected", MB_CARD), ("active", MB_SURFACE_HOVER)], foreground=[("selected", MB_HEADING), ("active", MB_TEXT)])
     style.configure("Treeview", background=MB_SURFACE, fieldbackground=MB_SURFACE, foreground=MB_TEXT, bordercolor=MB_BORDER, rowheight=28, font=fonts["small"])
     style.map("Treeview", background=[("selected", MB_SELECT_BG)], foreground=[("selected", MB_SELECT_FG)])
-    style.configure("Treeview.Heading", background=MB_PANEL, foreground=MB_TITLE, bordercolor=MB_BORDER, font=fonts["small_bold"], padding=(7, 7), relief="flat")
-    style.map("Treeview.Heading", background=[("active", MB_CARD)], foreground=[("active", MB_TITLE)])
+    style.configure("Treeview.Heading", background=MB_TITLEBAR, foreground=MB_HEADING, bordercolor=MB_STATUS_BORDER, font=fonts["small_bold"], padding=(7, 7), relief="flat")
+    style.map("Treeview.Heading", background=[("active", MB_CARD_HOVER)], foreground=[("active", MB_HEADING)])
     style.configure("Vertical.TScrollbar", background=MB_PANEL, troughcolor=MB_SURFACE, bordercolor=MB_BORDER, arrowcolor=MB_MUTED)
     style.configure("Horizontal.TScrollbar", background=MB_PANEL, troughcolor=MB_SURFACE, bordercolor=MB_BORDER, arrowcolor=MB_MUTED)
     return fonts

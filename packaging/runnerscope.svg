@@ -1,12 +1,7 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <rect x="8" y="8" width="112" height="112" rx="22" fill="#202a36"/>
-  <circle cx="64" cy="64" r="38" fill="none" stroke="#e8ecef" stroke-width="5"/>
-  <circle cx="64" cy="64" r="24" fill="none" stroke="#899198" stroke-width="3"/>
-  <path d="M64 18v92M18 64h92" stroke="#899198" stroke-width="3"/>
-  <circle cx="64" cy="44" r="7" fill="#2176c7" stroke="#eef1f4" stroke-width="2"/>
-  <circle cx="47" cy="74" r="7" fill="#63ab7c" stroke="#eef1f4" stroke-width="2"/>
-  <circle cx="81" cy="76" r="7" fill="#d19e47" stroke="#eef1f4" stroke-width="2"/>
-  <circle cx="64" cy="64" r="4" fill="#eef1f4"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Runner Monitor">
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#0D1218" stroke="#26313D" stroke-width="6"/>
+  <g transform="translate(32 32) scale(8)" fill="none" stroke="#00ADEF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="12" rx="2"/>
+    <path d="M8 20h8M12 16v4"/>
+  </g>
 </svg>

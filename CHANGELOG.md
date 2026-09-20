@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Advance the native/Common bridge from Common 1.19.6 to released Common 1.19.10 at `33e69c0a462b56d388881d89c4eb49f72fa0b0fe`.
+- Expose and consume the full 1.19.10 semantic appearance roles instead of stopping at the older base palette.
+- Standardise Runner Monitor artwork on the non-automotive Infiltrator icon family with canonical `#00ADEF` linework.
+
+
 ## 1.1.6
 
 - Unified Follow system, Day and Night with the Common appearance contract.
