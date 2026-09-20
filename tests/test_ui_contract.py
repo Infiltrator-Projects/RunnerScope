@@ -61,8 +61,16 @@ assert 'self._sync_navigation()' in source
 
 print("Runner Monitor UI shell contract passed")
 
-assert 'background=MB_SELECT_BG' in source
+assert 'nav_selected_bg = _blend_hex(MB_PANEL, MB_ACCENT, 0.075)' in source
+assert 'nav_selected_border = _blend_hex(MB_BORDER, MB_ACCENT, 0.48)' in source
+assert 'accent_card_bg = _blend_hex(MB_CARD, MB_ACCENT, 0.08)' in source
+assert 'warning_card_bg = _blend_hex(MB_CARD, STATE_AMBER, 0.08)' in source
+assert 'fault_card_bg = _blend_hex(MB_CARD, STATE_RED, 0.08)' in source
 assert 'foreground=MB_ACCENT' in source
 assert 'background=MB_CONNECTION' in source
 assert 'style="Accent.TButton"' in source
 assert 'style="Warning.TButton"' in source
+assert 'height=44, padding=(6, 0)' in source
+assert '"titlebar_subtitle": (body_family, 12, "bold")' in source
+assert 'tree.tag_configure("RUNNING", foreground=MB_ACCENT' in source
+assert 'tree.tag_configure("IDLE", foreground=STATE_GREEN)' in source
