@@ -22,6 +22,8 @@ The objective is a monitor whose state transitions and history can be explained 
 
 Runner Monitor supports **Follow system**, **Day** and **Night**. Day uses the white Infiltrator palette; Night uses the MB graphite/black palette with the canonical `#00ADEF` blue accent. Follow system detects the host light/dark preference and selects exactly Day or Night, updating while the application is running rather than inheriting a third toolkit palette.
 
+The desktop shell follows the same operations-console hierarchy as the rest of the Infiltrator family: a compact product header, left navigation rail, semantic status cards, layered graphite work surfaces, dedicated selection actions and a low-noise status footer. Normal interface copy uses the Common UI/brand typography roles; technical values stay in structured tables rather than forcing the whole application into a terminal aesthetic.
+
 ## Features
 
 
