@@ -397,6 +397,18 @@ MB_FONT_FILES = (
 )
 
 
+def _blend_hex(base: str, accent: str, amount: float) -> str:
+    """Blend two #RRGGBB colours for MBLINK-style translucent semantic surfaces."""
+    amount = max(0.0, min(1.0, float(amount)))
+    try:
+        b = tuple(int(base[index:index + 2], 16) for index in (1, 3, 5))
+        a = tuple(int(accent[index:index + 2], 16) for index in (1, 3, 5))
+    except (ValueError, TypeError):
+        return base
+    mixed = tuple(round(left + (right - left) * amount) for left, right in zip(b, a))
+    return "#{:02x}{:02x}{:02x}".format(*mixed)
+
+
 def register_optional_brand_fonts() -> None:
     """Use locally installed/private brand fonts when available; never distribute them."""
     if sys.platform != "win32":
@@ -494,7 +506,7 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         "section": (body_family, 12, "bold"),
         "kicker": (body_family, 8, "bold"),
         "nav": (body_family, 10, "bold"),
-        "titlebar_subtitle": (body_family, 9, "bold"),
+        "titlebar_subtitle": (body_family, 12, "bold"),
     }
 
     try:
@@ -506,6 +518,16 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     style = ttk.Style(window)
     if "clam" in style.theme_names():
         style.theme_use("clam")
+
+    # MBLINK composes selected/status surfaces as low-alpha semantic colour
+    # over graphite. Tk has no alpha CSS, so preblend the exact role colours.
+    nav_selected_bg = _blend_hex(MB_PANEL, MB_ACCENT, 0.075)
+    nav_selected_border = _blend_hex(MB_BORDER, MB_ACCENT, 0.48)
+    accent_card_bg = _blend_hex(MB_CARD, MB_ACCENT, 0.08)
+    info_card_bg = _blend_hex(MB_CARD, STATE_BLUE, 0.08)
+    success_card_bg = _blend_hex(MB_CARD, STATE_GREEN, 0.08)
+    warning_card_bg = _blend_hex(MB_CARD, STATE_AMBER, 0.08)
+    fault_card_bg = _blend_hex(MB_CARD, STATE_RED, 0.08)
 
     style.configure(
         ".",
@@ -712,9 +734,9 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     )
     style.configure(
         "NavSelected.TButton",
-        background=MB_SELECT_BG,
+        background=nav_selected_bg,
         foreground=MB_ACCENT,
-        bordercolor=MB_ACCENT,
+        bordercolor=nav_selected_border,
         font=fonts["nav"],
         padding=(14, 10),
         relief="solid",
@@ -723,7 +745,7 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
     )
     style.map(
         "NavSelected.TButton",
-        background=[("active", MB_CARD_HOVER), ("pressed", MB_SELECT_BG)],
+        background=[("active", MB_CARD_HOVER), ("pressed", nav_selected_bg)],
         foreground=[("active", MB_ACCENT_HOVER), ("pressed", MB_SELECTED_SUMMARY)],
         bordercolor=[("active", MB_ACCENT_HOVER)],
     )
@@ -765,17 +787,17 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         borderwidth=1,
         relief="solid",
     )
-    for style_name, border in (
-        ("Accent.SummaryCard.TFrame", MB_ACCENT),
-        ("Info.SummaryCard.TFrame", STATE_BLUE),
-        ("Success.SummaryCard.TFrame", MB_SUCCESS_BORDER),
-        ("Warning.SummaryCard.TFrame", MB_WARNING_BORDER),
-        ("Fault.SummaryCard.TFrame", STATE_RED),
-        ("Selected.SummaryCard.TFrame", MB_SELECTED_SUMMARY),
+    for style_name, fill, border in (
+        ("Accent.SummaryCard.TFrame", accent_card_bg, nav_selected_border),
+        ("Info.SummaryCard.TFrame", info_card_bg, STATE_BLUE),
+        ("Success.SummaryCard.TFrame", success_card_bg, MB_SUCCESS_BORDER),
+        ("Warning.SummaryCard.TFrame", warning_card_bg, MB_WARNING_BORDER),
+        ("Fault.SummaryCard.TFrame", fault_card_bg, STATE_RED),
+        ("Selected.SummaryCard.TFrame", accent_card_bg, MB_SELECTED_SUMMARY),
     ):
         style.configure(
             style_name,
-            background=MB_CARD,
+            background=fill,
             bordercolor=border,
             borderwidth=1,
             relief="solid",
@@ -793,15 +815,29 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         foreground=MB_HEADING,
         font=fonts["counter"],
     )
-    for style_name, colour in (
-        ("Accent.SummaryValue.TLabel", MB_ACCENT),
-        ("Green.SummaryValue.TLabel", STATE_GREEN),
-        ("Blue.SummaryValue.TLabel", STATE_BLUE),
-        ("Red.SummaryValue.TLabel", STATE_RED),
-        ("Amber.SummaryValue.TLabel", STATE_AMBER),
-        ("Purple.SummaryValue.TLabel", MB_SELECTED_SUMMARY),
+    for style_name, fill, colour in (
+        ("Accent.SummaryValue.TLabel", accent_card_bg, MB_ACCENT),
+        ("Green.SummaryValue.TLabel", success_card_bg, STATE_GREEN),
+        ("Blue.SummaryValue.TLabel", info_card_bg, STATE_BLUE),
+        ("Red.SummaryValue.TLabel", fault_card_bg, STATE_RED),
+        ("Amber.SummaryValue.TLabel", warning_card_bg, STATE_AMBER),
+        ("Purple.SummaryValue.TLabel", accent_card_bg, MB_SELECTED_SUMMARY),
     ):
-        style.configure(style_name, background=MB_CARD, foreground=colour, font=fonts["counter"])
+        style.configure(style_name, background=fill, foreground=colour, font=fonts["counter"])
+
+    for style_name, fill in (
+        ("Accent.SummaryKicker.TLabel", accent_card_bg),
+        ("Info.SummaryKicker.TLabel", info_card_bg),
+        ("Success.SummaryKicker.TLabel", success_card_bg),
+        ("Warning.SummaryKicker.TLabel", warning_card_bg),
+        ("Fault.SummaryKicker.TLabel", fault_card_bg),
+    ):
+        style.configure(
+            style_name,
+            background=fill,
+            foreground=MB_KICKER,
+            font=fonts["kicker"],
+        )
 
     style.configure(
         "Toolbar.TFrame",
@@ -1213,11 +1249,11 @@ class RunnerMonitor(tk.Tk):
         apply_windows_dark_titlebar(self, _effective_theme_mode(THEME_MODE) == "night")
 
     def _apply_tree_theme(self, tree: ttk.Treeview) -> None:
-        tree.tag_configure("RUNNING", foreground=STATE_GREEN, font=self.font_small_bold)
-        tree.tag_configure("IDLE", foreground=STATE_BLUE)
+        tree.tag_configure("RUNNING", foreground=MB_ACCENT, font=self.font_small_bold)
+        tree.tag_configure("IDLE", foreground=STATE_GREEN)
         tree.tag_configure("OFFLINE", foreground=STATE_RED, font=self.font_small_bold)
-        tree.tag_configure("LOCAL", foreground=STATE_GREEN, font=self.font_small_bold)
-        tree.tag_configure("GITHUB", foreground=STATE_PURPLE)
+        tree.tag_configure("LOCAL", foreground=MB_ACCENT, font=self.font_small_bold)
+        tree.tag_configure("GITHUB", foreground=MB_SELECTED_SUMMARY)
         tree.tag_configure("QUEUED", foreground=STATE_AMBER)
         tree.tag_configure("UNKNOWN", foreground=STATE_GREY)
         tree.tag_configure("SUCCESS", foreground=STATE_GREEN, font=self.font_small_bold)
@@ -1250,11 +1286,13 @@ class RunnerMonitor(tk.Tk):
 
         # Match Software's headerbar hierarchy: centered title/subtitle,
         # About + Theme + Refresh on the right, 44px-class compact geometry.
-        topbar = ttk.Frame(shell, style="Topbar.TFrame", padding=(6, 4))
+        topbar = ttk.Frame(shell, style="Topbar.TFrame", height=44, padding=(6, 0))
         topbar.pack(fill=tk.X)
+        topbar.pack_propagate(False)
         topbar.columnconfigure(0, weight=1)
         topbar.columnconfigure(1, weight=0)
         topbar.columnconfigure(2, weight=1)
+        topbar.rowconfigure(0, weight=1)
 
         ttk.Frame(topbar, style="TopbarInner.TFrame").grid(
             row=0, column=0, sticky="nsew"
@@ -1398,12 +1436,12 @@ class RunnerMonitor(tk.Tk):
         summary = ttk.Frame(content, style="App.TFrame")
         summary.pack(fill=tk.X, pady=(0, 10))
         primary_specs = (
-            ("TOTAL", "RUNNERS", "SummaryCard.TFrame", "SummaryValue.TLabel"),
-            ("RUNNING", "RUNNING", "Success.SummaryCard.TFrame", "Green.SummaryValue.TLabel"),
-            ("IDLE", "IDLE", "Info.SummaryCard.TFrame", "Blue.SummaryValue.TLabel"),
-            ("OFFLINE", "OFFLINE", "Fault.SummaryCard.TFrame", "Red.SummaryValue.TLabel"),
+            ("TOTAL", "RUNNERS", "SummaryCard.TFrame", "SummaryKicker.TLabel", "SummaryValue.TLabel"),
+            ("RUNNING", "RUNNING", "Accent.SummaryCard.TFrame", "Accent.SummaryKicker.TLabel", "Accent.SummaryValue.TLabel"),
+            ("IDLE", "IDLE", "Success.SummaryCard.TFrame", "Success.SummaryKicker.TLabel", "Green.SummaryValue.TLabel"),
+            ("OFFLINE", "OFFLINE", "Fault.SummaryCard.TFrame", "Fault.SummaryKicker.TLabel", "Red.SummaryValue.TLabel"),
         )
-        for column, (name, caption, card_style, value_style) in enumerate(primary_specs):
+        for column, (name, caption, card_style, kicker_style, value_style) in enumerate(primary_specs):
             summary.columnconfigure(column, weight=1, uniform="runner-summary")
             card = ttk.Frame(
                 summary,
@@ -1417,7 +1455,7 @@ class RunnerMonitor(tk.Tk):
                 sticky="nsew",
                 padx=(0 if column == 0 else 5, 0 if column == len(primary_specs) - 1 else 5),
             )
-            ttk.Label(card, text=caption, style="SummaryKicker.TLabel").pack(anchor=tk.W)
+            ttk.Label(card, text=caption, style=kicker_style).pack(anchor=tk.W)
             variable = tk.StringVar(value="0")
             self.counter_vars[name] = variable
             value = ttk.Label(
@@ -1433,11 +1471,11 @@ class RunnerMonitor(tk.Tk):
         activity_summary = ttk.Frame(content, style="App.TFrame")
         activity_summary.pack(fill=tk.X, pady=(0, 8))
         activity_specs = (
-            ("LOCAL ACTIVE", "SELF-HOSTED ACTIVE", "Success.SummaryCard.TFrame", "Green.SummaryValue.TLabel"),
-            ("GITHUB ACTIVE", "GITHUB-HOSTED ACTIVE", "Accent.SummaryCard.TFrame", "Accent.SummaryValue.TLabel"),
-            ("QUEUED", "QUEUED", "Warning.SummaryCard.TFrame", "Amber.SummaryValue.TLabel"),
+            ("LOCAL ACTIVE", "SELF-HOSTED ACTIVE", "Accent.SummaryCard.TFrame", "Accent.SummaryKicker.TLabel", "Accent.SummaryValue.TLabel"),
+            ("GITHUB ACTIVE", "GITHUB-HOSTED ACTIVE", "Info.SummaryCard.TFrame", "Info.SummaryKicker.TLabel", "Blue.SummaryValue.TLabel"),
+            ("QUEUED", "QUEUED", "Warning.SummaryCard.TFrame", "Warning.SummaryKicker.TLabel", "Amber.SummaryValue.TLabel"),
         )
-        for column, (name, caption, card_style, value_style) in enumerate(activity_specs):
+        for column, (name, caption, card_style, kicker_style, value_style) in enumerate(activity_specs):
             activity_summary.columnconfigure(column, weight=1, uniform="activity-summary")
             card = ttk.Frame(
                 activity_summary,
@@ -1451,7 +1489,7 @@ class RunnerMonitor(tk.Tk):
                 sticky="nsew",
                 padx=(0 if column == 0 else 5, 0 if column == len(activity_specs) - 1 else 5),
             )
-            ttk.Label(card, text=caption, style="SummaryKicker.TLabel").pack(side=tk.LEFT)
+            ttk.Label(card, text=caption, style=kicker_style).pack(side=tk.LEFT)
             variable = tk.StringVar(value="0")
             self.counter_vars[name] = variable
             value = ttk.Label(
