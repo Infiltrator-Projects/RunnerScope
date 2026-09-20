@@ -1,3 +1,12 @@
+infiltrator-runner-monitor (1.1.10) unstable; urgency=medium
+
+  * Refine the MBLINK-inspired visual tune with preblended cyan, info, success, warning and fault surfaces that reproduce the reference low-alpha treatment in Tk.
+  * Lock the compatibility titlebar to the same 44px-class geometry as Infiltrator Software.
+  * Use cyan for actively running/self-hosted activity, green for healthy idle state, blue for GitHub-hosted activity, amber for queued work and red for offline/fault state.
+  * Repair the UI regression guard for the new blended selected-navigation surface.
+
+ -- Shannon Smith <noreply@github.com>  Sun, 20 Sep 2026 18:55:00 +1000
+
 infiltrator-runner-monitor (1.1.9) unstable; urgency=medium
 
   * Tune the compatibility UI against the full Common/MBLINK Night semantic palette.
