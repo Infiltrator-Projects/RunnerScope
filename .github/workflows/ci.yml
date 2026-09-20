@@ -84,12 +84,12 @@ jobs:
         run: |
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          cp ../infiltrator-runner-monitor_1.1.8_*.deb dist/runnerscope_1.1.8_amd64.deb
-          dpkg-deb --info dist/runnerscope_1.1.8_*.deb
-          dpkg-deb --contents dist/runnerscope_1.1.8_*.deb
+          cp ../infiltrator-runner-monitor_1.1.9_*.deb dist/runnerscope_1.1.9_amd64.deb
+          dpkg-deb --info dist/runnerscope_1.1.9_*.deb
+          dpkg-deb --contents dist/runnerscope_1.1.9_*.deb
 
       - name: Install exact package
-        run: sudo apt-get install -y ./dist/runnerscope_1.1.8_*.deb
+        run: sudo apt-get install -y ./dist/runnerscope_1.1.9_*.deb
 
       - name: Smoke installed native and Python boundaries
         run: |
@@ -106,7 +106,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runnerscope-deb
-          path: dist/runnerscope_1.1.8_*.deb
+          path: dist/runnerscope_1.1.9_*.deb
           if-no-files-found: error
 
       - name: Purge package cleanly
