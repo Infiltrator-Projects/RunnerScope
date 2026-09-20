@@ -358,7 +358,7 @@ def _activate_palette(mode: str | None = None) -> dict[str, str]:
     STATE_GREEN = palette["success"]
     STATE_BLUE = palette["info"]
     STATE_AMBER = palette["warning"]
-    STATE_PURPLE = palette["operation"]
+    STATE_PURPLE = palette["selected_summary"]
     STATE_GREY = palette["subtle"]
     MB_TITLEBAR = palette["titlebar"]
     MB_HEADING = palette["heading"]
@@ -587,6 +587,12 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         relief="solid",
     )
     style.configure(
+        "TopbarInner.TFrame",
+        background=MB_TITLEBAR,
+        borderwidth=0,
+        relief="flat",
+    )
+    style.configure(
         "TopbarTitle.TLabel",
         background=MB_TITLEBAR,
         foreground=MB_HEADING,
@@ -604,6 +610,12 @@ def configure_shared_theme(window: tk.Misc, mode: str | None = None) -> dict[str
         bordercolor=MB_STATUS_BORDER,
         borderwidth=1,
         relief="solid",
+    )
+    style.configure(
+        "SidebarFill.TFrame",
+        background=MB_PANEL,
+        borderwidth=0,
+        relief="flat",
     )
     style.configure(
         "SidebarKicker.TLabel",
@@ -1152,7 +1164,7 @@ class RunnerMonitor(tk.Tk):
         # Product header: keep high-frequency controls out of the data table.
         topbar = ttk.Frame(shell, style="Topbar.TFrame", padding=(18, 9))
         topbar.pack(fill=tk.X)
-        brand = ttk.Frame(topbar, style="Topbar.TFrame")
+        brand = ttk.Frame(topbar, style="TopbarInner.TFrame")
         brand.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(brand, text="Runner Monitor", style="TopbarTitle.TLabel").pack(anchor=tk.W)
         ttk.Label(
@@ -1161,7 +1173,7 @@ class RunnerMonitor(tk.Tk):
             style="TopbarMeta.TLabel",
         ).pack(anchor=tk.W, pady=(0, 1))
 
-        top_actions = ttk.Frame(topbar, style="Topbar.TFrame")
+        top_actions = ttk.Frame(topbar, style="TopbarInner.TFrame")
         top_actions.pack(side=tk.RIGHT)
         ttk.Button(
             top_actions,
@@ -1203,7 +1215,7 @@ class RunnerMonitor(tk.Tk):
             button.pack(fill=tk.X, pady=(0, 5))
             self.nav_buttons[index] = button
 
-        ttk.Frame(sidebar, style="Sidebar.TFrame").pack(fill=tk.BOTH, expand=True)
+        ttk.Frame(sidebar, style="SidebarFill.TFrame").pack(fill=tk.BOTH, expand=True)
         ttk.Label(sidebar, text="SYSTEM", style="SidebarKicker.TLabel").pack(
             fill=tk.X, padx=3, pady=(0, 8)
         )
