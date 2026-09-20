@@ -66,7 +66,7 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 APP_NAME = "Runner Monitor"
 LEGACY_STORAGE_NAME = "RunnerScope"
-VERSION = "1.1.7"
+VERSION = "1.1.8"
 
 
 def _application_icon_path() -> Path | None:
