@@ -15,8 +15,8 @@ concurrency:
 
 jobs:
   local-linux:
-    name: Local Linux build / test / package
-    runs-on: [self-hosted, Linux, X64, linux-native]
+    name: Hosted Linux build / test
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Check out Runner Monitor and pinned Common
@@ -25,13 +25,18 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Verify local build dependencies
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake python3 python3-tk
+
+      - name: Verify build dependencies
         shell: bash
         run: |
           set -euo pipefail
-          for command_name in cmake gcc make python3 dpkg-buildpackage dh; do
+          for command_name in cmake gcc make python3; do
             command -v "$command_name" >/dev/null 2>&1 || {
-              echo "Self-hosted runner is missing $command_name." >&2
+              echo "Hosted runner is missing $command_name." >&2
               exit 1
             }
           done
@@ -52,7 +57,26 @@ jobs:
         run: |
           python3 tests/test_native_bridge.py ./build/runnerscope-native
           python3 tests/test_ui_contract.py
+          python3 tests/test_python_logic.py
           python3 -m py_compile runnerscope.py runnerscope_linux.py runnerscope_windows.py
+
+  windows-python:
+    name: Hosted Windows compatibility contracts
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out Runner Monitor
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Run Windows Python contracts
+        shell: pwsh
+        run: |
+          python --version
+          python tests/test_python_logic.py
+          python runnerscope.py --self-test
+          python -m py_compile runnerscope.py runnerscope_linux.py runnerscope_windows.py
 
   clean-package-install:
     name: Hosted clean Debian build / install
