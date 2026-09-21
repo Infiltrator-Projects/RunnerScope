@@ -40,8 +40,10 @@ jobs:
               exit 1
             }
           done
-          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.10"
-          test "$(git -C infiltratr-common rev-parse HEAD)" = "33e69c0a462b56d388881d89c4eb49f72fa0b0fe"
+          test -n "$(tr -d '[:space:]' < infiltratr-common/VERSION)"
+          expected_common="$(git ls-tree HEAD infiltratr-common | awk '{print $3}')"
+          test -n "$expected_common"
+          test "$(git -C infiltratr-common rev-parse HEAD)" = "$expected_common"
 
       - name: Enforce first-party native boundary
         run: ./tools/check-first-party-native.sh
@@ -101,19 +103,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = "1.19.10"
-          test "$(git -C infiltratr-common rev-parse HEAD)" = "33e69c0a462b56d388881d89c4eb49f72fa0b0fe"
+          test -n "$(tr -d '[:space:]' < infiltratr-common/VERSION)"
+          expected_common="$(git ls-tree HEAD infiltratr-common | awk '{print $3}')"
+          test -n "$expected_common"
+          test "$(git -C infiltratr-common rev-parse HEAD)" = "$expected_common"
 
       - name: Build Debian package
+        shell: bash
         run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          cp ../infiltrator-runner-monitor_1.1.10_*.deb dist/runnerscope_1.1.10_amd64.deb
-          dpkg-deb --info dist/runnerscope_1.1.10_*.deb
-          dpkg-deb --contents dist/runnerscope_1.1.10_*.deb
+          deb="$(find .. -maxdepth 1 -name "infiltrator-runner-monitor_${version}_*.deb" -print -quit)"
+          test -n "$deb"
+          cp "$deb" "dist/runnerscope_${version}_amd64.deb"
+          dpkg-deb --info "dist/runnerscope_${version}_amd64.deb"
+          dpkg-deb --contents "dist/runnerscope_${version}_amd64.deb"
 
       - name: Install exact package
-        run: sudo apt-get install -y ./dist/runnerscope_1.1.10_*.deb
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          sudo apt-get install -y "./dist/runnerscope_${version}_amd64.deb"
 
       - name: Smoke installed native and Python boundaries
         run: |
@@ -130,7 +143,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runnerscope-deb
-          path: dist/runnerscope_1.1.10_*.deb
+          path: dist/runnerscope_*.deb
           if-no-files-found: error
 
       - name: Purge package cleanly
