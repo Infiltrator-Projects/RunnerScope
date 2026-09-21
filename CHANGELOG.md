@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.1.12 - 2026-09-21
+
+- Put the Runner Monitor version above the Common version in the sidebar footer.
+- Keep the Common version as the final bottom line and protect that layout with a regression contract.
+
 ## 1.1.11 - 2026-09-21
 
 - Preserve repository-cache and history-retention settings instead of resetting hidden values when Settings is saved.
