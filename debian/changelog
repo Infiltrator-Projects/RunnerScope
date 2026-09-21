@@ -1,3 +1,11 @@
+infiltrator-runner-monitor (1.1.13) unstable; urgency=medium
+
+  * Report the exact pinned Common version in standalone builds when the native Common bridge is not installed.
+  * Keep native/source-tree Common version discovery when available and use the qualified pinned version only as the portable fallback.
+  * Reject the vague "Common compatibility" footer text in regression tests.
+
+ -- Shannon Smith <noreply@github.com>  Mon, 21 Sep 2026 14:40:00 +1000
+
 infiltrator-runner-monitor (1.1.12) unstable; urgency=medium
 
   * Keep the application version above the shared Common version in the sidebar footer so Common is always the final bottom line.
