@@ -1,3 +1,10 @@
+infiltrator-runner-monitor (1.1.12) unstable; urgency=medium
+
+  * Keep the application version above the shared Common version in the sidebar footer so Common is always the final bottom line.
+  * Add a UI regression contract for the footer ordering.
+
+ -- Shannon Smith <noreply@github.com>  Mon, 21 Sep 2026 14:15:00 +1000
+
 infiltrator-runner-monitor (1.1.11) unstable; urgency=medium
 
   * Fix settings persistence so repository-cache and history-retention values are no longer reset when settings are saved.
