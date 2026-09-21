@@ -24,6 +24,13 @@ static int model_contract(void)
     EXPECT(rs_runner_session_apply(&session, RS_RUNNER_IDLE, 120.0));
     EXPECT(fabs(rs_runner_session_busy_seconds(&session, 140.0) - 10.0) < 0.001);
     EXPECT(fabs(rs_runner_session_busy_percent(&session, 100.0, 140.0) - 25.0) < 0.001);
+
+    RsRunnerSession epoch_session;
+    rs_runner_session_init(&epoch_session, RS_RUNNER_RUNNING, 0.0);
+    EXPECT(epoch_session.busy_active);
+    EXPECT(fabs(rs_runner_session_busy_seconds(&epoch_session, 5.0) - 5.0) < 0.001);
+    EXPECT(rs_runner_session_apply(&epoch_session, RS_RUNNER_IDLE, 10.0));
+    EXPECT(fabs(rs_runner_session_busy_seconds(&epoch_session, 20.0) - 10.0) < 0.001);
     return 0;
 }
 
@@ -53,6 +60,17 @@ static int http_contract(void)
     EXPECT(view.content_length == 5U);
     EXPECT(view.body_length == 5U);
     EXPECT(memcmp(view.body, "hello", 5U) == 0);
+
+    const char bounded_response[] = {
+        'H','T','T','P','/','1','.','1',' ','2','0','4',' ','N','o',' ',
+        'C','o','n','t','e','n','t','\r','\n',
+        'C','o','n','t','e','n','t','-','L','e','n','g','t','h',':',' ','0','\r','\n',
+        '\r','\n'
+    };
+    EXPECT(rs_http_parse_response(
+        bounded_response, sizeof(bounded_response), &view));
+    EXPECT(view.status_code == 204U);
+    EXPECT(view.body_length == 0U);
 
     const char chunked[] =
         "4\r\nWiki\r\n"
