@@ -35,20 +35,59 @@ bool rs_secure_read_bounded_text(const char *path,
         return false;
     }
 
+    const int fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) return false;
+
     struct stat st;
-    if (stat(path, &st) != 0) return false;
-    if ((st.st_mode & (S_IRWXG | S_IRWXO)) != 0) {
+    if (fstat(fd, &st) != 0) {
+        const int saved = errno;
+        (void)close(fd);
+        errno = saved;
+        return false;
+    }
+    if (!S_ISREG(st.st_mode) || st.st_uid != geteuid() ||
+        (st.st_mode & (S_IRWXG | S_IRWXO)) != 0) {
+        (void)close(fd);
         errno = EACCES;
         return false;
     }
 
     size_t used = 0U;
-    const InfiltratrIoResult result =
-        infiltratr_read_text_file_ex(path, buffer, buffer_size, &used);
-    if (result != INFILTRATR_IO_OK) {
-        errno = result == INFILTRATR_IO_TRUNCATED ? EOVERFLOW : EIO;
+    while (used + 1U < buffer_size) {
+        const ssize_t amount = read(fd, buffer + used, buffer_size - used - 1U);
+        if (amount > 0) {
+            used += (size_t)amount;
+            continue;
+        }
+        if (amount == 0) break;
+        if (errno == EINTR) continue;
+        const int saved = errno;
+        (void)close(fd);
+        errno = saved;
         return false;
     }
+
+    if (used + 1U == buffer_size) {
+        unsigned char extra;
+        ssize_t amount;
+        do {
+            amount = read(fd, &extra, 1U);
+        } while (amount < 0 && errno == EINTR);
+        if (amount > 0) {
+            (void)close(fd);
+            errno = EOVERFLOW;
+            return false;
+        }
+        if (amount < 0) {
+            const int saved = errno;
+            (void)close(fd);
+            errno = saved;
+            return false;
+        }
+    }
+
+    if (close(fd) != 0) return false;
+    buffer[used] = '\0';
     if (length) *length = used;
     return true;
 }
