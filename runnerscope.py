@@ -2888,23 +2888,65 @@ class RunnerMonitor(tk.Tk):
         systemctl = shutil.which("systemctl")
         if not systemctl:
             raise RuntimeError("systemctl is unavailable")
-        proc = subprocess.run([systemctl, "list-units", "--all", "--type=service", "--no-legend", "--plain", "actions.runner.*"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", timeout=20, check=False)
+        proc = subprocess.run(
+            [systemctl, "list-units", "--all", "--type=service", "--no-legend", "--plain", "actions.runner.*"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
         if proc.returncode != 0:
             raise RuntimeError((proc.stderr or proc.stdout).strip() or "systemd service query failed")
-        service_names = [line.split()[0] for line in proc.stdout.splitlines() if line.strip() and line.split()[0].startswith("actions.runner.")]
+        service_names = [
+            line.split()[0]
+            for line in proc.stdout.splitlines()
+            if line.strip() and line.split()[0].startswith("actions.runner.")
+        ]
+        if not service_names:
+            return []
+
+        show = subprocess.run(
+            [
+                systemctl,
+                "show",
+                *service_names,
+                "--no-pager",
+                "-p", "Id",
+                "-p", "Description",
+                "-p", "ActiveState",
+                "-p", "SubState",
+                "-p", "MainPID",
+                "-p", "UnitFileState",
+                "-p", "User",
+                "-p", "ExecStart",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+        )
+        if show.returncode != 0:
+            raise RuntimeError((show.stderr or show.stdout).strip() or "systemd service detail query failed")
+
         now = time.time()
         github_states = {row.get("name"): row.get("state") for row in self.runner_rows}
         known_names = set(github_states)
         rows: list[dict[str, Any]] = []
-        for service_name in service_names:
-            show = subprocess.run([systemctl, "show", service_name, "--no-pager", "-p", "Id", "-p", "Description", "-p", "ActiveState", "-p", "SubState", "-p", "MainPID", "-p", "UnitFileState", "-p", "User", "-p", "ExecStart"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", timeout=10, check=False)
-            if show.returncode != 0:
-                continue
+        for block in re.split(r"\n\s*\n", show.stdout.strip()):
             props: dict[str, str] = {}
-            for line in show.stdout.splitlines():
+            for line in block.splitlines():
                 if "=" in line:
                     key, value = line.split("=", 1)
                     props[key] = value
+            service_name = props.get("Id", "")
+            if not service_name.startswith("actions.runner."):
+                continue
             display = props.get("Description") or service_name
             runner_name = _match_runner_name((display, service_name), known_names)
             exec_start = props.get("ExecStart", "")
@@ -2921,16 +2963,35 @@ class RunnerMonitor(tk.Tk):
             active = props.get("ActiveState", "unknown")
             service_state = "RUNNING" if active == "active" else active.upper()
             pid = int(props.get("MainPID") or 0) or "—"
-            rows.append(self._make_local_health_row(now, runner_name if runner_name != "—" else display, service_name, service_state, github_states.get(runner_name, "—"), pid, props.get("UnitFileState") or "—", props.get("User") or "—", root, exec_start))
+            rows.append(
+                self._make_local_health_row(
+                    now,
+                    runner_name if runner_name != "—" else display,
+                    service_name,
+                    service_state,
+                    github_states.get(runner_name, "—"),
+                    pid,
+                    props.get("UnitFileState") or "—",
+                    props.get("User") or "—",
+                    root,
+                    exec_start,
+                )
+            )
         return rows
 
     def _make_local_health_row(self, now: float, runner: str, service_name: str, service_state: str, github_state: str, pid: Any, start_mode: Any, account: Any, root: Path | None, fallback_path: str) -> dict[str, Any]:
         diag_dir = root / "_diag" if root else None
         newest: Path | None = None
+        newest_mtime: float | None = None
         if diag_dir and diag_dir.is_dir():
-            candidates = list(diag_dir.glob("Runner_*.log")) + list(diag_dir.glob("Worker_*.log"))
-            if candidates:
-                newest = max(candidates, key=lambda path: path.stat().st_mtime)
+            for candidate in list(diag_dir.glob("Runner_*.log")) + list(diag_dir.glob("Worker_*.log")):
+                try:
+                    mtime = candidate.stat().st_mtime
+                except OSError:
+                    continue
+                if newest_mtime is None or mtime > newest_mtime:
+                    newest = candidate
+                    newest_mtime = mtime
         return {
             "runner": runner,
             "service_name": service_name,
@@ -2940,7 +3001,7 @@ class RunnerMonitor(tk.Tk):
             "start_mode": start_mode,
             "account": account,
             "diag": newest.name if newest else "—",
-            "diag_age": fmt_duration(now - newest.stat().st_mtime) if newest else "—",
+            "diag_age": fmt_duration(now - newest_mtime) if newest_mtime is not None else "—",
             "path": str(root) if root else fallback_path or "—",
             "diag_path": str(diag_dir) if diag_dir and diag_dir.is_dir() else "",
         }
