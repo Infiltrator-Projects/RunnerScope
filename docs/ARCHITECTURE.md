@@ -1,68 +1,42 @@
 # Architecture
 
-## Purpose
+## Product architecture
 
-Runner Monitor is a cross-platform desktop monitor for GitHub Actions self-hosted runners. It observes organisation runner connectivity/busy state, resolves active workflow jobs, records session history, exports data and can inspect/restart a local runner service where the platform permits it.
+Runner Monitor is a native C application on every supported desktop platform.
 
-The project is in a deliberate transition from a Python/Tk application toward a first-party native implementation. Architecture therefore distinguishes the current compatibility product from the native target rather than pretending the migration is already complete.
+- `src/linux_main.c` is the shipping Linux desktop application.
+- `src/windows_main.c` is the shipping Windows desktop application.
+- both link directly to the exact Common revision pinned by the repository;
+- neither shipping target uses Python or Tk/Tkinter;
+- the Linux package installs the native ELF executable directly as `/usr/bin/runnerscope`;
+- the Windows release publishes a native Win32 EXE.
 
-## Current compatibility application
+The previous Python compatibility shell and native helper bridge were removed after the native product path was restored.
 
-`runnerscope.py` owns the shared current application behaviour. `runnerscope_linux.py` and `runnerscope_windows.py` are platform launch/integration surfaces.
+## Provider boundary
 
-The compatibility application currently relies on:
+The current shipping product uses GitHub CLI as its authenticated provider adapter. GitHub remains authoritative for runner/workflow facts; Runner Monitor owns correlation, timing, history, presentation and local-service policy.
 
-- Python/Tkinter for the UI/runtime;
-- the authenticated GitHub CLI for provider authentication/data access;
-- platform service-management mechanisms for local-runner inspection/restart.
-
-Those dependencies are current implementation facts, not the intended long-term semantic source of truth.
-
-## Native bridge
-
-`native/runnerscope_native.c` is the packaged native bridge linked against exact pinned Common. It provides project-owned native functionality already used alongside the compatibility application, including Common-backed theme/persistence contracts where applicable.
-
-## First-party native core
-
-`src/native2/` is the independent native rewrite:
-
-- `model.c/.h` — runner/job/session state model;
-- `http.c/.h` — first-party HTTP/provider transport layer;
-- `secure_config.c/.h` — configuration/credential boundary;
-- `linux_local.c/.h` — Linux local runner/service integration;
-- `main.c` — native composition and self-test entry point.
-
-The target is intentionally restricted to first-party C plus Common and normal libc/POSIX/Linux interfaces.
-
-## Dependency boundary
-
-The native target explicitly does **not** use GTK/GLib, Qt, Tk/Tkinter, Python, GitHub CLI, libcurl, OpenSSL-family libraries, GnuTLS, NSS or a second shared Infiltrator library.
-
-This is not a claim that those technologies are generally wrong. It is a project decision to own this monitor's provider protocol, HTTPS/TLS path, configuration and local-runner integration directly so that helper-tool output cannot redefine product behaviour.
+The long-term dependency-minimisation work in `src/native2/` is deliberately separate from the shipping architecture. It may replace the current provider/helper boundary only after it reaches behavioural parity. It must never cause the product to fall back to Python again.
 
 ## Common boundary
 
-Common may supply product-neutral parsing, formatting, timing, design and durable I/O primitives. Runner-specific GitHub semantics, local-runner state, provider protocol and application policy stay here.
+Common is consumed directly, not through a helper process. It provides product-neutral primitives such as theme/design contracts, formatting, timing and safe output helpers.
+
+Runner-specific semantics remain in Runner Monitor.
+
+## Platform presentation
+
+Linux uses GTK 3 for the native desktop shell. Windows uses Win32 controls and system APIs. Toolkit differences must not redefine the meaning of runner states.
+
+Both native shells surface the application version and linked Common version directly.
 
 ## State model
 
-Provider state and local service state are independent observations. A runner can be registered with GitHub while its local service is unhealthy, or local service metadata can exist while provider state is unavailable.
+Provider state and local service state are separate observations. A runner can remain registered with GitHub while its local service is unhealthy, or local service metadata can exist while provider data is unavailable.
 
-The UI/model therefore preserves:
-
-- provider connectivity/status;
-- busy/idle state;
-- active workflow/job identity when resolvable;
-- local service state;
-- history/session records;
-- error/unavailable states.
-
-Unavailable provider data is not converted into a guessed offline/busy state.
+Unavailable provider data is represented as unavailable/error state, not guessed state.
 
 ## Persistence
 
-Configuration and history are durable application data. Persistence must be atomic at the file-publication boundary and migration-compatible across the Python/native transition.
-
-## Migration rule
-
-The native rewrite must earn replacement capability by capability. It should not become the default merely because it compiles. Behaviour, saved data and failure semantics must remain compatible or have an explicit migration.
+Configuration/history are user data and must remain migration-compatible across native releases. The stable RunnerScope storage identity is retained for upgrade continuity even though the user-facing product name is Runner Monitor.
