@@ -1,25 +1,20 @@
-# Runner Monitor first-party native boundary
+# Runner Monitor dependency-minimisation core
 
-The native rewrite is owned entirely by Runner Monitor.
+`src/native2/` is the stricter first-party dependency-minimisation track. It is not a separate user-facing product and must never displace the shipping native application with Python or another interpreted fallback.
 
-Allowed project dependency:
-- the exact pinned Infiltratr Common release
+Allowed shared project dependency:
+- the exact pinned Infiltratr Common release.
 
-Allowed platform boundary:
-- C/POSIX/Linux system calls and kernel/desktop protocols implemented by Runner Monitor itself
+Target end-state restrictions for this core:
+- no GTK/GLib;
+- no Qt;
+- no Tk/Tkinter;
+- no Python;
+- no GitHub CLI runtime dependency;
+- no libcurl;
+- no OpenSSL-family, GnuTLS or NSS dependency;
+- no second shared Infiltrator library.
 
-Not allowed in the native product:
-- GTK / GLib
-- Qt
-- Tk / Tkinter
-- Python
-- GitHub CLI as an application runtime dependency
-- libcurl
-- OpenSSL / LibreSSL / BoringSSL
-- GnuTLS
-- NSS
-- a second shared Infiltrator library
+The shipping product may retain a platform UI/API adapter until this core reaches parity. Replacement is capability-by-capability and must preserve behaviour, data and release quality.
 
-GitHub authentication, HTTPS/TLS, protocol parsing, Linux desktop integration and
-runner/service integration must remain Runner Monitor-owned code. Common is consumed
-as-is and must not be changed to satisfy Runner Monitor.
+Common is consumed as-is and is not changed to absorb Runner Monitor-specific policy.
