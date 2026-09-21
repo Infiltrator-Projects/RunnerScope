@@ -2,34 +2,22 @@
 
 ## Current foundation
 
-- proven Python/Tk cross-platform monitor;
-- GitHub CLI authenticated provider path;
-- runner/job discovery, history, CSV export and local service inspection;
-- exact Common-backed native bridge;
-- first-party native C model/HTTP/config/Linux-service core with self-tests;
-- Debian packaging and release workflows.
+- native C/GTK Linux Runner Monitor restored as the shipping Linux application;
+- native C/Win32 Windows Runner Monitor built and released as an EXE;
+- exact Common linked directly into both platform binaries;
+- Python/Tk product files removed;
+- Linux runner/job/history/local-service feature surface restored;
+- first-party C model/HTTP/config/Linux-service core retained as a dependency-minimisation track;
+- CI builds native Linux and Windows artifacts and package validation rejects Python/Tk runtime dependencies.
 
-## Near-term native milestones
+## Near-term work
 
-1. prove provider HTTP/authentication and response parsing against the product contract;
-2. reach parity for organisation runner state and active-job correlation;
-3. preserve configuration/history compatibility;
-4. match local Linux runner discovery/service semantics;
-5. add a native presentation layer without changing the underlying model;
-6. remove the GitHub CLI/Python/Tk runtime only after parity evidence is complete.
-
-## Cross-platform priorities
-
-- isolate Windows/Linux local-service mechanics behind one product state model;
-- keep provider semantics platform-neutral;
-- preserve System/Day/Night shared appearance behaviour as native shells evolve.
-
-## Longer-term direction
-
-- one first-party native application with minimal runtime dependencies;
-- robust offline/provider-error behaviour and history browsing;
-- additional runner diagnostics only when provider/local evidence can be represented explicitly.
+1. bring the Win32 feature surface to parity with Linux for active-job correlation, history and local-service controls;
+2. preserve/migrate all existing native configuration/history data;
+3. move provider parsing/correlation into shared project-owned C modules where that improves parity;
+4. qualify first-party provider HTTP/authentication work against the shipping GitHub CLI adapter;
+5. replace helper/runtime dependencies only after parity evidence exists.
 
 ## Completion rule
 
-The native rewrite is complete when it can replace the compatibility application without losing supported monitoring, action safety, persistence or release behaviour.
+Dependency minimisation is complete when the first-party core can replace the remaining helper/toolkit boundaries without functionality loss. Native C delivery itself is no longer conditional on that work.
