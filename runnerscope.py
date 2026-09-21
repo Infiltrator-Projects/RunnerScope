@@ -275,9 +275,26 @@ def _durable_write_text(path: Path, text: str) -> None:
             detail = completed.stderr.decode("utf-8", errors="replace").strip()
             raise OSError(detail or f"native durable write failed with status {completed.returncode}")
         return
+
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+        if os.name == "posix":
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+    except Exception:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "organisation": "",
@@ -301,12 +318,23 @@ def config_dir() -> Path:
 def state_dir() -> Path:
     if sys.platform == "win32":
         root = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
-        return Path(root) / APP_NAME if root else Path.home() / APP_NAME
+        return Path(root) / LEGACY_STORAGE_NAME if root else Path.home() / LEGACY_STORAGE_NAME
     root = os.environ.get("XDG_STATE_HOME")
     return Path(root) / "runnerscope" if root else Path.home() / ".local" / "state" / "runnerscope"
 
+
+def _pre_1_1_11_state_file() -> Path | None:
+    if sys.platform != "win32":
+        return None
+    root = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+    directory = Path(root) / APP_NAME if root else Path.home() / APP_NAME
+    return directory / "state.json"
+
+
 CONFIG_FILE = config_dir() / "config.json"
 STATE_FILE = state_dir() / "state.json"
+PREVIOUS_STATE_FILE = _pre_1_1_11_state_file()
+CONFIG_LOAD_ERROR = ""
 
 ORG = ""
 REFRESH_SECONDS = 2.0
@@ -319,13 +347,17 @@ LOCAL_HEALTH_SECONDS = 10.0
 THEME_MODE = "system"
 
 def load_config() -> dict[str, Any] | None:
+    global CONFIG_LOAD_ERROR
+    CONFIG_LOAD_ERROR = ""
     if not CONFIG_FILE.is_file():
         return None
     try:
         data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
+        CONFIG_LOAD_ERROR = f"{CONFIG_FILE}: {exc}"
         return None
     if not isinstance(data, dict):
+        CONFIG_LOAD_ERROR = f"{CONFIG_FILE}: configuration root is not an object"
         return None
     cfg = dict(DEFAULT_CONFIG)
     cfg.update(data)
@@ -1715,8 +1747,14 @@ class RunnerMonitor(tk.Tk):
     def _cycle_theme(self) -> None:
         current = str(self.config_data.get("theme_mode", "system")).casefold()
         next_mode = {"system": "day", "day": "night", "night": "system"}.get(current, "system")
-        self.config_data["theme_mode"] = next_mode
-        save_config(self.config_data)
+        candidate = dict(self.config_data)
+        candidate["theme_mode"] = next_mode
+        try:
+            save_config(candidate)
+        except OSError as exc:
+            messagebox.showerror(APP_NAME, f"Could not save appearance setting.\n\n{exc}", parent=self)
+            return
+        self.config_data = candidate
         apply_config(self.config_data)
         self._last_system_dark = _system_prefers_dark()
         self._refresh_theme()
@@ -1766,7 +1804,11 @@ class RunnerMonitor(tk.Tk):
         self.wait_window(dialog)
         if not dialog.result:
             return
-        save_config(dialog.result)
+        try:
+            save_config(dialog.result)
+        except OSError as exc:
+            messagebox.showerror(APP_NAME, f"Could not save Runner Monitor settings.\n\n{exc}", parent=self)
+            return
         self.config_data = dict(dialog.result)
         apply_config(self.config_data)
         self._last_system_dark = _system_prefers_dark()
@@ -3235,10 +3277,13 @@ class RunnerMonitor(tk.Tk):
         self.status_var.set(f"Exported {len(rows)} row(s) to {filename}")
 
     def _load_persistent_history(self) -> None:
+        source = STATE_FILE
+        if not source.is_file() and PREVIOUS_STATE_FILE is not None and PREVIOUS_STATE_FILE.is_file():
+            source = PREVIOUS_STATE_FILE
         try:
-            if not STATE_FILE.is_file():
+            if not source.is_file():
                 return
-            data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            data = json.loads(source.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
                 raise ValueError("state root is not an object")
             schema = int(data.get("schema_version", 0))
@@ -3250,8 +3295,10 @@ class RunnerMonitor(tk.Tk):
             for row in reversed(rows[-MAX_HISTORY:]):
                 if isinstance(row, dict):
                     self.history.appendleft(dict(row))
+            if source != STATE_FILE:
+                self._history_dirty = True
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
-            self.history_load_error = f"{STATE_FILE}: {exc}"
+            self.history_load_error = f"{source}: {exc}"
 
     def _save_persistent_history_locked(self) -> None:
         try:
@@ -3393,6 +3440,18 @@ def main() -> int:
     enable_windows_dpi_awareness()
     register_optional_brand_fonts()
     cfg = load_config()
+    if CONFIG_LOAD_ERROR:
+        error_root = tk.Tk(className="RunnerScope")
+        _apply_window_icon(error_root)
+        error_root.withdraw()
+        messagebox.showerror(
+            APP_NAME,
+            "Runner Monitor could not read its configuration and has left the file unchanged.\n\n"
+            + CONFIG_LOAD_ERROR,
+            parent=error_root,
+        )
+        error_root.destroy()
+        return 1
     if cfg is None or not str(cfg.get("organisation") or "").strip():
         setup_root = tk.Tk(className="RunnerScope")
         _apply_window_icon(setup_root)
@@ -3404,7 +3463,11 @@ def main() -> int:
         setup_root.destroy()
         if not cfg:
             return 1
-        save_config(cfg)
+        try:
+            save_config(cfg)
+        except OSError as exc:
+            messagebox.showerror(APP_NAME, f"Could not save Runner Monitor settings.\n\n{exc}")
+            return 1
     apply_config(cfg)
     try:
         app = RunnerMonitor(cfg)
