@@ -84,3 +84,7 @@ assert source.count('tree.tag_configure("IDLE"') == 1
 assert 'def _gh_json_pages(' in source
 assert 'semantic_filter' in source
 assert '_runner_is_currently_busy' in source
+
+footer_app = 'text=f"Runner Monitor {VERSION}"'
+footer_common = 'text=f"Common {common_version}" if common_version else "Common compatibility"'
+assert source.index(footer_app) < source.index(footer_common)
