@@ -66,7 +66,7 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 APP_NAME = "Runner Monitor"
 LEGACY_STORAGE_NAME = "RunnerScope"
-VERSION = "1.1.11"
+VERSION = "1.1.12"
 
 
 def _application_icon_path() -> Path | None:
@@ -1523,12 +1523,12 @@ class RunnerMonitor(tk.Tk):
         common_version = _native_common_version()
         ttk.Label(
             sidebar,
-            text=f"Common {common_version}" if common_version else "Common compatibility",
+            text=f"Runner Monitor {VERSION}",
             style="SidebarMeta.TLabel",
         ).pack(fill=tk.X, padx=3)
         ttk.Label(
             sidebar,
-            text=f"Runner Monitor {VERSION}",
+            text=f"Common {common_version}" if common_version else "Common compatibility",
             style="SidebarMeta.TLabel",
         ).pack(fill=tk.X, padx=3, pady=(2, 0))
 
