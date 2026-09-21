@@ -66,7 +66,8 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 APP_NAME = "Runner Monitor"
 LEGACY_STORAGE_NAME = "RunnerScope"
-VERSION = "1.1.12"
+VERSION = "1.1.13"
+PINNED_COMMON_VERSION = "1.19.10"
 
 
 def _application_icon_path() -> Path | None:
@@ -242,22 +243,33 @@ def _native_palette(mode: str | None = None) -> dict[str, str]:
 
 
 def _native_common_version() -> str:
-    """Return the linked Common version when the native bridge is available."""
+    """Return the Common version used by this qualified build."""
     helper = _native_helper_path()
-    if helper is None:
-        return ""
+    if helper is not None:
+        try:
+            completed = subprocess.run(
+                [str(helper), "--common-version"],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=3,
+            )
+            reported = completed.stdout.strip()
+            if reported:
+                return reported
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    source_version = Path(__file__).resolve().parent / "infiltratr-common" / "VERSION"
     try:
-        completed = subprocess.run(
-            [str(helper), "--common-version"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            timeout=3,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    return completed.stdout.strip()
+        reported = source_version.read_text(encoding="utf-8").strip()
+        if reported:
+            return reported
+    except OSError:
+        pass
+
+    return PINNED_COMMON_VERSION
 
 def _durable_write_text(path: Path, text: str) -> None:
     """Publish UTF-8 text through Common's durable atomic writer when installed."""
@@ -1528,7 +1540,7 @@ class RunnerMonitor(tk.Tk):
         ).pack(fill=tk.X, padx=3)
         ttk.Label(
             sidebar,
-            text=f"Common {common_version}" if common_version else "Common compatibility",
+            text=f"Common {common_version}",
             style="SidebarMeta.TLabel",
         ).pack(fill=tk.X, padx=3, pady=(2, 0))
 
@@ -1767,7 +1779,7 @@ class RunnerMonitor(tk.Tk):
             (
                 f"Runner Monitor {VERSION}\n"
                 "GitHub Actions self-hosted runner monitoring and local runner service health.\n\n"
-                f"Common {_native_common_version() or 'compatibility'}\n"
+                f"Common {_native_common_version()}\n"
                 "Copyright © 1993-2026 Shannon Smith"
             ),
             parent=self,
