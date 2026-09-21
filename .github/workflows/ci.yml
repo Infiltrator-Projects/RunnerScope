@@ -9,10 +9,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: runnerscope-ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   linux-native:
     name: Hosted Linux native C/Common
