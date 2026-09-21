@@ -7,7 +7,9 @@ CMake builds and tests two native targets:
 - `runnerscope-native --self-test`;
 - `runnerscope-firstparty-core --self-test` plus `runnerscope-firstparty-contract`.
 
-`tests/test_native_bridge.py` exercises the integration contract around the native bridge. CI/release workflows also build/package the current application.
+`tests/test_native_bridge.py` exercises the integration contract around the native bridge. `tests/test_python_logic.py` covers deterministic compatibility-core behaviour such as paginated JSON decoding, duration ordering, runner-name matching and configuration persistence. `tests/test_ui_contract.py` remains a source-level shell guard rather than being treated as behavioural UI proof.
+
+Ordinary CI now runs on hosted Ubuntu and hosted Windows. Linux builds the native/Common targets, executes native and Python contracts, and performs a clean Debian build/install/purge pass. Windows executes the compatibility-core contracts, self-test and Python compilation so Windows regressions are no longer inferred from Linux-only evidence.
 
 Strict compiler warnings are treated as errors for native targets.
 
