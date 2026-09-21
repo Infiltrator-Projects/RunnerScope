@@ -13,6 +13,7 @@ void rs_runner_session_init(RsRunnerSession *session,
     session->state_since = now_seconds;
     if (state == RS_RUNNER_RUNNING) {
         session->busy_started = now_seconds;
+        session->busy_active = true;
         session->jobs_started = 1U;
     }
 }
@@ -26,15 +27,17 @@ bool rs_runner_session_apply(RsRunnerSession *session,
     if (session->state == next_state)
         return true;
 
-    if (session->state == RS_RUNNER_RUNNING && session->busy_started > 0.0) {
+    if (session->state == RS_RUNNER_RUNNING && session->busy_active) {
         if (now_seconds < session->busy_started)
             return false;
         session->accumulated_busy += now_seconds - session->busy_started;
         session->busy_started = 0.0;
+        session->busy_active = false;
     }
 
     if (next_state == RS_RUNNER_RUNNING) {
         session->busy_started = now_seconds;
+        session->busy_active = true;
         session->jobs_started++;
     }
 
@@ -49,7 +52,7 @@ double rs_runner_session_busy_seconds(const RsRunnerSession *session,
     if (!session) return 0.0;
     double busy = session->accumulated_busy;
     if (session->state == RS_RUNNER_RUNNING &&
-        session->busy_started > 0.0 &&
+        session->busy_active &&
         now_seconds >= session->busy_started)
         busy += now_seconds - session->busy_started;
     return busy;
