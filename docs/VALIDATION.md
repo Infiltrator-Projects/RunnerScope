@@ -1,49 +1,30 @@
 # Validation
 
-## Current automated evidence
+## Shipping evidence
 
-CMake builds and tests two native targets:
+CI validates the product as native software on both supported platforms.
 
-- `runnerscope-native --self-test`;
-- `runnerscope-firstparty-core --self-test` plus `runnerscope-firstparty-contract`.
+Linux:
+- configures and builds the C application against the pinned Common gitlink;
+- builds the first-party core/contracts;
+- runs all CTest contracts and the native application self-test;
+- verifies the application is an ELF binary;
+- rejects Python/Tk runtime linkage;
+- builds a clean Debian package;
+- rejects Python/Tk package dependencies;
+- installs, smoke-tests and purges the exact package.
 
-`tests/test_native_bridge.py` exercises the integration contract around the native bridge. `tests/test_python_logic.py` covers deterministic compatibility-core behaviour such as paginated JSON decoding, duration ordering, runner-name matching and configuration persistence. `tests/test_ui_contract.py` remains a source-level shell guard rather than being treated as behavioural UI proof.
+Windows:
+- configures and builds the native Win32 C application against the pinned Common gitlink;
+- runs its C/Common self-test;
+- stages and uploads the native EXE.
 
-Ordinary CI now runs on hosted Ubuntu and hosted Windows. Linux builds the native/Common targets, executes native and Python contracts, and performs a clean Debian build/install/purge pass. Windows executes the compatibility-core contracts, self-test and Python compilation so Windows regressions are no longer inferred from Linux-only evidence.
+Release publication consumes only those qualified native artifacts.
 
-Strict compiler warnings are treated as errors for native targets.
+## Dependency-minimisation evidence
 
-## Compatibility-application evidence
+`tools/check-first-party-native.sh` applies the stricter dependency boundary only to `src/native2/` and its contracts. This keeps long-term dependency reduction measurable without redefining the shipping product.
 
-The Python application remains the user-facing reference while migration is incomplete. Changes that affect behaviour shared with the native path should be compared against the established runner/job/history semantics rather than treating a native self-test as full parity.
+## Parity rule
 
-UI releases additionally require the Python source to compile, the shared Common palette/typography bridge to self-test, and the packaged application to retain the navigation-backed runner/job/history/local-service views and selection actions. Visual-shell changes must not remove the underlying monitoring or restart-safety paths. The source-level UI contract also guards the Software-style titlebar controls and the MBLINK semantic mappings for accent, connection, success and warning roles.
-
-## Native evidence layers
-
-1. model/unit contract tests;
-2. HTTP/provider parsing tests with controlled responses;
-3. configuration/history migration tests;
-4. local service tests on real Linux/Windows hosts;
-5. provider integration using a real authenticated GitHub account;
-6. UI parity/interaction testing.
-
-A lower layer does not prove a higher one.
-
-## Provider testing
-
-Live GitHub behaviour is time-dependent and permission-dependent. Tests should separate deterministic parsing/correlation from live-provider qualification.
-
-A missing permission or API field must be surfaced as unavailable/error, not accepted as proof of no active job.
-
-## Local action testing
-
-Service restart tests must avoid interrupting unrelated production runners. Active-job detection and confirmation behaviour are part of action safety.
-
-## Release criterion
-
-Until native parity is established, release validation must cover the compatibility product plus any packaged native bridge used by it. A future native-only release requires explicit evidence for provider, persistence and local-service parity.
-
-## Regression rule
-
-Every migration defect that changes runner/job interpretation, history, configuration or restart safety should become a permanent cross-implementation regression test where practical.
+A platform feature is not considered complete merely because the native binary compiles. Behavioural parity must be demonstrated for runner state, job correlation, history, service controls and persistence before claiming full cross-platform parity.
