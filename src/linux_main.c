@@ -1475,7 +1475,7 @@ static gboolean validate_org(const char *text)
 static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
 {
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
-        first_run ? "RunnerScope setup" : "RunnerScope settings",
+        first_run ? "Runner Monitor setup" : "Runner Monitor settings",
         app->window ? GTK_WINDOW(app->window) : NULL,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "_Cancel", GTK_RESPONSE_CANCEL, "_Save", GTK_RESPONSE_ACCEPT, NULL);
@@ -1521,7 +1521,7 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
     gtk_grid_attach(GTK_GRID(grid), theme, 1, 6, 1, 1);
 
     GtkWidget *hint = gtk_label_new(
-        "Authentication stays in GitHub CLI (gh auth login). RunnerScope never stores your token.");
+        "Authentication stays in GitHub CLI (gh auth login). Runner Monitor never stores your token.");
     gtk_widget_set_halign(hint, GTK_ALIGN_START);
     gtk_grid_attach(GTK_GRID(grid), hint, 0, 7, 2, 1);
 
@@ -1744,7 +1744,7 @@ static GtkWidget *make_counter(const char *name, const char *css_class)
 static void build_ui(RunnerScopeApp *app)
 {
     app->window = gtk_application_window_new(app->application);
-    gtk_window_set_title(GTK_WINDOW(app->window), "GitHub Runner Monitor");
+    gtk_window_set_title(GTK_WINDOW(app->window), "Runner Monitor");
     gtk_window_set_default_size(GTK_WINDOW(app->window), 1260, 720);
     gtk_window_set_icon_name(GTK_WINDOW(app->window), "utilities-system-monitor");
 
@@ -1885,6 +1885,22 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_set_sensitive(app->open_job_button, FALSE);
     g_signal_connect(app->open_job_button, "clicked", G_CALLBACK(on_open_job), app);
     gtk_box_pack_end(GTK_BOX(footer), app->open_job_button, FALSE, FALSE, 0);
+
+    GtkWidget *version_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_halign(version_box, GTK_ALIGN_END);
+    char *app_version = g_strdup_printf("Runner Monitor %s", RUNNERSCOPE_VERSION);
+    GtkWidget *app_version_label = gtk_label_new(app_version);
+    g_free(app_version);
+    gtk_widget_set_halign(app_version_label, GTK_ALIGN_END);
+    gtk_widget_set_name(app_version_label, "meta");
+    gtk_box_pack_start(GTK_BOX(version_box), app_version_label, FALSE, FALSE, 0);
+    char *common_version = g_strdup_printf("Common %s", INFILTRATR_COMMON_VERSION);
+    GtkWidget *common_version_label = gtk_label_new(common_version);
+    g_free(common_version);
+    gtk_widget_set_halign(common_version_label, GTK_ALIGN_END);
+    gtk_widget_set_name(common_version_label, "meta");
+    gtk_box_pack_start(GTK_BOX(version_box), common_version_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(outer), version_box, FALSE, FALSE, 0);
 
     apply_theme(app);
     gtk_widget_show_all(app->window);
