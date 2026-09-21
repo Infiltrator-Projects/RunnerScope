@@ -43,7 +43,9 @@ The desktop shell follows the same operations-console hierarchy as the rest of t
 - Local runner service restart with confirmation before interrupting an active job
 - First-run configuration dialog
 - No GitHub token stored by Runner Monitor
-- Shared graphite/silver interface on Windows and Linux\n- Native C/Common bridge on packaged Linux builds\n- Common-owned semantic theme roles and durable atomic config/history writes
+- Shared graphite/silver interface on Windows and Linux
+- Native C/Common bridge on packaged Linux builds
+- Common-owned semantic theme roles and durable atomic config/history writes
 
 ## Requirements
 
@@ -99,7 +101,7 @@ Default config locations:
 
 A safe `config.example.json` is included only as a reference. `config.json` and `state.json` are explicitly ignored by Git.
 
-The configuration can be changed later with the **Settings** button. Restart Runner Monitor after changing polling settings.
+The configuration can be changed later with the **Settings** button. Polling, repository-cache, history-retention and appearance settings are applied immediately.
 
 Environment variables can override local config values when needed:
 
@@ -122,6 +124,10 @@ python runnerscope.py --self-test
 Runner Monitor shells out to the installed GitHub CLI. Authentication remains in GitHub CLI's own credential storage. Runner Monitor does not ask for, store, or publish a GitHub token.
 
 The local config contains monitoring preferences and the organisation name only. It is stored outside the repository by default.
+
+Persistent history is stored separately from configuration. On Windows the canonical state path is `%LOCALAPPDATA%\\RunnerScope\\state.json`; Runner Monitor 1.1.11 migrates history from the earlier `%LOCALAPPDATA%\\Runner Monitor\\state.json` location when present. On Linux it uses `$XDG_STATE_HOME/runnerscope/state.json`, or `~/.local/state/runnerscope/state.json`.
+
+Corrupt or unreadable configuration/history is reported explicitly and the original file is left unchanged rather than silently replaced.
 
 ## Licence
 
