@@ -14,6 +14,17 @@ import runnerscope as rm
 
 
 def main() -> int:
+    original_helper = rm._native_helper_path
+    try:
+        rm._native_helper_path = lambda: None
+        assert rm._native_common_version() == rm.PINNED_COMMON_VERSION
+    finally:
+        rm._native_helper_path = original_helper
+
+    source_common = ROOT / "infiltratr-common" / "VERSION"
+    if source_common.is_file():
+        assert rm.PINNED_COMMON_VERSION == source_common.read_text(encoding="utf-8").strip()
+
     pages = rm._decode_json_stream('{"page":1}\n{"page":2}\n')
     assert [page["page"] for page in pages] == [1, 2]
 
