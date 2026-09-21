@@ -9,8 +9,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#define RUNNERSCOPE_VERSION "1.1.10"
-#define RUNNERSCOPE_COMMON_VERSION "1.19.10"
+#ifndef RUNNERSCOPE_VERSION
+#error "RUNNERSCOPE_VERSION must be supplied by the build system"
+#endif
 
 static InfiltratrProjectInfo project_info(void)
 {
@@ -123,16 +124,14 @@ static int self_test(void)
 {
     InfiltratrProjectInfo info = project_info();
     if (!infiltratr_project_info_is_valid(&info)) return 1;
-    if (strcmp(INFILTRATR_COMMON_VERSION, RUNNERSCOPE_COMMON_VERSION) != 0) return 2;
-
     const InfiltratrThemePalette *day = infiltratr_theme_resolve(INFILTRATR_THEME_DAY, false);
     const InfiltratrThemePalette *night = infiltratr_theme_resolve(INFILTRATR_THEME_NIGHT, true);
-    if (!day || !night || day == night) return 3;
-    if (day->background_rgb == night->background_rgb) return 4;
+    if (!day || !night || day == night) return 2;
+    if (day->background_rgb == night->background_rgb) return 3;
 
     (void)printf("Runner Monitor %s native/Common self-test passed (Common %s)\n",
                  RUNNERSCOPE_VERSION, INFILTRATR_COMMON_VERSION);
-    return ferror(stdout) ? 5 : 0;
+    return ferror(stdout) ? 4 : 0;
 }
 
 static void usage(FILE *stream)
