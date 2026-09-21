@@ -1,3 +1,16 @@
+infiltrator-runner-monitor (1.1.11) unstable; urgency=medium
+
+  * Fix settings persistence so repository-cache and history-retention values are no longer reset when settings are saved.
+  * Paginate organisation runners, repositories, workflow runs and jobs, and expand unresolved busy-runner fallback discovery across the full organisation repository set.
+  * Stop rebuilding complete Tk tables every refresh by using stable row identities and in-place updates; make counter filters semantic and sort duration/history fields by their underlying meaning.
+  * Make GitHub access testing asynchronous, reduce system-theme polling, clear hidden-tab actions correctly and verify provider busy state immediately before a local runner restart.
+  * Debounce durable history publication, surface configuration/history persistence failures and migrate the earlier Windows state location without discarding history.
+  * Batch Linux systemd service inspection and make diagnostic log discovery race tolerant.
+  * Harden the first-party native model, HTTP length bounds and private configuration reads, with regression tests for each corrected contract.
+  * Run ordinary CI on hosted Linux and Windows and derive build/release metadata from VERSION and the pinned Common submodule instead of duplicated literals.
+
+ -- Shannon Smith <noreply@github.com>  Mon, 21 Sep 2026 14:00:00 +1000
+
 infiltrator-runner-monitor (1.1.10) unstable; urgency=medium
 
   * Refine the MBLINK-inspired visual tune with preblended cyan, info, success, warning and fault surfaces that reproduce the reference low-alpha treatment in Tk.
