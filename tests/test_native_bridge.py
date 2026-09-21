@@ -20,13 +20,15 @@ def main() -> int:
         raise SystemExit("usage: test_native_bridge.py PATH-TO-runnerscope-native")
     helper = sys.argv[1]
 
-    assert run(helper, "--version").stdout.strip() == b"1.1.10"
-    assert run(helper, "--common-version").stdout.strip() == b"1.19.10"
+    expected_version = Path("VERSION").read_text(encoding="utf-8").strip().encode("ascii")
+    expected_common = Path("infiltratr-common/VERSION").read_text(encoding="utf-8").strip().encode("ascii")
+    assert run(helper, "--version").stdout.strip() == expected_version
+    assert run(helper, "--common-version").stdout.strip() == expected_common
 
     info = run(helper, "--project-info").stdout.decode("utf-8")
     assert "name=Runner Monitor" in info
-    assert "version=1.1.10" in info
-    assert "common-library=infiltratr-common-1.19.10" in info
+    assert f"version={expected_version.decode()}" in info
+    assert f"common-library=infiltratr-common-{expected_common.decode()}" in info
     assert "source-id=Infiltrator-Projects/RunnerScope" in info
 
     palette = {}
