@@ -3,9 +3,10 @@
 from pathlib import Path
 
 source = Path("runnerscope.py").read_text(encoding="utf-8")
+version = Path("VERSION").read_text(encoding="utf-8").strip()
+assert f'VERSION = "{version}"' in source
 
 required = (
-    'VERSION = "1.1.10"',
     '"Topbar.TFrame"',
     '"Titlebar.TButton"',
     '"TitlebarIcon.TButton"',
@@ -77,3 +78,9 @@ assert 'tree.tag_configure("IDLE", foreground=STATE_GREEN)' in source
 
 assert '_blend_hex(MB_PANEL, MB_ACCENT, 0.075)' in source
 assert '_blend_hex(MB_CARD, STATE_AMBER, 0.08)' in source
+
+assert source.count('tree.tag_configure("RUNNING"') == 1
+assert source.count('tree.tag_configure("IDLE"') == 1
+assert 'def _gh_json_pages(' in source
+assert 'semantic_filter' in source
+assert '_runner_is_currently_busy' in source
