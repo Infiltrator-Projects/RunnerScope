@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   publish:
-    # Publish only an exact, successful main-branch release commit.
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
@@ -28,7 +27,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Download exact tested Debian package
+      - name: Download qualified Debian package
         uses: actions/download-artifact@v4
         with:
           name: runnerscope-deb
@@ -36,23 +35,29 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
-      - name: Prepare immutable release assets
+      - name: Download qualified Windows executable
+        uses: actions/download-artifact@v4
+        with:
+          name: runner-monitor-windows
+          path: dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Prepare immutable native release assets
         shell: bash
         run: |
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
-          deb="$(find dist -maxdepth 1 -name "runnerscope_${version}_*.deb" -print -quit)"
-          test -n "$deb"
-          cp runnerscope.py "dist/Runner-Monitor-Windows-v${version}.py"
-          cp runnerscope.py "dist/Runner-Monitor-Linux-v${version}.py"
+          test -f "dist/runnerscope_${version}_amd64.deb"
+          test -f "dist/Runner-Monitor-Windows.exe"
+          mv "dist/Runner-Monitor-Windows.exe" "dist/Runner-Monitor-Windows-v${version}.exe"
           (
             cd dist
-            sha256sum "runnerscope_${version}_amd64.deb" \
-              "Runner-Monitor-Windows-v${version}.py" \
-              "Runner-Monitor-Linux-v${version}.py" > SHA256SUMS.txt
+            sha256sum "runnerscope_${version}_amd64.deb"               "Runner-Monitor-Windows-v${version}.exe" > SHA256SUMS.txt
           )
+          ! find dist -maxdepth 1 -name '*.py' -print -quit | grep -q .
 
-      - name: Publish immutable GitHub release
+      - name: Publish immutable native release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -64,13 +69,4 @@ jobs:
             echo "Published releases are immutable: $tag already exists." >&2
             exit 1
           fi
-          gh release create "$tag" \
-            "dist/runnerscope_${version}_amd64.deb" \
-            "dist/Runner-Monitor-Windows-v${version}.py" \
-            "dist/Runner-Monitor-Linux-v${version}.py" \
-            dist/SHA256SUMS.txt \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "${{ github.event.workflow_run.head_sha }}" \
-            --title "Runner Monitor ${version}" \
-            --generate-notes \
-            --latest
+          gh release create "$tag"             "dist/runnerscope_${version}_amd64.deb"             "dist/Runner-Monitor-Windows-v${version}.exe"             dist/SHA256SUMS.txt             --repo "$GITHUB_REPOSITORY"             --target "${{ github.event.workflow_run.head_sha }}"             --title "Runner Monitor ${version}"             --notes "Native C Runner Monitor linked directly with pinned Infiltratr Common. Linux ships as a native Debian executable and Windows ships as a native Win32 EXE. Python/Tk is not part of either runtime release."             --latest
