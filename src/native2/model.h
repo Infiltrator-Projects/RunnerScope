@@ -16,6 +16,7 @@ typedef struct {
     RsRunnerState state;
     double state_since;
     double busy_started;
+    bool busy_active;
     double accumulated_busy;
     uint64_t jobs_started;
 } RsRunnerSession;
