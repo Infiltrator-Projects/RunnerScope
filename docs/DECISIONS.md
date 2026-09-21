@@ -1,49 +1,45 @@
 # Decisions
 
-## ADR-001 — Migrate incrementally, not by flag day
+## ADR-001 — Native C is the product
 
-**Decision.** Keep the proven compatibility application while a first-party native core is qualified capability by capability.
+**Decision.** Runner Monitor ships as compiled C on Linux and Windows.
 
-**Rationale.** A rewrite that loses monitoring semantics or saved history would be regression, not progress.
+**Rationale.** The native implementation already existed and directly used Common. Treating Python/Tk as the supported product while a stricter rewrite was underway inverted the intended architecture.
 
-**Consequence.** Python/Tk and native code coexist temporarily with explicit ownership boundaries.
+**Consequence.** Python/Tk product entry points are removed. Dependency-reduction work proceeds inside the native line rather than replacing it.
 
-## ADR-002 — The native target owns provider mechanics directly
+## ADR-002 — Common is linked directly
 
-**Decision.** The first-party native product will not depend on GitHub CLI, libcurl or a third-party TLS stack as runtime application dependencies.
+**Decision.** Shipping binaries link directly to the exact pinned Common revision.
 
-**Rationale.** Provider protocol/authentication/output should not be redefined by helper-tool releases.
+**Rationale.** Common is a shared implementation dependency, not an out-of-process helper service.
 
-**Consequence.** Native HTTP/TLS/provider work has a higher implementation/testing burden and must be qualified before replacing the compatibility path.
+**Consequence.** The UI can report the linked Common version directly and cannot silently degrade to a compatibility label.
 
-## ADR-003 — Common is the only shared project dependency
+## ADR-003 — Platform-native shells may differ
 
-**Decision.** The native product may use exact pinned Common for product-neutral primitives but not another shared Infiltrator application library.
+**Decision.** Linux may use GTK and Windows may use Win32 while sharing the same product semantics.
 
-**Rationale.** Runner-specific provider and service semantics belong in Runner Monitor.
+**Rationale.** Native executable delivery and behavioural consistency matter more than forcing both systems through one toolkit.
 
-**Consequence.** Common is consumed as-is; Runner Monitor does not distort Common to absorb project policy.
+**Consequence.** Platform UI code stays local while runner/provider semantics remain aligned.
 
-## ADR-004 — Cloud state and local service state are separate
+## ADR-004 — Dependency minimisation is incremental
 
-**Decision.** GitHub registration/job state and local runner-service health are modelled independently.
+**Decision.** `src/native2/` remains the first-party dependency-minimisation core, but it does not replace the shipping application until it has parity.
 
-**Rationale.** Either side can be stale/unavailable while the other remains observable.
+**Rationale.** Removing GTK/GLib or GitHub CLI is useful only if functionality and correctness are preserved.
 
-**Consequence.** The UI can explain mismatches instead of collapsing them into one status light.
+**Consequence.** The product remains native C throughout the migration.
 
-## ADR-005 — Restart is an explicit control action
+## ADR-005 — Cloud and local service state are independent
 
-**Decision.** Local service restart requires deliberate operator action and must not occur as automatic monitoring recovery.
+**Decision.** GitHub registration/job state and local runner-service health are modelled separately.
 
-**Rationale.** Restarting can interrupt an active job.
+## ADR-006 — Restart is explicit
 
-**Consequence.** Monitoring remains passive by default and the action path checks/communicates relevant state.
+**Decision.** Local service restart requires deliberate operator action and is never automatic recovery.
 
-## ADR-006 — Saved state must survive implementation migration
+## ADR-007 — Saved state survives architecture work
 
-**Decision.** Configuration/history are user data and cannot be casually invalidated by the native rewrite.
-
-**Rationale.** The implementation language is not part of the user's intended data lifecycle.
-
-**Consequence.** Migration compatibility is a release requirement for replacing the compatibility application.
+**Decision.** Configuration/history are user data and cannot be discarded merely because implementation details change.
