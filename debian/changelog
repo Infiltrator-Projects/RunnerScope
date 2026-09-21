@@ -1,3 +1,14 @@
+infiltrator-runner-monitor (1.2.0) unstable; urgency=medium
+
+  * Restore the native C/GTK Runner Monitor as the installed Linux product.
+  * Link the application directly to pinned Infiltratr Common 1.19.10.
+  * Remove Python and Tk/Tkinter from build/runtime package dependencies.
+  * Install /usr/bin/runnerscope as the compiled ELF executable.
+  * Retain the first-party native core as an incremental dependency-minimisation track.
+  * Qualify native Linux and Windows builds in CI and publish a native Windows EXE.
+
+ -- Shannon Smith <noreply@github.com>  Mon, 21 Sep 2026 15:30:00 +1000
+
 infiltrator-runner-monitor (1.1.13) unstable; urgency=medium
 
   * Report the exact pinned Common version in standalone builds when the native Common bridge is not installed.
