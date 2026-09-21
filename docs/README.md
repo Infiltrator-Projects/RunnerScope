@@ -2,18 +2,15 @@
 
 Runner Monitor follows the common Infiltrator documentation baseline.
 
-- [Architecture](ARCHITECTURE.md) — compatibility/native components and ownership.
-- [Design](DESIGN.md) — first-party migration philosophy and state semantics.
-- [Decisions](DECISIONS.md) — durable migration/dependency choices.
-- [Roadmap](ROADMAP.md) — capability-by-capability native migration.
-- [Validation](VALIDATION.md) — parity and evidence levels.
+- [Architecture](ARCHITECTURE.md) — native product structure and ownership.
+- [Design](DESIGN.md) — state, Common and platform-shell design rules.
+- [Decisions](DECISIONS.md) — durable architecture choices.
+- [Roadmap](ROADMAP.md) — native parity and dependency-minimisation work.
+- [Validation](VALIDATION.md) — current build/package evidence.
 - [Project README](../README.md) — user-facing overview.
-- [Changelog](../CHANGELOG.md) — history.
+- [Changelog](../CHANGELOG.md) — release history.
 - [Contributing](../CONTRIBUTING.md) — engineering rules.
 - [Security](../SECURITY.md) — vulnerability policy.
+- [Dependency-minimisation core](FIRST_PARTY_NATIVE.md) — stricter end-state dependency boundary.
 
-Specialist document:
-
-- [First-party native boundary](FIRST_PARTY_NATIVE.md) — explicit allowed/prohibited dependencies for the native target.
-
-The compatibility application remains a supported implementation fact until the roadmap/validation criteria for replacement are satisfied.
+The shipping application is native C on Linux and Windows. There is no supported Python/Tk compatibility product.
