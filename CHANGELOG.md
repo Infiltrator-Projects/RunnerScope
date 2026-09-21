@@ -4,6 +4,19 @@
 
 No unreleased changes.
 
+## 1.2.0 - 2026-09-21
+
+- Restore native C as the shipping Runner Monitor architecture.
+- Restore the substantial native Linux C/GTK monitor and link it directly to pinned Common 1.19.10.
+- Add a native Win32 C/Common executable and publish a real Windows EXE.
+- Remove Python/Tk product entry points, launchers, tests and the obsolete out-of-process Common helper bridge.
+- Install the native Linux executable directly as `/usr/bin/runnerscope`; remove Python/Tk package dependencies.
+- Publish only qualified native Debian and Windows EXE artifacts.
+- Show the linked Common version directly in native application footers.
+- Keep the stricter `src/native2/` first-party work as an incremental dependency-minimisation track rather than allowing it to displace the native product.
+- Add native Linux/Windows CI and package guards that reject a return to Python/Tk shipping artifacts.
+
+
 ## 1.1.13 - 2026-09-21
 
 - Show the exact qualified Common version in standalone Windows/Linux Python builds even when the native Common bridge is absent.
