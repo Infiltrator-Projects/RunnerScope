@@ -4,6 +4,12 @@
 
 No unreleased changes.
 
+## 1.1.13 - 2026-09-21
+
+- Show the exact qualified Common version in standalone Windows/Linux Python builds even when the native Common bridge is absent.
+- Preserve native bridge and source-tree Common version discovery when available.
+- Add regression coverage that forces the no-helper path and forbids the vague "Common compatibility" footer.
+
 ## 1.1.12 - 2026-09-21
 
 - Put the Runner Monitor version above the Common version in the sidebar footer.
