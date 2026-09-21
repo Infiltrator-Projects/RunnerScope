@@ -86,5 +86,7 @@ assert 'semantic_filter' in source
 assert '_runner_is_currently_busy' in source
 
 footer_app = 'text=f"Runner Monitor {VERSION}"'
-footer_common = 'text=f"Common {common_version}" if common_version else "Common compatibility"'
+footer_common = 'text=f"Common {common_version}"'
 assert source.index(footer_app) < source.index(footer_common)
+assert '"Common compatibility"' not in source
+assert "PINNED_COMMON_VERSION" in source
