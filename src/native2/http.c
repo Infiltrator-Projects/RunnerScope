@@ -115,7 +115,13 @@ bool rs_http_parse_response(const char *response, size_t response_length,
         memcmp(response, "HTTP/1.", 7U) != 0)
         return false;
 
-    const char *status = strchr(response, ' ');
+    const char *status = NULL;
+    for (const char *cursor = response; cursor < line_end; ++cursor) {
+        if (*cursor == ' ') {
+            status = cursor;
+            break;
+        }
+    }
     if (!status || status + 4 > line_end) return false;
     if (!isdigit((unsigned char)status[1]) ||
         !isdigit((unsigned char)status[2]) ||
