@@ -2,65 +2,58 @@
 
 **Project copyright:** © 1993-2026 Shannon Smith
 
-Runner Monitor is a cross-platform desktop monitor for GitHub Actions self-hosted runners. It shows runner connectivity and busy state, resolves active workflow jobs, records session history, exports CSV data, and can inspect the local runner service on Windows and Linux.
+Runner Monitor is a native C desktop monitor for GitHub Actions self-hosted runners. The shipping application is compiled on both supported platforms and links directly against the repository-pinned Infiltratr Common library.
 
-Runner Monitor 1.1 continues the native Infiltrator migration without discarding the proven monitor UI. The Windows and Linux launchers still share the same `runnerscope.py` application, while packaged Linux builds add a native C bridge linked to an exact Infiltratr Common release. Common 1.19.10 owns the complete current semantic palette, typography/metrics contract and durable atomic publication used for configuration/history; GitHub credentials remain owned by the authenticated `gh` CLI.
+There is no Python or Tk/Tkinter runtime in the 1.2 native product line.
 
-### Compatibility naming
+## Native architecture
 
-The user-facing product remains **Runner Monitor**. The Debian/APT package identity is `infiltrator-runner-monitor` so it cannot collide with a future distribution package, while the existing `runnerscope` executable, desktop identity and per-user configuration paths remain stable. Existing `runnerscope` package installations migrate through the central Infiltrator repository transition package; the release asset may retain its `runnerscope_...deb` filename without changing the package identity stored inside the Debian archive.
+- Linux: C11 + GTK 3 desktop shell, built as the ELF executable `/usr/bin/runnerscope`.
+- Windows: C11 + native Win32 shell, built as `Runner-Monitor-Windows-v<version>.exe`.
+- Shared dependency: the exact pinned Infiltratr Common source tree.
+- Common owns the product-neutral palette, typography/metrics contract, formatting and other shared primitives.
+- Runner Monitor owns runner/provider semantics, local-service behaviour and application policy.
+- The current provider credential/API boundary remains the authenticated GitHub CLI (`gh`) while the dependency-minimisation core in `src/native2/` is qualified to replace it.
+- Python/Tk compatibility sources and the old Common helper bridge are not part of the repository or release product.
 
-## Engineering ethos
-
-What does a runner monitor built from first principles need to own so that a change in a helper tool does not redefine what the application means? Runner Monitor treats GitHub's runner and workflow state as input, while session history, interpretation, presentation and local-runner behaviour remain project-owned.
-
-The current application is partway through a native migration, so Python, the authenticated GitHub CLI and platform services are still practical adapters. They are not intended to become semantic sources of truth. Critical behaviour is moved into first-party native code when doing so makes the contract clearer or more dependable, while proven parts are not rewritten merely for fashion.
-
-The objective is a monitor whose state transitions and history can be explained and tested independently of incidental command output. New dependencies are justified by stronger reliability or maintainability, not by novelty alone.
+The user-facing name is **Runner Monitor**. The stable Linux executable and desktop identity remain `runnerscope`, and the Debian package identity remains `infiltrator-runner-monitor`.
 
 ## Appearance
 
-Runner Monitor uses a dedicated branching workflow/pipeline icon so it remains visually distinct from System Monitor while retaining the same graphite and canonical `#00ADEF` Infiltrator family treatment.
+Both native shells consume Common directly. The footer reports the application version followed by the linked Common version, with Common as the final line.
 
-Runner Monitor's compatibility shell mirrors the Infiltrator Software titlebar hierarchy and consumes the full MBLINK-derived Common semantic palette: cyan for active identity/focus, graphite connection layers, green success, amber warning and red fault roles. The current Tk shell intentionally retains native operating-system move/resize controls; the first-party native presentation layer can later use the same client-side titlebar mechanics as the GTK applications.
-
-Runner Monitor supports **Follow system**, **Day** and **Night**. Day uses the white Infiltrator palette; Night uses the MB graphite/black palette with the canonical `#00ADEF` blue accent. Follow system detects the host light/dark preference and selects exactly Day or Night, updating while the application is running rather than inheriting a third toolkit palette.
-
-The desktop shell follows the same operations-console hierarchy as the rest of the Infiltrator family: a compact product header, left navigation rail, semantic status cards, layered graphite work surfaces, dedicated selection actions and a low-noise status footer. Normal interface copy uses the Common UI/brand typography roles; technical values stay in structured tables rather than forcing the whole application into a terminal aesthetic.
+System, Day and Night semantics come from Common. Runner-specific status colours and table meanings remain local to Runner Monitor.
 
 ## Features
 
+The restored native Linux application includes:
 
-- Live organisation runner status: running, idle and offline
-- Active workflow/job discovery, including current step where GitHub exposes it
-- Parallel active-job scanning with repository caching for much faster startup and refresh
-- Mercedes graphite/silver UI with MB Corpo fonts when installed, plus safe platform fallbacks
-- Self-hosted versus GitHub-hosted activity counters
-- Runtime, queue time and per-runner session history
-- Search/filter across monitoring tables
-- CSV export
-- Local runner health and `_diag` discovery
-- Local runner service restart with confirmation before interrupting an active job
-- First-run configuration dialog
-- No GitHub token stored by Runner Monitor
-- Shared graphite/silver interface on Windows and Linux
-- Native C/Common bridge on packaged Linux builds
-- Common-owned semantic theme roles and durable atomic config/history writes
+- live organisation runner status;
+- active workflow/job discovery;
+- self-hosted versus GitHub-hosted activity counters;
+- runtime, state duration, session jobs and utilisation;
+- filtering and CSV export;
+- persistent history;
+- local Linux runner-service health and diagnostic discovery;
+- explicit local service restart;
+- native configuration UI;
+- Common-owned appearance and durable publication.
+
+The native Windows application currently provides the C/Common Win32 monitor shell, organisation configuration and live runner-state monitoring. Active-job/history/local-service parity remains native follow-on work; it will not be implemented by restoring Python.
 
 ## Requirements
 
 ### Windows
 
-- Python 3.10 or newer with Tkinter
-- GitHub CLI (`gh`)
+- 64-bit Windows supported by the current GitHub Actions Windows image/toolchain;
+- GitHub CLI (`gh`) authenticated with access to the target organisation.
 
 ### Linux
 
-- Python 3.10 or newer
-- Tkinter (`python3-tk` on Debian/Ubuntu/Linux Mint)
-- GitHub CLI (`gh`)
-- `systemd` for local runner service health/restart features
-- `pkexec` or `sudo` if you want to restart a local runner from the GUI
+- GTK 3;
+- GitHub CLI (`gh`);
+- systemd for local runner-service health;
+- polkit/`pkexec` for service restart.
 
 Authenticate GitHub CLI before starting Runner Monitor:
 
@@ -68,70 +61,42 @@ Authenticate GitHub CLI before starting Runner Monitor:
 gh auth login
 ```
 
-Organisation runner access may require the authenticated account/token to have the appropriate organisation permissions.
+## Install and run
 
-## Running
-
-Windows:
-
-```text
-python runnerscope_windows.py
-```
+Windows: use the published `Runner-Monitor-Windows-v<version>.exe`.
 
 Linux:
 
 ```text
-python3 runnerscope_linux.py
+sudo apt install ./runnerscope_<version>_amd64.deb
+runnerscope
 ```
 
-You can also run the shared core directly:
+## Configuration
 
-```text
-python runnerscope.py
-```
-
-## First-run configuration
-
-On first launch Runner Monitor asks for the GitHub organisation and monitoring preferences, then writes a local configuration file. It does not put the user's organisation, runner names, machine paths, or authentication credentials into the source tree.
-
-Default config locations:
+The native applications retain the stable RunnerScope configuration identity so existing settings can migrate without changing the user-facing product name.
 
 - Windows: `%APPDATA%\RunnerScope\config.json`
 - Linux: `$XDG_CONFIG_HOME/runnerscope/config.json`, or `~/.config/runnerscope/config.json`
 
-A safe `config.example.json` is included only as a reference. `config.json` and `state.json` are explicitly ignored by Git.
+`GITHUB_RUNNER_ORG` can override the configured organisation.
 
-The configuration can be changed later with the **Settings** button. Polling, repository-cache, history-retention and appearance settings are applied immediately.
-
-Environment variables can override local config values when needed:
-
-- `GITHUB_RUNNER_ORG`
-- `GITHUB_RUNNER_REFRESH`
-- `GITHUB_RUNNER_ACTIVITY_REFRESH`
-- `GITHUB_RUNNER_REPO_LIMIT`
-- `GITHUB_RUNNER_HISTORY`
-- `GITHUB_RUNNER_EXPECTED`
-- `GITHUB_RUNNER_LOCAL_HEALTH_REFRESH`
-
-## Self-test
+## Build
 
 ```text
-python runnerscope.py --self-test
+git submodule update --init --recursive
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
 ```
+
+On Windows, configure with the Visual Studio generator and build the Release configuration.
 
 ## Privacy and credentials
 
-Runner Monitor shells out to the installed GitHub CLI. Authentication remains in GitHub CLI's own credential storage. Runner Monitor does not ask for, store, or publish a GitHub token.
-
-The local config contains monitoring preferences and the organisation name only. It is stored outside the repository by default.
-
-Persistent history is stored separately from configuration. On Windows the canonical state path is `%LOCALAPPDATA%\\RunnerScope\\state.json`; Runner Monitor 1.1.11 migrates history from the earlier `%LOCALAPPDATA%\\Runner Monitor\\state.json` location when present. On Linux it uses `$XDG_STATE_HOME/runnerscope/state.json`, or `~/.local/state/runnerscope/state.json`.
-
-Corrupt or unreadable configuration/history is reported explicitly and the original file is left unchanged rather than silently replaced.
+Runner Monitor does not store a GitHub token. The current shipping provider adapter uses the authenticated GitHub CLI credential store. The native dependency-minimisation core is being developed separately so that this adapter can eventually be replaced without changing the product back to an interpreted runtime.
 
 ## Licence
-
-Copyright © 1993-2026 Shannon Smith.
 
 Runner Monitor is free software licensed under the GNU General Public License v3.0 or later. See `LICENSE`.
 
