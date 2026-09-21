@@ -240,6 +240,25 @@ def _native_palette(mode: str | None = None) -> dict[str, str]:
             palette[key] = value.lower()
     return palette
 
+
+def _native_common_version() -> str:
+    """Return the linked Common version when the native bridge is available."""
+    helper = _native_helper_path()
+    if helper is None:
+        return ""
+    try:
+        completed = subprocess.run(
+            [str(helper), "--common-version"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return completed.stdout.strip()
+
 def _durable_write_text(path: Path, text: str) -> None:
     """Publish UTF-8 text through Common's durable atomic writer when installed."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -958,13 +977,17 @@ class ConfigDialog(tk.Toplevel):
         ("expected_runners", "Expected runners", "0 disables the missing-runner count check."),
         ("runner_poll_seconds", "Runner refresh", "Fast status refresh in seconds; 2 is recommended."),
         ("activity_scan_seconds", "Job detail scan", "Full workflow/job scan interval in seconds. Busy transitions trigger an immediate scan."),
-        ("repository_scan_limit", "Repositories to scan", "Most recently active repositories checked for jobs."),
+        ("repository_scan_limit", "Repositories to scan", "Most recently active repositories checked for jobs; unresolved busy runners scan the full organisation."),
+        ("repository_cache_seconds", "Repository cache", "How long the organisation repository list is cached."),
+        ("history_entries", "History entries", "Maximum persistent history records retained."),
         ("local_health_seconds", "Local service health", "How often local runner services are checked."),
     )
 
     def __init__(self, parent: tk.Misc, cfg: dict[str, Any] | None = None, title: str = "Runner Monitor setup") -> None:
         super().__init__(parent)
         self.result: dict[str, Any] | None = None
+        self._test_queue: queue.Queue[tuple[bool, str]] = queue.Queue()
+        self._test_in_progress = False
         source = dict(DEFAULT_CONFIG)
         if cfg:
             source.update(cfg)
@@ -994,17 +1017,19 @@ class ConfigDialog(tk.Toplevel):
             if first_entry is None:
                 first_entry = entry
 
-        ttk.Label(outer, text="Appearance").grid(row=8, column=0, sticky="w", padx=(0, 12), pady=5)
+        theme_row = 2 + len(self.FIELDS)
+        ttk.Label(outer, text="Appearance").grid(row=theme_row, column=0, sticky="w", padx=(0, 12), pady=5)
         theme_box = ttk.Combobox(outer, textvariable=self.theme_var, state="readonly", width=28, values=("Follow system", "Day", "Night"))
-        theme_box.grid(row=8, column=1, sticky="ew", pady=5)
-        ttk.Label(outer, text="System follows the OS; Day is white and Night is the MB graphite theme.", style="Meta.TLabel").grid(row=8, column=2, sticky="w", padx=(12, 0), pady=5)
+        theme_box.grid(row=theme_row, column=1, sticky="ew", pady=5)
+        ttk.Label(outer, text="System follows the OS; Day is white and Night is the MB graphite theme.", style="Meta.TLabel").grid(row=theme_row, column=2, sticky="w", padx=(12, 0), pady=5)
 
-        ttk.Label(outer, text="Authentication stays in GitHub CLI (gh auth login); Runner Monitor never stores your token.", style="Meta.TLabel").grid(row=9, column=0, columnspan=3, sticky="w", pady=(12, 4))
+        ttk.Label(outer, text="Authentication stays in GitHub CLI (gh auth login); Runner Monitor never stores your token.", style="Meta.TLabel").grid(row=theme_row + 1, column=0, columnspan=3, sticky="w", pady=(12, 4))
         self.test_status = tk.StringVar(value="")
-        ttk.Label(outer, textvariable=self.test_status, style="Meta.TLabel").grid(row=10, column=0, columnspan=2, sticky="w")
+        ttk.Label(outer, textvariable=self.test_status, style="Meta.TLabel").grid(row=theme_row + 2, column=0, columnspan=2, sticky="w")
         buttons = ttk.Frame(outer)
-        buttons.grid(row=10, column=2, sticky="e", pady=(8, 0))
-        ttk.Button(buttons, text="Test GitHub access", command=self._test_access).pack(side=tk.LEFT, padx=(0, 8))
+        buttons.grid(row=theme_row + 2, column=2, sticky="e", pady=(8, 0))
+        self.test_button = ttk.Button(buttons, text="Test GitHub access", command=self._test_access)
+        self.test_button.pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(buttons, text="Save", command=self._save).pack(side=tk.LEFT)
         outer.columnconfigure(1, weight=1)
@@ -1029,6 +1054,8 @@ class ConfigDialog(tk.Toplevel):
                 runner_poll_seconds=max(1.0, float(self.vars["runner_poll_seconds"].get())),
                 activity_scan_seconds=max(10.0, float(self.vars["activity_scan_seconds"].get())),
                 repository_scan_limit=max(1, int(self.vars["repository_scan_limit"].get())),
+                repository_cache_seconds=max(60.0, float(self.vars["repository_cache_seconds"].get())),
+                history_entries=max(50, int(self.vars["history_entries"].get())),
                 local_health_seconds=max(5.0, float(self.vars["local_health_seconds"].get())),
                 theme_mode={"Follow system": "system", "Day": "day", "Night": "night"}.get(self.theme_var.get(), "system"),
             )
@@ -1038,6 +1065,8 @@ class ConfigDialog(tk.Toplevel):
         return cfg
 
     def _test_access(self) -> None:
+        if self._test_in_progress:
+            return
         cfg = self._values()
         if not cfg:
             return
@@ -1045,18 +1074,51 @@ class ConfigDialog(tk.Toplevel):
         if not gh:
             messagebox.showerror(APP_NAME, "GitHub CLI (gh) is not installed or not on PATH.", parent=self)
             return
+        self._test_in_progress = True
+        self.test_button.configure(state=tk.DISABLED)
         self.test_status.set("Testing GitHub access…")
-        self.update_idletasks()
+        threading.Thread(
+            target=self._test_access_worker,
+            args=(gh, str(cfg["organisation"])),
+            daemon=True,
+        ).start()
+        self.after(100, self._poll_test_access)
+
+    def _test_access_worker(self, gh: str, organisation: str) -> None:
         try:
-            proc = subprocess.run([gh, "api", f"/orgs/{cfg['organisation']}/actions/runners?per_page=1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", timeout=20, creationflags=_creation_flags(), check=False)
+            proc = subprocess.run(
+                [gh, "api", f"/orgs/{organisation}/actions/runners?per_page=1"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                creationflags=_creation_flags(),
+                check=False,
+            )
             if proc.returncode != 0:
                 raise RuntimeError((proc.stderr or proc.stdout).strip() or "GitHub CLI request failed")
             payload = json.loads(proc.stdout or "{}")
             total = int(payload.get("total_count", 0))
-            self.test_status.set(f"GitHub access OK — organisation reports {total} runner(s).")
+            self._test_queue.put((True, f"GitHub access OK — organisation reports {total} runner(s)."))
         except Exception as exc:
+            self._test_queue.put((False, str(exc)))
+
+    def _poll_test_access(self) -> None:
+        try:
+            ok, message = self._test_queue.get_nowait()
+        except queue.Empty:
+            if self._test_in_progress and self.winfo_exists():
+                self.after(100, self._poll_test_access)
+            return
+        self._test_in_progress = False
+        self.test_button.configure(state=tk.NORMAL)
+        if ok:
+            self.test_status.set(message)
+        else:
             self.test_status.set("GitHub access failed.")
-            messagebox.showerror(APP_NAME, str(exc), parent=self)
+            messagebox.showerror(APP_NAME, message, parent=self)
 
     def _save(self) -> None:
         cfg = self._values()
@@ -1165,6 +1227,49 @@ def _creation_flags() -> int:
     return getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
 
 
+def _decode_json_stream(raw: str) -> list[Any]:
+    """Decode one or more consecutive JSON values emitted by gh --paginate."""
+    decoder = json.JSONDecoder()
+    values: list[Any] = []
+    index = 0
+    while index < len(raw):
+        while index < len(raw) and raw[index].isspace():
+            index += 1
+        if index >= len(raw):
+            break
+        value, index = decoder.raw_decode(raw, index)
+        values.append(value)
+    return values
+
+
+def _duration_sort_seconds(value: Any) -> float:
+    text = str(value or "").strip().casefold()
+    if not text or text == "—":
+        return float("inf")
+    if text.startswith("queue "):
+        text = text[6:]
+    total = 0.0
+    matched = False
+    for amount, unit in re.findall(r"(\d+(?:\.\d+)?)\s*([dhms])", text):
+        matched = True
+        total += float(amount) * {"d": 86400.0, "h": 3600.0, "m": 60.0, "s": 1.0}[unit]
+    return total if matched else float("inf")
+
+
+def _match_runner_name(texts: Iterable[str], known_names: Iterable[str]) -> str:
+    """Choose the most specific case-insensitive runner-name match."""
+    haystacks = [str(text or "").casefold() for text in texts]
+    candidates = sorted(
+        (str(name) for name in known_names if str(name)),
+        key=lambda value: (-len(value), value.casefold()),
+    )
+    for name in candidates:
+        needle = name.casefold()
+        if any(needle in text for text in haystacks):
+            return name
+    return "—"
+
+
 class RunnerMonitor(tk.Tk):
     ACTIVE_STATUSES = {"queued", "in_progress", "waiting", "pending", "requested"}
 
@@ -1193,10 +1298,15 @@ class RunnerMonitor(tk.Tk):
         self.job_state: dict[str, dict[str, Any]] = {}
         self.observed_local_jobs = 0
         self.observed_hosted_jobs = 0
+        self.history_load_error = ""
+        self.history_save_error = ""
+        self._history_dirty = False
+        self._last_history_save = 0.0
         self.history: deque[dict[str, Any]] = deque(maxlen=MAX_HISTORY)
         self._load_persistent_history()
 
         self.repo_cache: list[str] = []
+        self.repo_all_cache: list[str] = []
         self.repo_cache_at = 0.0
         self.last_activity_scan = 0.0
         self.last_activity_error = ""
@@ -1214,6 +1324,7 @@ class RunnerMonitor(tk.Tk):
         self.last_local_health_update = 0.0
         self.last_local_health_error = ""
         self.sort_state: dict[str, tuple[str, bool]] = {}
+        self.semantic_filter = ""
         self._last_system_dark = _system_prefers_dark()
         self.tree_row_maps: dict[str, dict[str, dict[str, Any]]] = {
             "runners": {},
@@ -1230,7 +1341,7 @@ class RunnerMonitor(tk.Tk):
         if sys.platform == "win32" or sys.platform.startswith("linux"):
             self.after(int(LOCAL_HEALTH_SECONDS * 1000), self._local_health_timer)
         self.after(1000, self._tick_timer)
-        self.after(2000, self._theme_timer)
+        self.after(10000, self._theme_timer)
 
         self.request_runner_refresh()
         self.request_activity_refresh(force=True)
@@ -1278,7 +1389,7 @@ class RunnerMonitor(tk.Tk):
             self._refresh_theme()
         else:
             self._last_system_dark = current_dark
-        self.after(2000, self._theme_timer)
+        self.after(10000, self._theme_timer)
 
     def _build_ui(self) -> None:
         shell = ttk.Frame(self, style="App.TFrame")
@@ -1377,9 +1488,10 @@ class RunnerMonitor(tk.Tk):
             style="Nav.TButton",
             command=self._open_settings,
         ).pack(fill=tk.X, pady=(0, 12))
+        common_version = _native_common_version()
         ttk.Label(
             sidebar,
-            text="Common 1.19.10",
+            text=f"Common {common_version}" if common_version else "Common compatibility",
             style="SidebarMeta.TLabel",
         ).pack(fill=tk.X, padx=3)
         ttk.Label(
@@ -1515,12 +1627,12 @@ class RunnerMonitor(tk.Tk):
         self.filter_var = tk.StringVar()
         self.filter_entry = ttk.Entry(toolbar, textvariable=self.filter_var)
         self.filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 8))
-        self.filter_var.trace_add("write", lambda *_: self._apply_current_filter())
+        self.filter_var.trace_add("write", lambda *_: self._filter_text_changed())
         ttk.Button(
             toolbar,
             text="Clear",
             style="Secondary.TButton",
-            command=lambda: self.filter_var.set(""),
+            command=self._clear_filters,
         ).pack(side=tk.LEFT)
         ttk.Label(
             toolbar,
@@ -1617,7 +1729,7 @@ class RunnerMonitor(tk.Tk):
             (
                 f"Runner Monitor {VERSION}\n"
                 "GitHub Actions self-hosted runner monitoring and local runner service health.\n\n"
-                "Common 1.19.10\n"
+                f"Common {_native_common_version() or 'compatibility'}\n"
                 "Copyright © 1993-2026 Shannon Smith"
             ),
             parent=self,
@@ -1663,6 +1775,7 @@ class RunnerMonitor(tk.Tk):
             self.theme_button_var.set(self._theme_button_text())
         self.history = deque(self.history, maxlen=MAX_HISTORY)
         self.repo_cache = []
+        self.repo_all_cache = []
         self.repo_cache_at = 0.0
         self.org_var.set(f"Organisation: {ORG}")
         self.scan_var.set(f"Runner poll {REFRESH_SECONDS:g}s  •  Activity scan {ACTIVITY_SECONDS:g}s  •  Up to {REPO_LIMIT} active repositories")
@@ -1678,16 +1791,7 @@ class RunnerMonitor(tk.Tk):
         columns: tuple[tuple[str, str, int, str], ...],
     ) -> ttk.Treeview:
         tree = ttk.Treeview(parent, columns=[c[0] for c in columns], show="headings")
-        tree.tag_configure("RUNNING", foreground=STATE_GREEN, font=self.font_small_bold)
-        tree.tag_configure("IDLE", foreground=STATE_BLUE)
-        tree.tag_configure("OFFLINE", foreground=STATE_RED, font=self.font_small_bold)
-        tree.tag_configure("LOCAL", foreground=STATE_GREEN, font=self.font_small_bold)
-        tree.tag_configure("GITHUB", foreground=STATE_PURPLE)
-        tree.tag_configure("QUEUED", foreground=STATE_AMBER)
-        tree.tag_configure("UNKNOWN", foreground=STATE_GREY)
-        tree.tag_configure("SUCCESS", foreground=STATE_GREEN, font=self.font_small_bold)
-        tree.tag_configure("FAILURE", foreground=STATE_RED, font=self.font_small_bold)
-        tree.tag_configure("CANCELLED", foreground=STATE_AMBER)
+        self._apply_tree_theme(tree)
         for key, title, width, anchor in columns:
             tree.heading(
                 key,
@@ -1810,12 +1914,14 @@ class RunnerMonitor(tk.Tk):
     def _tick_timer(self) -> None:
         if not self.stop_event.is_set():
             self._refresh_runtime_values()
+            self._flush_history_if_dirty()
             self.after(1000, self._tick_timer)
 
     def _on_close(self) -> None:
         self.stop_event.set()
         with self.data_lock:
-            self._save_persistent_history_locked()
+            if self._history_dirty:
+                self._save_persistent_history_locked()
         self.destroy()
 
     def _manual_refresh(self) -> None:
@@ -1866,6 +1972,17 @@ class RunnerMonitor(tk.Tk):
         except json.JSONDecodeError as exc:
             raise RuntimeError("GitHub CLI returned invalid JSON") from exc
 
+    def _gh_json_pages(self, endpoint: str, timeout: int = 40) -> list[Any]:
+        raw = self._run_gh(
+            ["api", "--paginate", "-H", "Accept: application/vnd.github+json", endpoint],
+            timeout=timeout,
+        )
+        try:
+            pages = _decode_json_stream(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("GitHub CLI returned invalid paginated JSON") from exc
+        return pages or []
+
     # ---------- fast runner polling ----------
 
     def request_runner_refresh(self) -> None:
@@ -1877,9 +1994,14 @@ class RunnerMonitor(tk.Tk):
 
     def _runner_worker(self) -> None:
         try:
-            data = self._gh_json(f"/orgs/{ORG}/actions/runners?per_page=100")
+            pages = self._gh_json_pages(f"/orgs/{ORG}/actions/runners?per_page=100")
             now = time.time()
-            raw_runners = data.get("runners", [])
+            raw_runners = [
+                runner
+                for page in pages
+                if isinstance(page, dict)
+                for runner in (page.get("runners") or [])
+            ]
             rows: list[dict[str, Any]] = []
             activity_needed = False
 
@@ -2010,18 +2132,26 @@ class RunnerMonitor(tk.Tk):
         with self.data_lock:
             if self.repo_cache and now - self.repo_cache_at < REPO_CACHE_SECONDS:
                 return list(self.repo_cache)
-        repos = self._gh_json(
+        pages = self._gh_json_pages(
             f"/orgs/{ORG}/repos?type=all&sort=pushed&direction=desc&per_page=100"
         )
+        repos = [
+            repo
+            for page in pages
+            if isinstance(page, list)
+            for repo in page
+        ]
         names = [
             repo["name"]
             for repo in repos
             if repo.get("name") and not repo.get("archived") and not repo.get("disabled")
-        ][:REPO_LIMIT]
+        ]
+        selected = names[:REPO_LIMIT]
         with self.data_lock:
-            self.repo_cache = names
+            self.repo_all_cache = names
+            self.repo_cache = selected
             self.repo_cache_at = now
-        return list(names)
+        return list(selected)
 
     def _activity_worker(self) -> None:
         try:
@@ -2075,10 +2205,13 @@ class RunnerMonitor(tk.Tk):
             }
             if busy_names - matched_names and repos:
                 fallback_runs: list[dict[str, Any]] = []
-                with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                with self.data_lock:
+                    fallback_repos = list(self.repo_all_cache) or list(repos)
+                fallback_workers = min(6, max(1, len(fallback_repos)))
+                with concurrent.futures.ThreadPoolExecutor(max_workers=fallback_workers) as pool:
                     futures = {
                         pool.submit(self._fetch_repo_runs, repo, "in_progress"): repo
-                        for repo in repos
+                        for repo in fallback_repos
                     }
                     for future in concurrent.futures.as_completed(futures):
                         if self.stop_event.is_set():
@@ -2265,9 +2398,15 @@ class RunnerMonitor(tk.Tk):
         endpoint = f"/repos/{ORG}/{repo}/actions/runs?per_page=100&exclude_pull_requests=true"
         if status:
             endpoint += f"&status={status}"
-        data = self._gh_json(endpoint)
+        pages = self._gh_json_pages(endpoint)
         result = []
-        for run in data.get("workflow_runs", []):
+        workflow_runs = [
+            run
+            for page in pages
+            if isinstance(page, dict)
+            for run in (page.get("workflow_runs") or [])
+        ]
+        for run in workflow_runs:
             if run.get("status") not in self.ACTIVE_STATUSES:
                 continue
             result.append(
@@ -2304,11 +2443,17 @@ class RunnerMonitor(tk.Tk):
         run_id = run.get("run_id")
         if not run_id:
             return []
-        data = self._gh_json(
+        pages = self._gh_json_pages(
             f"/repos/{ORG}/{run['repo']}/actions/runs/{run_id}/jobs?per_page=100&filter=latest"
         )
         result = []
-        for job in data.get("jobs", []):
+        jobs = [
+            job
+            for page in pages
+            if isinstance(page, dict)
+            for job in (page.get("jobs") or [])
+        ]
+        for job in jobs:
             row = dict(job)
             row.update(
                 {
@@ -2372,6 +2517,10 @@ class RunnerMonitor(tk.Tk):
             base += f"  Activity scan warning: {self.last_activity_error}."
         if self.last_local_health_error:
             base += f"  Local health warning: {self.last_local_health_error}."
+        if self.history_load_error:
+            base += f"  History load warning: {self.history_load_error}."
+        if self.history_save_error:
+            base += f"  History persistence warning: {self.history_save_error}."
         self.status_var.set(base)
 
     def _apply_activity_data(
@@ -2403,15 +2552,41 @@ class RunnerMonitor(tk.Tk):
     def _set_counter(self, name: str, value: int) -> None:
         self.counter_vars[name].set(str(value))
 
-    def _filtered(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _filtered(self, rows: list[dict[str, Any]], table: str = "") -> list[dict[str, Any]]:
+        filtered = list(rows)
+        semantic = self.semantic_filter
+        if semantic and table == "runners":
+            filtered = [
+                row for row in filtered
+                if semantic == "TOTAL" or row.get("state") == semantic
+            ]
+        elif semantic and table == "activity":
+            if semantic == "LOCAL ACTIVE":
+                filtered = [row for row in filtered if row.get("status") == "IN_PROGRESS" and str(row.get("environment", "")).startswith("LOCAL")]
+            elif semantic == "GITHUB ACTIVE":
+                filtered = [row for row in filtered if row.get("status") == "IN_PROGRESS" and str(row.get("environment", "")).startswith("GITHUB")]
+            elif semantic == "QUEUED":
+                filtered = [row for row in filtered if row.get("status") != "IN_PROGRESS"]
+
         needle = self.filter_var.get().strip().casefold()
-        if not needle:
-            return list(rows)
-        return [
-            row
-            for row in rows
-            if needle in " ".join(str(value) for value in row.values()).casefold()
-        ]
+        if needle:
+            filtered = [
+                row
+                for row in filtered
+                if needle in " ".join(str(value) for value in row.values()).casefold()
+            ]
+        return filtered
+
+    def _filter_text_changed(self) -> None:
+        self.semantic_filter = ""
+        self._apply_current_filter()
+
+    def _clear_filters(self) -> None:
+        self.semantic_filter = ""
+        if self.filter_var.get():
+            self.filter_var.set("")
+        else:
+            self._apply_current_filter()
 
     def _apply_current_filter(self) -> None:
         selected = self.notebook.index(self.notebook.select())
@@ -2433,20 +2608,36 @@ class RunnerMonitor(tk.Tk):
         tagger: Callable[[dict[str, Any]], str],
     ) -> None:
         selection = tree.selection()
-        children = tree.get_children()
-        if children:
-            tree.delete(*children)
+        existing = set(tree.get_children())
         row_map: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            item_id = f"{table}-{id(row)}"
-            tree.insert(
-                "",
-                tk.END,
-                iid=item_id,
-                values=[row.get(column, "") for column in columns],
-                tags=(tagger(row),),
-            )
+        ordered_ids: list[str] = []
+        for index, row in enumerate(rows):
+            if table == "runners":
+                identity = str(row.get("name") or index)
+            elif table == "activity":
+                identity = str(row.get("job_id") or f"{row.get('repo')}|{row.get('job')}|{row.get('runner')}")
+            elif table == "history":
+                identity = f"{row.get('time')}|{row.get('runner')}|{row.get('event')}|{row.get('detail')}"
+            else:
+                identity = str(row.get("service_name") or row.get("runner") or index)
+            encoded = base64.urlsafe_b64encode(identity.encode("utf-8", errors="replace")).decode("ascii").rstrip("=")
+            item_id = f"{table}-{encoded}"
+            values = [row.get(column, "") for column in columns]
+            tags = (tagger(row),)
+            if item_id in existing:
+                tree.item(item_id, values=values, tags=tags)
+            else:
+                tree.insert("", tk.END, iid=item_id, values=values, tags=tags)
+            ordered_ids.append(item_id)
             row_map[item_id] = row
+
+        wanted = set(ordered_ids)
+        stale = existing - wanted
+        if stale:
+            tree.delete(*stale)
+        for position, item_id in enumerate(ordered_ids):
+            tree.move(item_id, "", position)
+
         self.tree_row_maps[table] = row_map
         surviving = [item_id for item_id in selection if item_id in row_map]
         if surviving:
@@ -2455,7 +2646,7 @@ class RunnerMonitor(tk.Tk):
 
     def _render_runner_rows(self) -> None:
         columns = tuple(self.runner_tree["columns"])
-        rows = self._sort_rows("runners", self._filtered(self.runner_rows))
+        rows = self._sort_rows("runners", self._filtered(self.runner_rows, "runners"))
         self._replace_tree_rows(
             "runners",
             self.runner_tree,
@@ -2466,7 +2657,7 @@ class RunnerMonitor(tk.Tk):
 
     def _render_activity_rows(self) -> None:
         columns = tuple(self.activity_tree["columns"])
-        rows = self._sort_rows("activity", self._filtered(self.activity_rows))
+        rows = self._sort_rows("activity", self._filtered(self.activity_rows, "activity"))
 
         def tag(row: dict[str, Any]) -> str:
             if row.get("status") != "IN_PROGRESS":
@@ -2480,7 +2671,7 @@ class RunnerMonitor(tk.Tk):
         with self.data_lock:
             all_rows = list(self.history)
         columns = tuple(self.history_tree["columns"])
-        rows = self._sort_rows("history", self._filtered(all_rows))
+        rows = self._sort_rows("history", self._filtered(all_rows, "history"))
         self._replace_tree_rows(
             "history",
             self.history_tree,
@@ -2509,6 +2700,10 @@ class RunnerMonitor(tk.Tk):
         column, descending = state
 
         def key(row: dict[str, Any]) -> tuple[int, Any]:
+            if table == "history" and column == "time_text":
+                return (0, float(row.get("time") or 0.0))
+            if column in {"runtime", "state_for", "diag_age"}:
+                return (0, _duration_sort_seconds(row.get(column)))
             value = row.get(column, "")
             if isinstance(value, (int, float)):
                 return (0, value)
@@ -2573,17 +2768,24 @@ class RunnerMonitor(tk.Tk):
         )
 
     def _counter_filter(self, name: str) -> None:
-        if name in {"TOTAL", "RUNNING", "IDLE", "OFFLINE"}:
-            self.notebook.select(0)
-            self.filter_var.set("" if name == "TOTAL" else name)
-        else:
-            self.notebook.select(1)
-            mapping = {"LOCAL ACTIVE": "LOCAL", "GITHUB ACTIVE": "GITHUB", "QUEUED": "QUEUE"}
-            self.filter_var.set(mapping.get(name, ""))
+        if self.filter_var.get():
+            self.filter_var.set("")
+        self.semantic_filter = name
+        self.notebook.select(0 if name in {"TOTAL", "RUNNING", "IDLE", "OFFLINE"} else 1)
+        self._apply_current_filter()
 
     def _notebook_tab_changed(self, _event: tk.Event[Any] | None = None) -> None:
         self._sync_navigation()
         self._apply_current_filter()
+        selected = self.notebook.index(self.notebook.select())
+        if selected == 1:
+            self._activity_selection_changed()
+        else:
+            self.open_button.configure(state=tk.DISABLED)
+        if selected == 3:
+            self._local_selection_changed()
+        else:
+            self.diag_button.configure(state=tk.DISABLED)
         self._update_restart_button()
 
     def _selected_runner_row(self) -> dict[str, Any] | None:
@@ -2672,7 +2874,7 @@ class RunnerMonitor(tk.Tk):
         for service in services:
             display = str(service.get("DisplayName") or service.get("Name") or "—")
             service_name = str(service.get("Name") or "—")
-            runner_name = next((name for name in known_names if name and (name in display or name in service_name)), "—")
+            runner_name = _match_runner_name((display, service_name), known_names)
             path_name = str(service.get("PathName") or "")
             executable = extract_service_executable(path_name)
             root: Path | None = None
@@ -2704,7 +2906,7 @@ class RunnerMonitor(tk.Tk):
                     key, value = line.split("=", 1)
                     props[key] = value
             display = props.get("Description") or service_name
-            runner_name = next((name for name in known_names if name and (name.casefold() in display.casefold() or name.casefold() in service_name.casefold())), "—")
+            runner_name = _match_runner_name((display, service_name), known_names)
             exec_start = props.get("ExecStart", "")
             path_match = re.search(r"path=([^ ;}]+)", exec_start) or re.search(r"(/[^ ;}]+)", exec_start)
             executable = Path(path_match.group(1)) if path_match else None
@@ -2747,7 +2949,7 @@ class RunnerMonitor(tk.Tk):
         if not hasattr(self, "local_tree"):
             return
         columns = tuple(self.local_tree["columns"])
-        rows = self._sort_rows("local", self._filtered(self.local_health_rows))
+        rows = self._sort_rows("local", self._filtered(self.local_health_rows, "local"))
         def tag(row: dict[str, Any]) -> str:
             if row.get("service_state") != "RUNNING":
                 return "OFFLINE"
@@ -2778,6 +2980,16 @@ class RunnerMonitor(tk.Tk):
     @staticmethod
     def _powershell_quote(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
+
+    def _runner_is_currently_busy(self, runner_name: str) -> bool:
+        pages = self._gh_json_pages(f"/orgs/{ORG}/actions/runners?per_page=100")
+        for page in pages:
+            if not isinstance(page, dict):
+                continue
+            for runner in page.get("runners") or []:
+                if str(runner.get("name") or "").casefold() == runner_name.casefold():
+                    return str(runner.get("status") or "").casefold() == "online" and bool(runner.get("busy"))
+        raise RuntimeError(f"GitHub no longer reports runner {runner_name!r}; restart cancelled")
 
     def _find_local_runner_service(self, runner_name: str) -> dict[str, Any] | None:
         needle = runner_name.casefold()
@@ -2844,12 +3056,17 @@ class RunnerMonitor(tk.Tk):
         self.status_var.set(f"Locating local service for {runner_name}…")
         threading.Thread(
             target=self._restart_runner_worker,
-            args=(runner_name, service_name),
+            args=(runner_name, service_name, active),
             daemon=True,
         ).start()
 
-    def _restart_runner_worker(self, runner_name: str, service_name: str = "") -> None:
+    def _restart_runner_worker(self, runner_name: str, service_name: str = "", active_confirmed: bool = False) -> None:
         try:
+            currently_busy = self._runner_is_currently_busy(runner_name)
+            if currently_busy and not active_confirmed:
+                raise RuntimeError(
+                    "GitHub reports this runner is currently busy. Refresh the monitor and confirm the active-job restart explicitly."
+                )
             if not service_name:
                 service = self._find_local_runner_service(runner_name)
                 if not service:
@@ -2928,14 +3145,19 @@ class RunnerMonitor(tk.Tk):
     def _export_selected_tab(self) -> None:
         selected = self.notebook.index(self.notebook.select())
         if selected == 0:
-            tree, rows, label = self.runner_tree, self._filtered(self.runner_rows), "runners"
+            tree, label, table = self.runner_tree, "runners", "runners"
         elif selected == 1:
-            tree, rows, label = self.activity_tree, self._filtered(self.activity_rows), "active-jobs"
+            tree, label, table = self.activity_tree, "active-jobs", "activity"
         elif selected == 2:
-            tree, rows, label = self.history_tree, self._filtered(list(self.history)), "history"
+            tree, label, table = self.history_tree, "history", "history"
         else:
-            tree, rows, label = self.local_tree, self._filtered(self.local_health_rows), "local-health"
+            tree, label, table = self.local_tree, "local-health", "local"
         columns = list(tree["columns"])
+        rows = [
+            self.tree_row_maps[table][item_id]
+            for item_id in tree.get_children()
+            if item_id in self.tree_row_maps[table]
+        ]
         filename = filedialog.asksaveasfilename(
             title="Export GitHub runner data",
             defaultextension=".csv",
@@ -2946,7 +3168,7 @@ class RunnerMonitor(tk.Tk):
             return
         with open(filename, "w", newline="", encoding="utf-8-sig") as handle:
             writer = csv.writer(handle)
-            writer.writerow(columns)
+            writer.writerow([tree.heading(column, "text") for column in columns])
             for row in rows:
                 writer.writerow([row.get(column, "") for column in columns])
         self.status_var.set(f"Exported {len(rows)} row(s) to {filename}")
@@ -2956,21 +3178,44 @@ class RunnerMonitor(tk.Tk):
             if not STATE_FILE.is_file():
                 return
             data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-            rows = data.get("history", []) if isinstance(data, dict) else []
+            if not isinstance(data, dict):
+                raise ValueError("state root is not an object")
+            schema = int(data.get("schema_version", 0))
+            if schema not in {0, 1}:
+                raise ValueError(f"unsupported state schema {schema}")
+            rows = data.get("history", [])
+            if not isinstance(rows, list):
+                raise ValueError("history is not a list")
             for row in reversed(rows[-MAX_HISTORY:]):
                 if isinstance(row, dict):
                     self.history.appendleft(dict(row))
-        except (OSError, ValueError, TypeError):
-            return
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            self.history_load_error = f"{STATE_FILE}: {exc}"
 
     def _save_persistent_history_locked(self) -> None:
         try:
             _durable_write_text(
                 STATE_FILE,
-                json.dumps({"history": list(self.history)}, ensure_ascii=False, indent=2) + "\n",
+                json.dumps(
+                    {"schema_version": 1, "history": list(self.history)},
+                    ensure_ascii=False,
+                    indent=2,
+                ) + "\n",
             )
-        except OSError:
-            pass
+            self._history_dirty = False
+            self._last_history_save = time.time()
+            self.history_save_error = ""
+        except OSError as exc:
+            self.history_save_error = f"{STATE_FILE}: {exc}"
+
+    def _flush_history_if_dirty(self) -> None:
+        if not self._history_dirty or time.time() - self._last_history_save < 5.0:
+            return
+        with self.data_lock:
+            if self._history_dirty:
+                self._save_persistent_history_locked()
+        if self.history_save_error:
+            self.status_var.set(f"History persistence warning: {self.history_save_error}")
 
     def _show_local_health_error(self, message: str) -> None:
         self.status_var.set(f"Local service health warning: {message}")
@@ -2995,7 +3240,7 @@ class RunnerMonitor(tk.Tk):
                 "tag": tag,
             }
         )
-        self._save_persistent_history_locked()
+        self._history_dirty = True
         self._post(self._render_history_rows)
 
     def _selected_activity_row(self) -> dict[str, Any] | None:
