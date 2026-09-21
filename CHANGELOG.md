@@ -4,6 +4,17 @@
 
 No unreleased changes.
 
+## 1.1.11 - 2026-09-21
+
+- Preserve repository-cache and history-retention settings instead of resetting hidden values when Settings is saved.
+- Paginate organisation runners, repositories, workflow runs and jobs; unresolved busy runners now search the full organisation repository set.
+- Replace full Tk table reconstruction with stable in-place row updates, add semantic counter filtering, meaningful duration/history sorting and display-faithful CSV export.
+- Make GitHub access testing asynchronous, reduce system-theme polling, clear hidden-tab actions and re-check live provider busy state immediately before local runner restart.
+- Debounce durable history writes, report configuration/history persistence failures explicitly, and migrate the earlier Windows state path without discarding history.
+- Batch Linux systemd service inspection and make diagnostic-log sampling tolerant of files changing during refresh.
+- Harden the first-party native runner model, length-bounded HTTP parsing and private configuration reads, with deterministic regression coverage.
+- Run normal validation on hosted Linux and Windows, including a clean Debian build/install/smoke/purge path, and derive build/release metadata from VERSION and the pinned Common submodule.
+
 ## 1.1.10 - 2026-09-20
 
 - Reproduce MBLINK's low-alpha semantic surfaces in Tk by preblending Common graphite with the exact accent/state roles.
