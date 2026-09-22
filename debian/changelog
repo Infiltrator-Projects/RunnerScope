@@ -1,3 +1,10 @@
+infiltrator-runner-monitor (1.2.1) unstable; urgency=medium
+
+  * Advance pinned Infiltratr Common to 1.19.24.
+  * Retain native Linux and Windows product behaviour while inheriting current shared hardening.
+
+ -- Shannon Smith <noreply@github.com>  Wed, 23 Sep 2026 09:35:00 +1000
+
 infiltrator-runner-monitor (1.2.0) unstable; urgency=medium
 
   * Restore the native C/GTK Runner Monitor as the installed Linux product.

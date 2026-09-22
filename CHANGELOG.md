@@ -4,6 +4,12 @@
 
 No unreleased changes.
 
+## 1.2.1 - 2026-09-23
+
+- Advance the exact Infiltratr Common dependency from 1.19.10 to released Common 1.19.24.
+- Inherit the intervening shared design, formatting, POSIX and graphics hardening while preserving Runner Monitor's native C/GTK and Win32 product architecture.
+- Keep the dependency exact through the committed gitlink and qualify both native platforms plus the clean Debian install path before publication.
+
 ## 1.2.0 - 2026-09-21
 
 - Restore native C as the shipping Runner Monitor architecture.
