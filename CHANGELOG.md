@@ -4,6 +4,16 @@
 
 No unreleased changes.
 
+## 1.2.2 - 2026-09-23
+
+- Restore a conventional Linux application menu bar with File, Edit, View and Help menus.
+- Add View → Theme with Follow system, Day and Night, backed by the same persisted Common theme mode already used by Settings.
+- Make Follow system react to live GTK host-theme changes instead of requiring a restart or settings round-trip.
+- Add Help → About Runner Monitor with application version, Common version, project identity, author, website and licence details.
+- Replace the crowded one-line footer with a dedicated action row plus a separate status/version row, keeping selection-specific actions grouped apart from general actions.
+- Restyle footer actions with Common palette roles so enabled and disabled buttons remain legible in Night mode.
+- Use the dedicated Runner Monitor application icon for the native Linux window and About dialog.
+
 ## 1.2.1 - 2026-09-23
 
 - Advance the exact Infiltratr Common dependency from 1.19.10 to released Common 1.19.24.
