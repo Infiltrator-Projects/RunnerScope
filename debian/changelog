@@ -1,3 +1,13 @@
+infiltrator-runner-monitor (1.2.2) unstable; urgency=medium
+
+  * Restore File/Edit/View/Help menus to the native Linux application.
+  * Expose Follow system, Day and Night directly under View -> Theme.
+  * Add a discoverable About Runner Monitor dialog under Help.
+  * Repair the crowded footer by separating action and status/version rows.
+  * Use Common palette roles for legible enabled and disabled footer buttons.
+
+ -- Shannon Smith <noreply@github.com>  Wed, 23 Sep 2026 18:55:00 +1000
+
 infiltrator-runner-monitor (1.2.1) unstable; urgency=medium
 
   * Advance pinned Infiltratr Common to 1.19.24.
