@@ -1533,7 +1533,7 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         gtk_grid_attach(GTK_GRID(grid), entries[i], 1, (gint)i, 1, 1);
 
     GtkWidget *theme = gtk_combo_box_text_new();
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(theme), "system", "System");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(theme), "system", "Follow system");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(theme), "day", "Day");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(theme), "night", "Night");
     gtk_combo_box_set_active(GTK_COMBO_BOX(theme), (gint)app->config.theme_mode);
