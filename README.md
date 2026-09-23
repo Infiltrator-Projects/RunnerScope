@@ -20,7 +20,9 @@ The user-facing name is **Runner Monitor**. The stable Linux executable and desk
 
 ## Appearance
 
-Both native shells consume Common directly. The footer reports the application version followed by the linked Common version, with Common as the final line.
+Both native shells consume Common directly. On Linux, the native menu bar exposes File, Edit, View and Help. View → Theme provides **Follow system**, **Day** and **Night**; the selected mode is persisted in the existing Runner Monitor configuration, and Follow system tracks live GTK host-theme changes. Help → About Runner Monitor exposes the application version, linked Common version and project identity.
+
+The Linux footer keeps selection-specific actions in a dedicated action row and status/version information in a separate row so controls remain readable at ordinary desktop widths. Enabled and disabled actions use Common palette roles instead of falling back to bright toolkit defaults in Night mode.
 
 System, Day and Night semantics come from Common. Runner-specific status colours and table meanings remain local to Runner Monitor.
 
