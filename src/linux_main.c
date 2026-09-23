@@ -173,6 +173,7 @@ typedef struct {
     GtkWidget *open_job_button;
     GtkWidget *open_diag_button;
     GtkWidget *restart_button;
+    GtkWidget *theme_menu_items[3];
     GtkWidget *counter_labels[7];
 
     GtkListStore *runner_store;
@@ -237,6 +238,7 @@ typedef struct {
 
 static gboolean activity_apply_idle(gpointer data);
 static gboolean local_apply_idle(gpointer data);
+static InfiltratrProjectInfo project_info(void);
 
 static void raw_runner_free(gpointer data)
 {
@@ -574,6 +576,22 @@ static void apply_theme(RunnerScopeApp *app)
         success, info, fault, success, operation, warning, surface, text, border,
         button_bg, button_fg, border, card_hover, panel, muted, border, card,
         title, surface, text, select_bg, select_fg, panel, title, border);
+
+    char *chrome_css = g_strdup_printf(
+        "menubar, menu { background:%s; color:%s; }"
+        "menubar { border-bottom:1px solid %s; }"
+        "menuitem { color:%s; }"
+        "menuitem:hover { background:%s; color:%s; }"
+        "#footer-actions button { background:%s; color:%s; border:1px solid %s;"
+        " min-height:28px; padding:4px 10px; }"
+        "#footer-actions button:hover { background:%s; }"
+        "#footer-actions button:disabled { background:%s; color:%s; border-color:%s; }",
+        panel, text, border, text, card_hover, title,
+        surface, text, border, card_hover, panel, subtle, border);
+    char *combined_css = g_strconcat(css, chrome_css, NULL);
+    g_free(chrome_css);
+    g_free(css);
+    css = combined_css;
 
     GtkCssProvider *provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider, css, -1, NULL);
@@ -1562,7 +1580,17 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         break;
     }
     gtk_widget_destroy(dialog);
-    if (saved && app->window) apply_theme(app);
+    if (saved && app->window) {
+        apply_theme(app);
+        for (gint mode = INFILTRATR_THEME_SYSTEM;
+             mode <= INFILTRATR_THEME_NIGHT; mode++) {
+            GtkWidget *item = app->theme_menu_items[mode];
+            if (item)
+                gtk_check_menu_item_set_active(
+                    GTK_CHECK_MENU_ITEM(item),
+                    mode == (gint)app->config.theme_mode);
+        }
+    }
     return saved;
 }
 
@@ -1582,6 +1610,176 @@ static void on_settings(GtkButton *button, gpointer user_data)
             app->config.local_health_seconds, local_timer_cb, app);
         on_refresh(NULL, app);
     }
+}
+
+
+static void on_menu_refresh(GtkMenuItem *item, gpointer user_data)
+{
+    (void)item;
+    on_refresh(NULL, user_data);
+}
+
+static void on_menu_export(GtkMenuItem *item, gpointer user_data)
+{
+    (void)item;
+    on_export(NULL, user_data);
+}
+
+static void on_menu_settings(GtkMenuItem *item, gpointer user_data)
+{
+    (void)item;
+    on_settings(NULL, user_data);
+}
+
+static void on_menu_quit(GtkMenuItem *item, gpointer user_data)
+{
+    (void)item;
+    RunnerScopeApp *app = user_data;
+    if (app && app->application)
+        g_application_quit(G_APPLICATION(app->application));
+}
+
+static void on_system_theme_changed(
+    GObject *object, GParamSpec *pspec, gpointer user_data)
+{
+    (void)object;
+    (void)pspec;
+    RunnerScopeApp *app = user_data;
+    if (app && app->config.theme_mode == INFILTRATR_THEME_SYSTEM)
+        apply_theme(app);
+}
+
+static void on_theme_menu_selected(
+    GtkCheckMenuItem *item, gpointer user_data)
+{
+    if (!gtk_check_menu_item_get_active(item)) return;
+    RunnerScopeApp *app = user_data;
+    if (!app) return;
+
+    const gint mode = GPOINTER_TO_INT(
+        g_object_get_data(G_OBJECT(item), "runner-monitor-theme-mode"));
+    if (mode < INFILTRATR_THEME_SYSTEM || mode > INFILTRATR_THEME_NIGHT)
+        return;
+    if ((gint)app->config.theme_mode == mode) return;
+
+    app->config.theme_mode = (InfiltratrThemeMode)mode;
+    GError *error = NULL;
+    if (!save_config(&app->config, &error)) {
+        if (app->status_label)
+            gtk_label_set_text(
+                GTK_LABEL(app->status_label),
+                error ? error->message : "Unable to save theme setting");
+        g_clear_error(&error);
+    }
+    apply_theme(app);
+}
+
+static void on_menu_about(GtkMenuItem *item, gpointer user_data)
+{
+    (void)item;
+    RunnerScopeApp *app = user_data;
+    InfiltratrProjectInfo info = project_info();
+    char comments[384];
+    (void)g_snprintf(
+        comments, sizeof(comments),
+        "%s\n\nNative C / GTK 3\nInfiltratr Common %s",
+        info.comments ? info.comments : "GitHub Actions self-hosted runner monitor",
+        INFILTRATR_COMMON_VERSION);
+    const char *authors[] = {
+        "Shannon Smith — Author and project maintainer",
+        NULL
+    };
+    gtk_show_about_dialog(
+        app && app->window ? GTK_WINDOW(app->window) : NULL,
+        "program-name", info.program_name,
+        "version", info.version,
+        "comments", comments,
+        "authors", authors,
+        "website", info.website,
+        "website-label", "Project website",
+        "copyright", info.copyright_text,
+        "license-type", GTK_LICENSE_GPL_3_0,
+        "logo-icon-name", "runnerscope",
+        NULL);
+}
+
+static GtkWidget *menu_item(
+    const char *label, GCallback callback, gpointer user_data)
+{
+    GtkWidget *item = gtk_menu_item_new_with_mnemonic(label);
+    if (callback)
+        g_signal_connect(item, "activate", callback, user_data);
+    return item;
+}
+
+static GtkWidget *build_menu_bar(RunnerScopeApp *app)
+{
+    GtkWidget *bar = gtk_menu_bar_new();
+
+    GtkWidget *file_root = gtk_menu_item_new_with_mnemonic("_File");
+    GtkWidget *file_menu = gtk_menu_new();
+    gtk_menu_shell_append(
+        GTK_MENU_SHELL(file_menu),
+        menu_item("_Export CSV…", G_CALLBACK(on_menu_export), app));
+    gtk_menu_shell_append(
+        GTK_MENU_SHELL(file_menu), gtk_separator_menu_item_new());
+    gtk_menu_shell_append(
+        GTK_MENU_SHELL(file_menu),
+        menu_item("_Quit", G_CALLBACK(on_menu_quit), app));
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_root), file_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(bar), file_root);
+
+    GtkWidget *edit_root = gtk_menu_item_new_with_mnemonic("_Edit");
+    GtkWidget *edit_menu = gtk_menu_new();
+    gtk_menu_shell_append(
+        GTK_MENU_SHELL(edit_menu),
+        menu_item("_Settings…", G_CALLBACK(on_menu_settings), app));
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(edit_root), edit_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(bar), edit_root);
+
+    GtkWidget *view_root = gtk_menu_item_new_with_mnemonic("_View");
+    GtkWidget *view_menu = gtk_menu_new();
+    gtk_menu_shell_append(
+        GTK_MENU_SHELL(view_menu),
+        menu_item("_Refresh now", G_CALLBACK(on_menu_refresh), app));
+    gtk_menu_shell_append(
+        GTK_MENU_SHELL(view_menu), gtk_separator_menu_item_new());
+
+    GtkWidget *theme_root = gtk_menu_item_new_with_mnemonic("_Theme");
+    GtkWidget *theme_menu = gtk_menu_new();
+    GSList *theme_group = NULL;
+    for (gint mode = INFILTRATR_THEME_SYSTEM;
+         mode <= INFILTRATR_THEME_NIGHT; mode++) {
+        const char *label = mode == INFILTRATR_THEME_SYSTEM
+            ? "Follow system"
+            : infiltratr_theme_mode_name((InfiltratrThemeMode)mode);
+        GtkWidget *radio = gtk_radio_menu_item_new_with_label(theme_group, label);
+        theme_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(radio));
+        g_object_set_data(
+            G_OBJECT(radio), "runner-monitor-theme-mode",
+            GINT_TO_POINTER(mode));
+        g_signal_connect(
+            radio, "toggled", G_CALLBACK(on_theme_menu_selected), app);
+        app->theme_menu_items[mode] = radio;
+        gtk_menu_shell_append(GTK_MENU_SHELL(theme_menu), radio);
+    }
+    gtk_check_menu_item_set_active(
+        GTK_CHECK_MENU_ITEM(
+            app->theme_menu_items[(gint)app->config.theme_mode]), TRUE);
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(theme_root), theme_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), theme_root);
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_root), view_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(bar), view_root);
+
+    GtkWidget *help_root = gtk_menu_item_new_with_mnemonic("_Help");
+    GtkWidget *help_menu = gtk_menu_new();
+    gtk_menu_shell_append(
+        GTK_MENU_SHELL(help_menu),
+        menu_item("_About Runner Monitor", G_CALLBACK(on_menu_about), app));
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(help_root), help_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(bar), help_root);
+
+    return bar;
 }
 
 static char *csv_escape(const char *input)
@@ -1746,11 +1944,14 @@ static void build_ui(RunnerScopeApp *app)
     app->window = gtk_application_window_new(app->application);
     gtk_window_set_title(GTK_WINDOW(app->window), "Runner Monitor");
     gtk_window_set_default_size(GTK_WINDOW(app->window), 1260, 720);
-    gtk_window_set_icon_name(GTK_WINDOW(app->window), "utilities-system-monitor");
+    gtk_window_set_icon_name(GTK_WINDOW(app->window), "runnerscope");
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_container_set_border_width(GTK_CONTAINER(outer), 12);
     gtk_container_add(GTK_CONTAINER(app->window), outer);
+
+    GtkWidget *menu_bar = build_menu_bar(app);
+    gtk_box_pack_start(GTK_BOX(outer), menu_bar, FALSE, FALSE, 0);
 
     GtkWidget *heading = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_pack_start(GTK_BOX(outer), heading, FALSE, FALSE, 0);
@@ -1858,33 +2059,59 @@ static void build_ui(RunnerScopeApp *app)
     selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->local_tree));
     g_signal_connect(selection, "changed", G_CALLBACK(on_local_selection), app);
 
-    GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_box_pack_start(GTK_BOX(outer), footer, FALSE, FALSE, 0);
-    app->status_label = gtk_label_new("Starting…");
-    gtk_widget_set_halign(app->status_label, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(footer), app->status_label, TRUE, TRUE, 0);
+    GtkWidget *action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_name(action_row, "footer-actions");
+    gtk_box_pack_start(GTK_BOX(outer), action_row, FALSE, FALSE, 0);
 
-    GtkWidget *button = gtk_button_new_with_label("Refresh now");
-    g_signal_connect(button, "clicked", G_CALLBACK(on_refresh), app);
-    gtk_box_pack_end(GTK_BOX(footer), button, FALSE, FALSE, 0);
-    button = gtk_button_new_with_label("Settings");
-    g_signal_connect(button, "clicked", G_CALLBACK(on_settings), app);
-    gtk_box_pack_end(GTK_BOX(footer), button, FALSE, FALSE, 0);
-    button = gtk_button_new_with_label("Export CSV");
-    g_signal_connect(button, "clicked", G_CALLBACK(on_export), app);
-    gtk_box_pack_end(GTK_BOX(footer), button, FALSE, FALSE, 0);
-    app->restart_button = gtk_button_new_with_label("Restart selected runner");
-    gtk_widget_set_sensitive(app->restart_button, FALSE);
-    g_signal_connect(app->restart_button, "clicked", G_CALLBACK(on_restart), app);
-    gtk_box_pack_end(GTK_BOX(footer), app->restart_button, FALSE, FALSE, 0);
-    app->open_diag_button = gtk_button_new_with_label("Open _diag");
-    gtk_widget_set_sensitive(app->open_diag_button, FALSE);
-    g_signal_connect(app->open_diag_button, "clicked", G_CALLBACK(on_open_diag), app);
-    gtk_box_pack_end(GTK_BOX(footer), app->open_diag_button, FALSE, FALSE, 0);
+    GtkWidget *context_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_start(GTK_BOX(action_row), context_actions, FALSE, FALSE, 0);
+
     app->open_job_button = gtk_button_new_with_label("Open selected job");
     gtk_widget_set_sensitive(app->open_job_button, FALSE);
+    gtk_widget_set_tooltip_text(
+        app->open_job_button, "Select an active job to open it in GitHub.");
     g_signal_connect(app->open_job_button, "clicked", G_CALLBACK(on_open_job), app);
-    gtk_box_pack_end(GTK_BOX(footer), app->open_job_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(context_actions), app->open_job_button, FALSE, FALSE, 0);
+
+    app->open_diag_button = gtk_button_new_with_label("Open _diag");
+    gtk_widget_set_sensitive(app->open_diag_button, FALSE);
+    gtk_widget_set_tooltip_text(
+        app->open_diag_button, "Select a local runner to open its latest diagnostic.");
+    g_signal_connect(app->open_diag_button, "clicked", G_CALLBACK(on_open_diag), app);
+    gtk_box_pack_start(
+        GTK_BOX(context_actions), app->open_diag_button, FALSE, FALSE, 0);
+
+    app->restart_button = gtk_button_new_with_label("Restart selected runner");
+    gtk_widget_set_sensitive(app->restart_button, FALSE);
+    gtk_widget_set_tooltip_text(
+        app->restart_button, "Select a local runner before restarting its service.");
+    g_signal_connect(app->restart_button, "clicked", G_CALLBACK(on_restart), app);
+    gtk_box_pack_start(
+        GTK_BOX(context_actions), app->restart_button, FALSE, FALSE, 0);
+
+    GtkWidget *general_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_end(GTK_BOX(action_row), general_actions, FALSE, FALSE, 0);
+
+    GtkWidget *button = gtk_button_new_with_label("Export CSV");
+    g_signal_connect(button, "clicked", G_CALLBACK(on_export), app);
+    gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
+
+    button = gtk_button_new_with_label("Settings");
+    g_signal_connect(button, "clicked", G_CALLBACK(on_settings), app);
+    gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
+
+    button = gtk_button_new_with_label("Refresh now");
+    g_signal_connect(button, "clicked", G_CALLBACK(on_refresh), app);
+    gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
+
+    GtkWidget *status_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_box_pack_start(GTK_BOX(outer), status_row, FALSE, FALSE, 0);
+    app->status_label = gtk_label_new("Starting…");
+    gtk_widget_set_halign(app->status_label, GTK_ALIGN_START);
+    gtk_widget_set_hexpand(app->status_label, TRUE);
+    gtk_label_set_ellipsize(GTK_LABEL(app->status_label), PANGO_ELLIPSIZE_END);
+    gtk_box_pack_start(GTK_BOX(status_row), app->status_label, TRUE, TRUE, 0);
 
     GtkWidget *version_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_halign(version_box, GTK_ALIGN_END);
@@ -1900,9 +2127,18 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_set_halign(common_version_label, GTK_ALIGN_END);
     gtk_widget_set_name(common_version_label, "meta");
     gtk_box_pack_start(GTK_BOX(version_box), common_version_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(outer), version_box, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(status_row), version_box, FALSE, FALSE, 0);
 
     apply_theme(app);
+    GtkSettings *settings = gtk_settings_get_default();
+    if (settings) {
+        g_signal_connect(
+            settings, "notify::gtk-application-prefer-dark-theme",
+            G_CALLBACK(on_system_theme_changed), app);
+        g_signal_connect(
+            settings, "notify::gtk-theme-name",
+            G_CALLBACK(on_system_theme_changed), app);
+    }
     gtk_widget_show_all(app->window);
 }
 
@@ -1919,7 +2155,7 @@ static InfiltratrProjectInfo project_info(void)
     info.website = "https://github.com/Infiltrator-Projects/RunnerScope";
     info.license_id = "GPL-3.0-or-later";
     info.comments = "Native GitHub Actions self-hosted runner monitor";
-    info.icon_name = "utilities-system-monitor";
+    info.icon_name = "runnerscope";
     info.copyright_text = "Copyright (c) 2026 Shannon Smith";
     return info;
 }
