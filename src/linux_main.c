@@ -238,6 +238,7 @@ typedef struct {
 
 static gboolean activity_apply_idle(gpointer data);
 static gboolean local_apply_idle(gpointer data);
+static void on_export(GtkButton *button, gpointer user_data);
 static InfiltratrProjectInfo project_info(void);
 
 static void raw_runner_free(gpointer data)
