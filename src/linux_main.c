@@ -568,7 +568,7 @@ static void apply_theme(RunnerScopeApp *app)
         "entry { background:%s; color:%s; border-color:%s; }"
         "button { background:%s; color:%s; border:1px solid %s; }"
         "button:hover { background:%s; }"
-        "notebook tab { background:%s; color:%s; border-color:%s; padding:7px 14px; }"
+        "notebook tab { background:%s; color:%s; border-color:%s; padding:5px 10px; }"
         "notebook tab:checked { background:%s; color:%s; }"
         "treeview.view { background:%s; color:%s; }"
         "treeview.view:selected { background:%s; color:%s; }"

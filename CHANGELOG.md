@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.7 - 2026-09-24
+
+- Tighten native Linux notebook tabs to the 5 px / 10 px publisher tab rhythm.
+- Preserve monitoring behaviour, data models, dependencies and Common APIs unchanged.
+
 ## 1.2.6 - 2026-09-24
 
 - Align native Linux footer actions with the 30 px publisher desktop control height.
