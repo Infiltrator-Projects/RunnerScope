@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.16 - 2026-09-25
+
+- Use Common's 10 px control radius for native Linux runner summary counters instead of a private compact-radius literal.
+- Preserve monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
+
 ## 1.2.15 - 2026-09-25
 
 - Align native Linux runner summary-chip padding with the suite-wide 6 px / 10 px compact spacing rhythm.

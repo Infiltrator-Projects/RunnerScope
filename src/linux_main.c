@@ -536,7 +536,8 @@ static void apply_theme(RunnerScopeApp *app)
     const InfiltratrThemePalette *p =
         infiltratr_theme_resolve(app->config.theme_mode, system_dark_mode());
     const InfiltratrTypography *type = infiltratr_typography();
-    if (!p || !type || !type->ui_family || !type->brand_family) return;
+    const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
+    if (!p || !type || !metrics || !type->ui_family || !type->brand_family) return;
 
     char bg[8], panel[8], card[8], surface[8], border[8], text[8], title[8];
     char muted[8], subtle[8], button_bg[8], button_fg[8], select_bg[8], select_fg[8];
@@ -560,7 +561,7 @@ static void apply_theme(RunnerScopeApp *app)
         "#title { color:%s; font-size:28px; font-weight:700; }"
         "#meta { color:%s; }"
         "#summary { color:%s; }"
-        ".counter { background:%s; border:1px solid %s; border-radius:6px;"
+        ".counter { background:%s; border:1px solid %s; border-radius:%upx;"
         " padding:6px 10px; font-weight:700; }"
         ".counter-running { color:%s; } .counter-idle { color:%s; }"
         ".counter-offline { color:%s; } .counter-local { color:%s; }"
@@ -575,6 +576,7 @@ static void apply_theme(RunnerScopeApp *app)
         "treeview header button { background:%s; color:%s; }"
         "scrolledwindow { border:1px solid %s; }",
         bg, text, bg, text, text, title, muted, text, card, border,
+        (unsigned int)metrics->control_radius,
         success, info, fault, success, operation, warning, surface, text, border,
         button_bg, button_fg, border, card_hover, panel, muted, border, select_fg,
         operation, surface, text, select_bg, select_fg, panel, title, border);

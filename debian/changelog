@@ -1,3 +1,10 @@
+infiltrator-runner-monitor (1.2.16) unstable; urgency=medium
+
+  * Align native Linux runner summary counters with Common's 10 px control radius.
+  * Preserve monitoring behaviour, platform architecture and dependencies.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 08:55:00 +1000
+
 infiltrator-runner-monitor (1.2.15) unstable; urgency=medium
 
   * Align native Linux runner summary-chip padding with the 6 px / 10 px
