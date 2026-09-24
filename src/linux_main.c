@@ -566,7 +566,7 @@ static void apply_theme(RunnerScopeApp *app)
         ".counter-offline { color:%s; } .counter-local { color:%s; }"
         ".counter-hosted { color:%s; } .counter-queued { color:%s; }"
         "entry { background:%s; color:%s; border-color:%s; }"
-        "button { background:%s; color:%s; border:1px solid %s; }"
+        "button { background:%s; color:%s; border:1px solid %s; border-radius:6px; }"
         "button:hover { background:%s; }"
         "notebook tab { background:%s; color:%s; border-color:%s; padding:5px 10px; }"
         "notebook tab:checked { background:%s; color:%s; }"

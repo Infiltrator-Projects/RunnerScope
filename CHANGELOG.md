@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.8 - 2026-09-24
+
+- Align native Linux generic button corners with the suite-wide 6 px compact control radius.
+- Preserve runner monitoring, provider behaviour, data models, dependencies and Common APIs unchanged.
+
 ## 1.2.7 - 2026-09-24
 
 - Tighten native Linux notebook tabs to the 5 px / 10 px publisher tab rhythm.
