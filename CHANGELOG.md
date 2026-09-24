@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.17 - 2026-09-25
+
+- Align native Linux notebook tabs with the suite-wide 30 px desktop control height while retaining the existing compact radius and accent underline.
+- Preserve monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
+
 ## 1.2.16 - 2026-09-25
 
 - Use Common's 10 px control radius for native Linux runner summary counters instead of a private compact-radius literal.
