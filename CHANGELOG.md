@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.3 - 2026-09-24
+
+- Align runner summary counter corners with the suite-wide 6 px compact radius.
+- Keep runner/provider behaviour, dependencies and native platform architecture unchanged.
+
 ## 1.2.2 - 2026-09-23
 
 - Restore a conventional Linux application menu bar with File, Edit, View and Help menus.
