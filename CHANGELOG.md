@@ -4,6 +4,12 @@
 
 No unreleased changes.
 
+## 1.2.5 - 2026-09-24
+
+- Bring the native Linux product heading onto the 28 px publisher desktop title scale.
+- Preserve monitoring behaviour, provider access, layout structure, dependencies and Common APIs.
+
+
 ## 1.2.4 - 2026-09-24
 
 - Replace the native Linux shell's private font choice with the already-linked Common typography contract.

@@ -1,3 +1,10 @@
+infiltrator-runner-monitor (1.2.5) unstable; urgency=medium
+
+  * Align the native Linux product heading with the 28 px suite title scale.
+  * Preserve runner monitoring behaviour and dependencies unchanged.
+
+ -- Shannon Smith <noreply@github.com>  Thu, 24 Sep 2026 19:35:00 +1000
+
 infiltrator-runner-monitor (1.2.4) unstable; urgency=medium
 
   * Use the existing Common typography contract for native Linux shell text.

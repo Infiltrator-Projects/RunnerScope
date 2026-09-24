@@ -557,7 +557,7 @@ static void apply_theme(RunnerScopeApp *app)
         "window { background:%s; color:%s; }"
         "box, notebook, notebook > stack { background:%s; color:%s; }"
         "label { color:%s; }"
-        "#title { color:%s; font-size:20px; font-weight:700; }"
+        "#title { color:%s; font-size:28px; font-weight:700; }"
         "#meta { color:%s; }"
         "#summary { color:%s; }"
         ".counter { background:%s; border:1px solid %s; border-radius:6px;"
