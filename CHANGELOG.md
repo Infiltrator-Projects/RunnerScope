@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.10 - 2026-09-24
+
+- Align the native Linux outer shell with the suite-wide 20 px screen-padding rhythm.
+- Preserve runner monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
+
 ## 1.2.9 - 2026-09-24
 
 - Align the native Linux product title with the 18 px publisher titlebar scale.

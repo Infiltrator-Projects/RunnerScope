@@ -1959,7 +1959,7 @@ static void build_ui(RunnerScopeApp *app)
     gtk_window_set_icon_name(GTK_WINDOW(app->window), "runnerscope");
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_container_set_border_width(GTK_CONTAINER(outer), 12);
+    gtk_container_set_border_width(GTK_CONTAINER(outer), 20);
     gtk_container_add(GTK_CONTAINER(app->window), outer);
 
     GtkWidget *menu_bar = build_menu_bar(app);
