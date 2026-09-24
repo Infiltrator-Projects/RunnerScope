@@ -4,6 +4,12 @@
 
 No unreleased changes.
 
+## 1.2.11 - 2026-09-25
+
+- Remove the native Linux typography override that accidentally shrank the 28 px product heading back to 18 px.
+- Keep the 18 px publisher scale for titlebar chrome while restoring the intended 28 px in-page product heading.
+- Preserve monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
+
 ## 1.2.10 - 2026-09-24
 
 - Align the native Linux outer shell with the suite-wide 20 px screen-padding rhythm.
