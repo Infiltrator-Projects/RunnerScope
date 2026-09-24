@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.12 - 2026-09-25
+
+- Align all native Linux buttons with the suite-wide 30 px desktop control height instead of limiting that height to footer actions.
+- Preserve runner monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
+
 ## 1.2.11 - 2026-09-25
 
 - Remove the native Linux typography override that accidentally shrank the 28 px product heading back to 18 px.
