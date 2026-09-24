@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.14 - 2026-09-25
+
+- Replace the filled selected notebook tab with the suite-wide restrained 2 px accent underline while retaining the existing compact tab geometry.
+- Preserve runner monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
+
 ## 1.2.13 - 2026-09-25
 
 - Give native Linux notebook tabs the same 6 px compact corner radius as the surrounding publisher chrome.
