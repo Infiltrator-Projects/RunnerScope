@@ -1,3 +1,10 @@
+infiltrator-runner-monitor (1.2.12) unstable; urgency=medium
+
+  * Align all native Linux buttons with the 30 px publisher desktop control height.
+  * Preserve runner monitoring behaviour, platform architecture and dependencies.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 05:56:00 +1000
+
 infiltrator-runner-monitor (1.2.11) unstable; urgency=medium
 
   * Restore the intended 28 px in-page product heading after the typography
