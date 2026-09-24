@@ -559,7 +559,7 @@ static void apply_theme(RunnerScopeApp *app)
         "#title { color:%s; font-size:20px; font-weight:700; }"
         "#meta { color:%s; }"
         "#summary { color:%s; }"
-        ".counter { background:%s; border:1px solid %s; border-radius:4px;"
+        ".counter { background:%s; border:1px solid %s; border-radius:6px;"
         " padding:5px 9px; font-weight:700; }"
         ".counter-running { color:%s; } .counter-idle { color:%s; }"
         ".counter-offline { color:%s; } .counter-local { color:%s; }"
