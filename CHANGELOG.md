@@ -4,6 +4,12 @@
 
 No unreleased changes.
 
+## 1.2.9 - 2026-09-24
+
+- Align the native Linux product title with the 18 px publisher titlebar scale.
+- Preserve monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
+
+
 ## 1.2.8 - 2026-09-24
 
 - Align native Linux generic button corners with the suite-wide 6 px compact control radius.

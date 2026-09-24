@@ -596,7 +596,7 @@ static void apply_theme(RunnerScopeApp *app)
 
     char *typography_css = g_strdup_printf(
         "window, window *, popover, popover * { font-family:\"%s\"; font-weight:%u; }"
-        "#title { font-family:\"%s\"; font-weight:%u; }",
+        "#title { font-family:\"%s\"; font-size:18px; font-weight:%u; }",
         type->ui_family,
         (unsigned int)type->ui_regular_weight,
         type->brand_family,
