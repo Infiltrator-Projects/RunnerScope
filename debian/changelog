@@ -1,3 +1,10 @@
+infiltrator-runner-monitor (1.2.10) unstable; urgency=medium
+
+  * Align native Linux outer shell padding with the 20 px publisher screen rhythm.
+  * Preserve monitoring behaviour, native platform architecture and dependencies.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 24 Sep 2026 23:49:00 +1000
+
 infiltrator-runner-monitor (1.2.9) unstable; urgency=medium
 
   * Align the native Linux product title with the 18 px publisher titlebar scale.
