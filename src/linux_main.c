@@ -535,7 +535,8 @@ static void apply_theme(RunnerScopeApp *app)
     if (!app) return;
     const InfiltratrThemePalette *p =
         infiltratr_theme_resolve(app->config.theme_mode, system_dark_mode());
-    if (!p) return;
+    const InfiltratrTypography *type = infiltratr_typography();
+    if (!p || !type || !type->ui_family || !type->brand_family) return;
 
     char bg[8], panel[8], card[8], surface[8], border[8], text[8], title[8];
     char muted[8], subtle[8], button_bg[8], button_fg[8], select_bg[8], select_fg[8];
@@ -592,7 +593,17 @@ static void apply_theme(RunnerScopeApp *app)
     char *combined_css = g_strconcat(css, chrome_css, NULL);
     g_free(chrome_css);
     g_free(css);
-    css = combined_css;
+
+    char *typography_css = g_strdup_printf(
+        "window, window *, popover, popover * { font-family:\"%s\"; font-weight:%u; }"
+        "#title { font-family:\"%s\"; font-weight:%u; }",
+        type->ui_family,
+        (unsigned int)type->ui_regular_weight,
+        type->brand_family,
+        (unsigned int)type->brand_weight);
+    css = g_strconcat(combined_css, typography_css, NULL);
+    g_free(typography_css);
+    g_free(combined_css);
 
     GtkCssProvider *provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider, css, -1, NULL);

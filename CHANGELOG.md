@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.4 - 2026-09-24
+
+- Replace the native Linux shell's private font choice with the already-linked Common typography contract.
+- Use Common's UI family for normal controls and its brand family for the product title without changing layout, monitoring behaviour or dependencies.
+
 ## 1.2.3 - 2026-09-24
 
 - Align runner summary counter corners with the suite-wide 6 px compact radius.
