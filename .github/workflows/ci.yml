@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   linux-native:
-    name: Hosted Linux native C/Common
-    runs-on: ubuntu-24.04
+    name: Linux native C/Common
+    runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'linux-native' }}
     timeout-minutes: 30
     steps:
       - name: Check out Runner Monitor and pinned Common
@@ -22,9 +22,23 @@ jobs:
           submodules: recursive
 
       - name: Install native build dependencies
+        if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake pkg-config libgtk-3-dev
+
+      - name: Verify self-hosted native dependencies
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for command_name in cc c++ make cmake ctest pkg-config; do
+            command -v "$command_name" >/dev/null 2>&1 || {
+              echo "Self-hosted runner is missing $command_name." >&2
+              exit 1
+            }
+          done
+          pkg-config --exists gtk+-3.0
 
       - name: Verify exact Common gitlink
         shell: bash
