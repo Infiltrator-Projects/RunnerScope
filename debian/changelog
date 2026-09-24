@@ -1,3 +1,10 @@
+infiltrator-runner-monitor (1.2.17) unstable; urgency=medium
+
+  * Align native Linux notebook tabs with the 30 px publisher control height.
+  * Preserve monitoring behaviour, platform architecture and dependencies.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 09:24:00 +1000
+
 infiltrator-runner-monitor (1.2.16) unstable; urgency=medium
 
   * Align native Linux runner summary counters with Common's 10 px control radius.
