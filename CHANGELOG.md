@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.6 - 2026-09-24
+
+- Align native Linux footer actions with the 30 px publisher desktop control height.
+- Preserve monitoring behaviour, layout structure, dependencies and Common APIs unchanged.
+
 ## 1.2.5 - 2026-09-24
 
 - Bring the native Linux product heading onto the 28 px publisher desktop title scale.

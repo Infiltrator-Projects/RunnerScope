@@ -585,7 +585,7 @@ static void apply_theme(RunnerScopeApp *app)
         "menuitem { color:%s; }"
         "menuitem:hover { background:%s; color:%s; }"
         "#footer-actions button { background:%s; color:%s; border:1px solid %s;"
-        " min-height:28px; padding:4px 10px; }"
+        " min-height:30px; padding:4px 10px; }"
         "#footer-actions button:hover { background:%s; }"
         "#footer-actions button:disabled { background:%s; color:%s; border-color:%s; }",
         panel, text, border, text, card_hover, title,
