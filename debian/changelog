@@ -1,3 +1,11 @@
+infiltrator-runner-monitor (1.2.14) unstable; urgency=medium
+
+  * Replace the filled selected notebook tab with the restrained 2 px
+    publisher accent underline.
+  * Preserve runner monitoring behaviour, platform architecture and dependencies.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 07:28:00 +1000
+
 infiltrator-runner-monitor (1.2.12) unstable; urgency=medium
 
   * Align all native Linux buttons with the 30 px publisher desktop control height.
