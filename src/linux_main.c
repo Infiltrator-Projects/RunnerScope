@@ -561,7 +561,7 @@ static void apply_theme(RunnerScopeApp *app)
         "#meta { color:%s; }"
         "#summary { color:%s; }"
         ".counter { background:%s; border:1px solid %s; border-radius:6px;"
-        " padding:5px 9px; font-weight:700; }"
+        " padding:6px 10px; font-weight:700; }"
         ".counter-running { color:%s; } .counter-idle { color:%s; }"
         ".counter-offline { color:%s; } .counter-local { color:%s; }"
         ".counter-hosted { color:%s; } .counter-queued { color:%s; }"

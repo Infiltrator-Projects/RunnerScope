@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.15 - 2026-09-25
+
+- Align native Linux runner summary-chip padding with the suite-wide 6 px / 10 px compact spacing rhythm.
+- Preserve monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
+
 ## 1.2.14 - 2026-09-25
 
 - Replace the filled selected notebook tab with the suite-wide restrained 2 px accent underline while retaining the existing compact tab geometry.
