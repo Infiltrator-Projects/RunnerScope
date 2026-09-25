@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.2.18 - 2026-09-25
+
+- Align the Linux default window with the 1220x780 publisher desktop geometry.
+- Preserve runner discovery, monitoring behaviour, dependencies and Common APIs.
+
 ## 1.2.17 - 2026-09-25
 
 - Align native Linux notebook tabs with the suite-wide 30 px desktop control height while retaining the existing compact radius and accent underline.

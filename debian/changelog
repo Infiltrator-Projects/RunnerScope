@@ -1,3 +1,10 @@
+infiltrator-runner-monitor (1.2.18) unstable; urgency=medium
+
+  * Align the Linux default window with the 1220x780 publisher desktop geometry.
+  * Preserve runner discovery, monitoring behaviour, dependencies and Common APIs.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 25 Sep 2026 11:35:00 +1000
+
 infiltrator-runner-monitor (1.2.17) unstable; urgency=medium
 
   * Align native Linux notebook tabs with the 30 px publisher control height.
