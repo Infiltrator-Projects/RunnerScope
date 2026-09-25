@@ -1957,7 +1957,7 @@ static void build_ui(RunnerScopeApp *app)
 {
     app->window = gtk_application_window_new(app->application);
     gtk_window_set_title(GTK_WINDOW(app->window), "Runner Monitor");
-    gtk_window_set_default_size(GTK_WINDOW(app->window), 1260, 720);
+    gtk_window_set_default_size(GTK_WINDOW(app->window), 1220, 780);
     gtk_window_set_icon_name(GTK_WINDOW(app->window), "runnerscope");
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
