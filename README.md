@@ -2,7 +2,7 @@
 
 **Project copyright:** © 1993-2026 Shannon Smith
 
-Runner Monitor is a native C desktop monitor for GitHub Actions self-hosted runners. The shipping application is compiled on both supported platforms and links directly against the repository-pinned Infiltratr Common library.
+Runner Monitor is a native C desktop monitor for GitHub Actions self-hosted runners. The shipping application is compiled on both supported platforms and links directly against the repository-pinned Infiltratr Common 1.19.35 library.
 
 There is no Python or Tk/Tkinter runtime in the 1.2 native product line.
 
@@ -10,7 +10,7 @@ There is no Python or Tk/Tkinter runtime in the 1.2 native product line.
 
 - Linux: C11 + GTK 3 desktop shell, built as the ELF executable `/usr/bin/runnerscope`.
 - Windows: C11 + native Win32 shell, built as `Runner-Monitor-Windows-v<version>.exe`.
-- Shared dependency: the exact pinned Infiltratr Common source tree.
+- Shared dependency: Infiltratr Common 1.19.35 at `7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f`.
 - Common owns the product-neutral palette, typography/metrics contract, formatting and other shared primitives.
 - Runner Monitor owns runner/provider semantics, local-service behaviour and application policy.
 - The current provider credential/API boundary remains the authenticated GitHub CLI (`gh`) while the dependency-minimisation core in `src/native2/` is qualified to replace it.
