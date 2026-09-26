@@ -1,3 +1,13 @@
+infiltrator-runner-monitor (1.2.19) unstable; urgency=medium
+
+  * Redesign the native Linux Runner Monitor shell to match the current
+    Infiltrator OS/System Settings visual language.
+  * Add the branded application header, live fleet hero, status-card grid,
+    icon-led left navigation and cohesive table/footer presentation.
+  * Preserve runner discovery, monitoring, local-service controls and Common APIs.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 26 Sep 2026 22:30:00 +1000
+
 infiltrator-runner-monitor (1.2.18) unstable; urgency=medium
 
   * Align the Linux default window with the 1220x780 publisher desktop geometry.
