@@ -533,89 +533,180 @@ static void rgb_text(uint32_t rgb, char out[8])
 static void apply_theme(RunnerScopeApp *app)
 {
     if (!app) return;
+
     const InfiltratrThemePalette *p =
         infiltratr_theme_resolve(app->config.theme_mode, system_dark_mode());
     const InfiltratrTypography *type = infiltratr_typography();
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
-    if (!p || !type || !metrics || !type->ui_family || !type->brand_family) return;
+    if (!p || !type || !metrics || !type->ui_family) return;
 
-    char bg[8], panel[8], card[8], surface[8], border[8], text[8], title[8];
-    char muted[8], subtle[8], button_bg[8], button_fg[8], select_bg[8], select_fg[8];
-    char success[8], warning[8], fault[8], info[8], operation[8], card_hover[8];
-    rgb_text(p->background_rgb, bg); rgb_text(p->panel_rgb, panel);
-    rgb_text(p->card_rgb, card); rgb_text(p->surface_rgb, surface);
-    rgb_text(p->border_rgb, border); rgb_text(p->text_rgb, text);
-    rgb_text(p->title_rgb, title); rgb_text(p->muted_rgb, muted);
-    rgb_text(p->subtle_rgb, subtle); rgb_text(p->button_background_rgb, button_bg);
-    rgb_text(p->button_foreground_rgb, button_fg);
+    char bg[8], panel[8], card[8], surface[8], input[8], border[8];
+    char text[8], title[8], muted[8], subtle[8], accent[8], accent_fg[8];
+    char hover[8], select_bg[8], select_fg[8], success[8], warning[8];
+    char fault[8], info[8], operation[8], status_border[8];
+
+    rgb_text(p->background_rgb, bg);
+    rgb_text(p->panel_rgb, panel);
+    rgb_text(p->card_rgb, card);
+    rgb_text(p->surface_rgb, surface);
+    rgb_text(p->input_rgb, input);
+    rgb_text(p->border_rgb, border);
+    rgb_text(p->text_rgb, text);
+    rgb_text(p->title_rgb, title);
+    rgb_text(p->muted_rgb, muted);
+    rgb_text(p->subtle_rgb, subtle);
+    rgb_text(p->neutral_accent_rgb, accent);
+    rgb_text(p->accent_foreground_rgb, accent_fg);
+    rgb_text(p->surface_hover_rgb, hover);
     rgb_text(p->selection_background_rgb, select_bg);
     rgb_text(p->selection_foreground_rgb, select_fg);
-    rgb_text(p->success_rgb, success); rgb_text(p->warning_rgb, warning);
-    rgb_text(p->fault_rgb, fault); rgb_text(p->info_rgb, info);
-    rgb_text(p->operation_rgb, operation); rgb_text(p->card_hover_rgb, card_hover);
+    rgb_text(p->success_rgb, success);
+    rgb_text(p->warning_rgb, warning);
+    rgb_text(p->fault_rgb, fault);
+    rgb_text(p->info_rgb, info);
+    rgb_text(p->operation_rgb, operation);
+    rgb_text(p->status_border_rgb, status_border);
 
-    char *css = g_strdup_printf(
-        "window { background:%s; color:%s; }"
-        "box, notebook, notebook > stack { background:%s; color:%s; }"
-        "label { color:%s; }"
-        "#title { color:%s; font-size:28px; font-weight:700; }"
-        "#meta { color:%s; }"
-        "#summary { color:%s; }"
-        ".counter { background:%s; border:1px solid %s; border-radius:%upx;"
-        " padding:6px 10px; font-weight:700; }"
-        ".counter-running { color:%s; } .counter-idle { color:%s; }"
-        ".counter-offline { color:%s; } .counter-local { color:%s; }"
-        ".counter-hosted { color:%s; } .counter-queued { color:%s; }"
-        "entry { background:%s; color:%s; border-color:%s; }"
-        "button { background:%s; color:%s; border:1px solid %s; border-radius:6px; min-height:30px; }"
-        "button:hover { background:%s; }"
-        "notebook tab { background:%s; color:%s; border-color:%s; border-radius:6px; min-height:30px; padding:5px 10px; }"
-        "notebook tab:checked { background:transparent; color:%s; border-bottom:2px solid %s; }"
-        "treeview.view { background:%s; color:%s; }"
-        "treeview.view:selected { background:%s; color:%s; }"
-        "treeview header button { background:%s; color:%s; }"
-        "scrolledwindow { border:1px solid %s; }",
-        bg, text, bg, text, text, title, muted, text, card, border,
-        (unsigned int)metrics->control_radius,
-        success, info, fault, success, operation, warning, surface, text, border,
-        button_bg, button_fg, border, card_hover, panel, muted, border, select_fg,
-        operation, surface, text, select_bg, select_fg, panel, title, border);
+    GString *css = g_string_new(NULL);
 
-    char *chrome_css = g_strdup_printf(
-        "menubar, menu { background:%s; color:%s; }"
-        "menubar { border-bottom:1px solid %s; }"
-        "menuitem { color:%s; }"
-        "menuitem:hover { background:%s; color:%s; }"
+    g_string_append_printf(
+        css,
+        "window { background:%s; color:%s; font-family:\"%s\"; font-weight:%u; }\n"
+        "#runner-root { background-image:linear-gradient(to bottom right,%s,%s); }\n"
+        "label { color:%s; }\n",
+        bg, text, type->ui_family, (unsigned int)type->ui_regular_weight,
+        bg, panel, text);
+
+    g_string_append_printf(
+        css,
+        "headerbar.runner-header { background-image:linear-gradient(to right,%s,%s);"
+        " border-bottom:1px solid %s; min-height:56px; padding:4px 8px; }\n"
+        ".header-brand { padding:2px 4px; }\n"
+        ".header-brand-icon { background:%s; border:1px solid %s; border-radius:12px; padding:7px; }\n"
+        ".header-brand-title { color:%s; font-size:20px; font-weight:%u; }\n"
+        ".header-brand-subtitle { color:%s; font-size:11px; }\n"
+        ".header-search { min-width:300px; min-height:34px; background:%s; color:%s;"
+        " border:1px solid %s; border-radius:14px; padding:5px 10px; }\n"
+        ".header-search:focus { border-color:%s; }\n"
+        ".runner-menubar, .runner-menubar menuitem { background:transparent; color:%s; }\n"
+        ".runner-menubar menuitem { padding:5px 7px; border-radius:6px; }\n"
+        ".runner-menubar menuitem:hover { background:%s; color:%s; }\n"
+        "menu { background:%s; color:%s; border:1px solid %s; }\n"
+        "menu menuitem:hover { background:%s; }\n",
+        panel, bg, border,
+        card, border,
+        title, (unsigned int)type->ui_bold_weight,
+        muted,
+        input, text, status_border, accent,
+        muted, hover, title,
+        panel, text, border, hover);
+
+    g_string_append_printf(
+        css,
+        ".page-header { padding:2px 2px 4px 2px; }\n"
+        ".page-eyebrow { color:%s; font-size:10px; font-weight:%u; }\n"
+        ".page-title { color:%s; font-size:34px; font-weight:%u; }\n"
+        ".page-summary { color:%s; font-size:12px; }\n"
+        ".meta { color:%s; font-size:11px; }\n",
+        warning, (unsigned int)type->ui_bold_weight,
+        title, (unsigned int)type->ui_bold_weight,
+        muted, muted);
+
+    g_string_append_printf(
+        css,
+        ".hero-card { background-image:linear-gradient(135deg,%s,%s); border:1px solid %s;"
+        " border-radius:18px; padding:18px; }\n"
+        ".hero-icon-well { min-width:86px; min-height:86px; background:%s; border:1px solid %s;"
+        " border-radius:18px; padding:12px; }\n"
+        ".hero-kicker { color:%s; font-size:10px; font-weight:%u; }\n"
+        ".hero-title { color:%s; font-size:20px; font-weight:%u; }\n"
+        "#summary { color:%s; font-size:11px; }\n"
+        "#scan { color:%s; font-size:11px; }\n"
+        ".counter { background:%s; border:1px solid %s; border-radius:13px;"
+        " padding:12px 14px; min-height:46px; font-size:15px; font-weight:%u; }\n"
+        ".counter:hover { background:%s; border-color:%s; }\n"
+        ".counter-running { color:%s; border-top:2px solid %s; }\n"
+        ".counter-idle { color:%s; border-top:2px solid %s; }\n"
+        ".counter-offline { color:%s; border-top:2px solid %s; }\n"
+        ".counter-local { color:%s; border-top:2px solid %s; }\n"
+        ".counter-hosted { color:%s; border-top:2px solid %s; }\n"
+        ".counter-queued { color:%s; border-top:2px solid %s; }\n",
+        card, panel, border,
+        surface, border,
+        warning, (unsigned int)type->ui_bold_weight,
+        title, (unsigned int)type->ui_bold_weight,
+        text, muted,
+        surface, border, (unsigned int)type->ui_bold_weight,
+        hover, accent,
+        success, success,
+        info, info,
+        fault, fault,
+        success, success,
+        operation, operation,
+        warning, warning);
+
+    g_string_append_printf(
+        css,
+        "notebook.runner-notebook { background:%s; border:1px solid %s; border-radius:16px; }\n"
+        "notebook.runner-notebook > header.left { background:%s; border-right:1px solid %s;"
+        " padding:10px 8px; min-width:218px; }\n"
+        "notebook.runner-notebook > header.left > tabs > tab { background:transparent; color:%s;"
+        " border:1px solid transparent; border-radius:11px; padding:10px 11px; margin:3px 0; min-height:48px; }\n"
+        "notebook.runner-notebook > header.left > tabs > tab:hover { background:%s; }\n"
+        "notebook.runner-notebook > header.left > tabs > tab:checked { background:%s;"
+        " border-color:%s; border-left:3px solid %s; }\n"
+        ".runner-tab-icon { background:%s; border:1px solid %s; border-radius:10px; padding:6px; }\n"
+        ".nav-primary { color:%s; font-size:13px; font-weight:%u; }\n"
+        ".nav-secondary { color:%s; font-size:10px; }\n",
+        card, border,
+        panel, border, text,
+        hover, select_bg, accent, accent,
+        surface, border,
+        title, (unsigned int)type->ui_bold_weight, muted);
+
+    g_string_append_printf(
+        css,
+        "scrolledwindow.runner-table { background:%s; border:0; }\n"
+        "treeview.view { background:%s; color:%s; border:0; }\n"
+        "treeview.view:selected { background:%s; color:%s; }\n"
+        "treeview.view header button { background:%s; color:%s; border:0; border-bottom:1px solid %s;"
+        " min-height:34px; font-weight:%u; }\n"
+        "treeview.view header button:hover { background:%s; }\n"
+        "scrollbar { background:transparent; min-width:10px; min-height:10px; }\n"
+        "scrollbar slider { min-width:8px; min-height:28px; border-radius:999px; background:%s; }\n"
+        "scrollbar slider:hover { background:%s; }\n",
+        card,
+        card, text,
+        select_bg, select_fg,
+        panel, title, border, (unsigned int)type->ui_bold_weight,
+        hover,
+        subtle, accent);
+
+    g_string_append_printf(
+        css,
+        ".footer-card { background:%s; border:1px solid %s; border-radius:13px; padding:8px 10px; }\n"
         "#footer-actions button { background:%s; color:%s; border:1px solid %s;"
-        " min-height:30px; padding:4px 10px; }"
-        "#footer-actions button:hover { background:%s; }"
-        "#footer-actions button:disabled { background:%s; color:%s; border-color:%s; }",
-        panel, text, border, text, card_hover, title,
-        surface, text, border, card_hover, panel, subtle, border);
-    char *combined_css = g_strconcat(css, chrome_css, NULL);
-    g_free(chrome_css);
-    g_free(css);
-
-    char *typography_css = g_strdup_printf(
-        "window, window *, popover, popover * { font-family:\"%s\"; font-weight:%u; }"
-        "#title { font-family:\"%s\"; font-size:28px; font-weight:%u; }",
-        type->ui_family,
-        (unsigned int)type->ui_regular_weight,
-        type->brand_family,
-        (unsigned int)type->brand_weight);
-    css = g_strconcat(combined_css, typography_css, NULL);
-    g_free(typography_css);
-    g_free(combined_css);
+        " border-radius:%upx; min-height:32px; padding:4px 10px; }\n"
+        "#footer-actions button:hover { background:%s; border-color:%s; }\n"
+        "#footer-actions button:disabled { background:%s; color:%s; border-color:%s; opacity:0.55; }\n"
+        ".status-text { color:%s; font-size:11px; }\n"
+        ".version-text { color:%s; font-size:10px; }\n",
+        card, border,
+        surface, text, status_border, (unsigned int)metrics->control_radius,
+        hover, accent,
+        panel, subtle, border,
+        muted, muted);
 
     GtkCssProvider *provider = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(provider, css, -1, NULL);
+    gtk_css_provider_load_from_data(provider, css->str, -1, NULL);
     GdkScreen *screen = gdk_screen_get_default();
-    if (screen)
+    if (screen) {
         gtk_style_context_add_provider_for_screen(
             screen, GTK_STYLE_PROVIDER(provider),
             GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    }
     g_object_unref(provider);
-    g_free(css);
+    g_string_free(css, TRUE);
 }
 
 static char *run_command(char **argv, GError **error)
@@ -1950,45 +2041,212 @@ static GtkWidget *make_counter(const char *name, const char *css_class)
     GtkStyleContext *context = gtk_widget_get_style_context(label);
     gtk_style_context_add_class(context, "counter");
     if (css_class) gtk_style_context_add_class(context, css_class);
+    gtk_widget_set_hexpand(label, TRUE);
+    gtk_widget_set_halign(label, GTK_ALIGN_FILL);
+    gtk_widget_set_valign(label, GTK_ALIGN_FILL);
     return label;
+}
+
+static GtkWidget *make_tab_label(const char *icon_name,
+                                 const char *title,
+                                 const char *subtitle)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget *icon = gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_MENU);
+    GtkWidget *copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    GtkWidget *primary = gtk_label_new(title);
+    GtkWidget *secondary = gtk_label_new(subtitle);
+
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(icon_well), "runner-tab-icon");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(primary), "nav-primary");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(secondary), "nav-secondary");
+
+    gtk_image_set_pixel_size(GTK_IMAGE(icon), 22);
+    gtk_box_pack_start(GTK_BOX(icon_well), icon, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box), icon_well, FALSE, FALSE, 0);
+
+    gtk_widget_set_halign(primary, GTK_ALIGN_START);
+    gtk_widget_set_halign(secondary, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(copy), primary, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(copy), secondary, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), copy, TRUE, TRUE, 0);
+
+    gtk_widget_set_size_request(box, 188, -1);
+    return box;
 }
 
 static void build_ui(RunnerScopeApp *app)
 {
     app->window = gtk_application_window_new(app->application);
     gtk_window_set_title(GTK_WINDOW(app->window), "Runner Monitor");
-    gtk_window_set_default_size(GTK_WINDOW(app->window), 1220, 780);
+    gtk_window_set_default_size(GTK_WINDOW(app->window), 1320, 840);
     gtk_window_set_icon_name(GTK_WINDOW(app->window), "runnerscope");
 
-    GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_container_set_border_width(GTK_CONTAINER(outer), 20);
+    /*
+     * Match the current Infiltrator OS shell: product identity and search live
+     * in the title area, while the data surface is left to the application.
+     */
+    GtkWidget *header = gtk_header_bar_new();
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(header), "runner-header");
+    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header), TRUE);
+    gtk_header_bar_set_custom_title(
+        GTK_HEADER_BAR(header), gtk_label_new(""));
+
+    GtkWidget *brand = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(brand), "header-brand");
+    GtkWidget *brand_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(brand_icon_well), "header-brand-icon");
+    GtkWidget *brand_icon =
+        gtk_image_new_from_icon_name("runnerscope", GTK_ICON_SIZE_DIALOG);
+    gtk_image_set_pixel_size(GTK_IMAGE(brand_icon), 28);
+    gtk_box_pack_start(
+        GTK_BOX(brand_icon_well), brand_icon, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(brand), brand_icon_well, FALSE, FALSE, 0);
+
+    GtkWidget *brand_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget *brand_title = gtk_label_new("Runner Monitor");
+    GtkWidget *brand_subtitle = gtk_label_new("Infiltrator OS");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(brand_title), "header-brand-title");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(brand_subtitle), "header-brand-subtitle");
+    gtk_widget_set_halign(brand_title, GTK_ALIGN_START);
+    gtk_widget_set_halign(brand_subtitle, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(brand_copy), brand_title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(brand_copy), brand_subtitle, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(brand), brand_copy, FALSE, FALSE, 0);
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(header), brand);
+
+    GtkWidget *header_end = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *menu_bar = build_menu_bar(app);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(menu_bar), "runner-menubar");
+    gtk_box_pack_start(GTK_BOX(header_end), menu_bar, FALSE, FALSE, 0);
+
+    app->filter_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(
+        GTK_ENTRY(app->filter_entry), "Filter current view…");
+    gtk_widget_set_size_request(app->filter_entry, 320, -1);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->filter_entry), "header-search");
+    g_signal_connect(
+        app->filter_entry, "changed", G_CALLBACK(on_filter_changed), app);
+    gtk_box_pack_start(
+        GTK_BOX(header_end), app->filter_entry, FALSE, FALSE, 0);
+    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), header_end);
+    gtk_window_set_titlebar(GTK_WINDOW(app->window), header);
+
+    GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_set_name(outer, "runner-root");
+    gtk_container_set_border_width(GTK_CONTAINER(outer), 16);
     gtk_container_add(GTK_CONTAINER(app->window), outer);
 
-    GtkWidget *menu_bar = build_menu_bar(app);
-    gtk_box_pack_start(GTK_BOX(outer), menu_bar, FALSE, FALSE, 0);
+    GtkWidget *page_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(page_header), "page-header");
+    gtk_box_pack_start(GTK_BOX(outer), page_header, FALSE, FALSE, 0);
 
-    GtkWidget *heading = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_pack_start(GTK_BOX(outer), heading, FALSE, FALSE, 0);
-    GtkWidget *title = gtk_label_new("GitHub Self-Hosted Runner Monitor");
-    gtk_widget_set_name(title, "title");
-    gtk_widget_set_halign(title, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(heading), title, FALSE, FALSE, 0);
-    app->updated_label = gtk_label_new("Runner data: —    Activity: —");
-    gtk_widget_set_name(app->updated_label, "meta");
+    GtkWidget *page_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(page_copy, TRUE);
+    GtkWidget *eyebrow = gtk_label_new("RUNNER INFRASTRUCTURE");
+    GtkWidget *page_title = gtk_label_new("Runner Monitor");
+    GtkWidget *page_summary = gtk_label_new(
+        "Live GitHub Actions capacity, active work and local runner health.");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(eyebrow), "page-eyebrow");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(page_title), "page-title");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(page_summary), "page-summary");
+    gtk_widget_set_halign(eyebrow, GTK_ALIGN_START);
+    gtk_widget_set_halign(page_title, GTK_ALIGN_START);
+    gtk_widget_set_halign(page_summary, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(page_copy), eyebrow, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(page_copy), page_title, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(page_copy), page_summary, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(page_header), page_copy, TRUE, TRUE, 0);
+
+    app->updated_label = gtk_label_new("Runner data: —");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->updated_label), "meta");
     gtk_widget_set_halign(app->updated_label, GTK_ALIGN_END);
-    gtk_box_pack_end(GTK_BOX(heading), app->updated_label, FALSE, FALSE, 0);
+    gtk_widget_set_valign(app->updated_label, GTK_ALIGN_END);
+    gtk_box_pack_end(
+        GTK_BOX(page_header), app->updated_label, FALSE, FALSE, 0);
 
-    GtkWidget *meta = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
-    gtk_box_pack_start(GTK_BOX(outer), meta, FALSE, FALSE, 0);
-    char *org_text = g_strdup_printf("Organisation: %s", app->config.organisation);
-    GtkWidget *org = gtk_label_new(org_text); g_free(org_text);
-    gtk_box_pack_start(GTK_BOX(meta), org, FALSE, FALSE, 0);
+    /*
+     * The old row of tiny status pills made every datum look equally
+     * unimportant.  This hero surface gives fleet state a single visual anchor.
+     */
+    GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(hero), "hero-card");
+    gtk_box_pack_start(GTK_BOX(outer), hero, FALSE, FALSE, 0);
+
+    GtkWidget *hero_left = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
+    gtk_widget_set_size_request(hero_left, 300, -1);
+    GtkWidget *hero_top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *hero_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(hero_icon_well), "hero-icon-well");
+    GtkWidget *hero_icon =
+        gtk_image_new_from_icon_name("runnerscope", GTK_ICON_SIZE_DIALOG);
+    gtk_image_set_pixel_size(GTK_IMAGE(hero_icon), 64);
+    gtk_box_pack_start(GTK_BOX(hero_icon_well), hero_icon, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(hero_top), hero_icon_well, FALSE, FALSE, 0);
+
+    GtkWidget *hero_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    GtkWidget *hero_kicker = gtk_label_new("LIVE FLEET");
+    GtkWidget *hero_title = gtk_label_new("GitHub self-hosted runners");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(hero_kicker), "hero-kicker");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(hero_title), "hero-title");
+    gtk_widget_set_halign(hero_kicker, GTK_ALIGN_START);
+    gtk_widget_set_halign(hero_title, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(hero_copy), hero_kicker, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hero_copy), hero_title, FALSE, FALSE, 0);
+
+    char *org_text =
+        g_strdup_printf("Organisation  •  %s", app->config.organisation);
+    GtkWidget *org = gtk_label_new(org_text);
+    g_free(org_text);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(org), "meta");
+    gtk_widget_set_halign(org, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(hero_copy), org, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hero_top), hero_copy, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(hero_left), hero_top, FALSE, FALSE, 0);
+
+    app->summary_label = gtk_label_new("Observed this session: —");
+    gtk_widget_set_name(app->summary_label, "summary");
+    gtk_widget_set_halign(app->summary_label, GTK_ALIGN_START);
+    gtk_label_set_line_wrap(GTK_LABEL(app->summary_label), TRUE);
+    gtk_box_pack_start(
+        GTK_BOX(hero_left), app->summary_label, FALSE, FALSE, 0);
+
     app->scan_label = gtk_label_new("Preparing activity scan…");
-    gtk_widget_set_name(app->scan_label, "meta");
-    gtk_box_pack_start(GTK_BOX(meta), app->scan_label, FALSE, FALSE, 0);
+    gtk_widget_set_name(app->scan_label, "scan");
+    gtk_widget_set_halign(app->scan_label, GTK_ALIGN_START);
+    gtk_label_set_line_wrap(GTK_LABEL(app->scan_label), TRUE);
+    gtk_box_pack_start(
+        GTK_BOX(hero_left), app->scan_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(hero), hero_left, FALSE, FALSE, 0);
 
-    GtkWidget *counters = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_box_pack_start(GTK_BOX(outer), counters, FALSE, FALSE, 0);
+    GtkWidget *counter_grid = gtk_grid_new();
+    gtk_widget_set_hexpand(counter_grid, TRUE);
+    gtk_grid_set_row_spacing(GTK_GRID(counter_grid), 9);
+    gtk_grid_set_column_spacing(GTK_GRID(counter_grid), 9);
+    gtk_grid_set_column_homogeneous(GTK_GRID(counter_grid), TRUE);
+    gtk_grid_set_row_homogeneous(GTK_GRID(counter_grid), TRUE);
+
     const char *counter_names[] = {
         "TOTAL  0", "RUNNING  0", "IDLE  0", "OFFLINE  0",
         "LOCAL ACTIVE  0", "GITHUB ACTIVE  0", "QUEUED  0"
@@ -1998,22 +2256,15 @@ static void build_ui(RunnerScopeApp *app)
         "counter-local", "counter-hosted", "counter-queued"
     };
     for (guint i = 0U; i < 7U; i++) {
-        app->counter_labels[i] = make_counter(counter_names[i], counter_classes[i]);
-        gtk_box_pack_start(GTK_BOX(counters), app->counter_labels[i], FALSE, FALSE, 0);
+        app->counter_labels[i] =
+            make_counter(counter_names[i], counter_classes[i]);
+        const gint column = i < 4U ? (gint)i : (gint)(i - 4U);
+        const gint row = i < 4U ? 0 : 1;
+        gtk_grid_attach(
+            GTK_GRID(counter_grid), app->counter_labels[i],
+            column, row, 1, 1);
     }
-
-    app->summary_label = gtk_label_new("Observed this session: —");
-    gtk_widget_set_name(app->summary_label, "summary");
-    gtk_widget_set_halign(app->summary_label, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(outer), app->summary_label, FALSE, FALSE, 0);
-
-    GtkWidget *filter = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_box_pack_start(GTK_BOX(outer), filter, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(filter), gtk_label_new("Filter:"), FALSE, FALSE, 0);
-    app->filter_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(app->filter_entry), "Filter selected data");
-    gtk_box_pack_start(GTK_BOX(filter), app->filter_entry, FALSE, FALSE, 0);
-    g_signal_connect(app->filter_entry, "changed", G_CALLBACK(on_filter_changed), app);
+    gtk_box_pack_start(GTK_BOX(hero), counter_grid, TRUE, TRUE, 0);
 
     app->runner_store = gtk_list_store_new(RUNNER_N_COLS,
         G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,
@@ -2028,54 +2279,84 @@ static void build_ui(RunnerScopeApp *app)
         G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);
 
     app->notebook = gtk_notebook_new();
+    gtk_notebook_set_tab_pos(GTK_NOTEBOOK(app->notebook), GTK_POS_LEFT);
+    gtk_notebook_set_scrollable(GTK_NOTEBOOK(app->notebook), TRUE);
+    gtk_notebook_set_show_border(GTK_NOTEBOOK(app->notebook), FALSE);
     gtk_widget_set_hexpand(app->notebook, TRUE);
     gtk_widget_set_vexpand(app->notebook, TRUE);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->notebook), "runner-notebook");
     gtk_box_pack_start(GTK_BOX(outer), app->notebook, TRUE, TRUE, 0);
 
     GtkWidget *scroll = scrolled_tree(app->runner_store);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(scroll), "runner-table");
     app->runner_tree = gtk_bin_get_child(GTK_BIN(scroll));
     const char *runner_titles[] = {"Runner","OS","State","Repository","Current job",
         "Runtime","State for","Jobs","Busy","Labels"};
     const gint runner_widths[] = {180,65,80,140,250,90,80,50,55,280};
     for (gint i = 0; i < RUNNER_N_COLS; i++)
         tree_add_text_column(app->runner_tree, runner_titles[i], i, runner_widths[i]);
-    gtk_notebook_append_page(GTK_NOTEBOOK(app->notebook), scroll, gtk_label_new("Runners"));
+    gtk_notebook_append_page(
+        GTK_NOTEBOOK(app->notebook), scroll,
+        make_tab_label("computer-symbolic", "Runners", "Fleet state & utilisation"));
 
     scroll = scrolled_tree(app->activity_store);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(scroll), "runner-table");
     app->activity_tree = gtk_bin_get_child(GTK_BIN(scroll));
     const char *act_titles[] = {"Where","Repository","Workflow","Job","Current step",
         "Status","Runner","Runtime","Event","Branch"};
     const gint act_widths[] = {85,140,180,210,180,90,170,90,70,100};
     for (gint i = 0; i < 10; i++)
         tree_add_text_column(app->activity_tree, act_titles[i], i, act_widths[i]);
-    gtk_notebook_append_page(GTK_NOTEBOOK(app->notebook), scroll, gtk_label_new("Active jobs"));
+    gtk_notebook_append_page(
+        GTK_NOTEBOOK(app->notebook), scroll,
+        make_tab_label("media-playback-start-symbolic", "Active jobs",
+                       "Work executing now"));
     GtkTreeSelection *selection =
         gtk_tree_view_get_selection(GTK_TREE_VIEW(app->activity_tree));
-    g_signal_connect(selection, "changed", G_CALLBACK(on_activity_selection), app);
+    g_signal_connect(
+        selection, "changed", G_CALLBACK(on_activity_selection), app);
 
     scroll = scrolled_tree(app->history_store);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(scroll), "runner-table");
     app->history_tree = gtk_bin_get_child(GTK_BIN(scroll));
     tree_add_text_column(app->history_tree, "Time", HIST_COL_TIME, 110);
     tree_add_text_column(app->history_tree, "Runner", HIST_COL_RUNNER, 180);
     tree_add_text_column(app->history_tree, "Event", HIST_COL_EVENT, 100);
     tree_add_text_column(app->history_tree, "Detail", HIST_COL_DETAIL, 500);
-    gtk_notebook_append_page(GTK_NOTEBOOK(app->notebook), scroll, gtk_label_new("History"));
+    gtk_notebook_append_page(
+        GTK_NOTEBOOK(app->notebook), scroll,
+        make_tab_label("document-open-recent-symbolic", "History",
+                       "Session activity"));
 
     scroll = scrolled_tree(app->local_store);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(scroll), "runner-table");
     app->local_tree = gtk_bin_get_child(GTK_BIN(scroll));
     const char *local_titles[] = {"Runner","Service","GitHub","PID","Start","Account",
         "Latest diagnostic","Age","Path"};
     const gint local_widths[] = {180,80,80,60,80,100,180,80,300};
     for (gint i = 0; i < 9; i++)
         tree_add_text_column(app->local_tree, local_titles[i], i, local_widths[i]);
-    gtk_notebook_append_page(GTK_NOTEBOOK(app->notebook), scroll,
-                             gtk_label_new("Local Linux health"));
+    gtk_notebook_append_page(
+        GTK_NOTEBOOK(app->notebook), scroll,
+        make_tab_label("utilities-system-monitor-symbolic", "Local Linux health",
+                       "Services & diagnostics"));
     selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->local_tree));
-    g_signal_connect(selection, "changed", G_CALLBACK(on_local_selection), app);
+    g_signal_connect(
+        selection, "changed", G_CALLBACK(on_local_selection), app);
+
+    GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(footer), "footer-card");
+    gtk_box_pack_start(GTK_BOX(outer), footer, FALSE, FALSE, 0);
 
     GtkWidget *action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_set_name(action_row, "footer-actions");
-    gtk_box_pack_start(GTK_BOX(outer), action_row, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(footer), action_row, FALSE, FALSE, 0);
 
     GtkWidget *context_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_box_pack_start(GTK_BOX(action_row), context_actions, FALSE, FALSE, 0);
@@ -2084,23 +2365,28 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_set_sensitive(app->open_job_button, FALSE);
     gtk_widget_set_tooltip_text(
         app->open_job_button, "Select an active job to open it in GitHub.");
-    g_signal_connect(app->open_job_button, "clicked", G_CALLBACK(on_open_job), app);
+    g_signal_connect(
+        app->open_job_button, "clicked", G_CALLBACK(on_open_job), app);
     gtk_box_pack_start(
         GTK_BOX(context_actions), app->open_job_button, FALSE, FALSE, 0);
 
     app->open_diag_button = gtk_button_new_with_label("Open _diag");
     gtk_widget_set_sensitive(app->open_diag_button, FALSE);
     gtk_widget_set_tooltip_text(
-        app->open_diag_button, "Select a local runner to open its latest diagnostic.");
-    g_signal_connect(app->open_diag_button, "clicked", G_CALLBACK(on_open_diag), app);
+        app->open_diag_button,
+        "Select a local runner to open its latest diagnostic.");
+    g_signal_connect(
+        app->open_diag_button, "clicked", G_CALLBACK(on_open_diag), app);
     gtk_box_pack_start(
         GTK_BOX(context_actions), app->open_diag_button, FALSE, FALSE, 0);
 
     app->restart_button = gtk_button_new_with_label("Restart selected runner");
     gtk_widget_set_sensitive(app->restart_button, FALSE);
     gtk_widget_set_tooltip_text(
-        app->restart_button, "Select a local runner before restarting its service.");
-    g_signal_connect(app->restart_button, "clicked", G_CALLBACK(on_restart), app);
+        app->restart_button,
+        "Select a local runner before restarting its service.");
+    g_signal_connect(
+        app->restart_button, "clicked", G_CALLBACK(on_restart), app);
     gtk_box_pack_start(
         GTK_BOX(context_actions), app->restart_button, FALSE, FALSE, 0);
 
@@ -2120,28 +2406,40 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
 
     GtkWidget *status_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    gtk_box_pack_start(GTK_BOX(outer), status_row, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(footer), status_row, FALSE, FALSE, 0);
     app->status_label = gtk_label_new("Starting…");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->status_label), "status-text");
     gtk_widget_set_halign(app->status_label, GTK_ALIGN_START);
     gtk_widget_set_hexpand(app->status_label, TRUE);
-    gtk_label_set_ellipsize(GTK_LABEL(app->status_label), PANGO_ELLIPSIZE_END);
-    gtk_box_pack_start(GTK_BOX(status_row), app->status_label, TRUE, TRUE, 0);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(app->status_label), PANGO_ELLIPSIZE_END);
+    gtk_box_pack_start(
+        GTK_BOX(status_row), app->status_label, TRUE, TRUE, 0);
 
     GtkWidget *version_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_halign(version_box, GTK_ALIGN_END);
-    char *app_version = g_strdup_printf("Runner Monitor %s", RUNNERSCOPE_VERSION);
+    char *app_version =
+        g_strdup_printf("Runner Monitor %s", RUNNERSCOPE_VERSION);
     GtkWidget *app_version_label = gtk_label_new(app_version);
     g_free(app_version);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app_version_label), "version-text");
     gtk_widget_set_halign(app_version_label, GTK_ALIGN_END);
-    gtk_widget_set_name(app_version_label, "meta");
-    gtk_box_pack_start(GTK_BOX(version_box), app_version_label, FALSE, FALSE, 0);
-    char *common_version = g_strdup_printf("Common %s", INFILTRATR_COMMON_VERSION);
+    gtk_box_pack_start(
+        GTK_BOX(version_box), app_version_label, FALSE, FALSE, 0);
+
+    char *common_version =
+        g_strdup_printf("Common %s", INFILTRATR_COMMON_VERSION);
     GtkWidget *common_version_label = gtk_label_new(common_version);
     g_free(common_version);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(common_version_label), "version-text");
     gtk_widget_set_halign(common_version_label, GTK_ALIGN_END);
-    gtk_widget_set_name(common_version_label, "meta");
-    gtk_box_pack_start(GTK_BOX(version_box), common_version_label, FALSE, FALSE, 0);
-    gtk_box_pack_end(GTK_BOX(status_row), version_box, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(version_box), common_version_label, FALSE, FALSE, 0);
+    gtk_box_pack_end(
+        GTK_BOX(status_row), version_box, FALSE, FALSE, 0);
 
     apply_theme(app);
     GtkSettings *settings = gtk_settings_get_default();
