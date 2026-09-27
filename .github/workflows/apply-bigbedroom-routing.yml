@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Apply BigBedroom routing
+
+on:
+  push:
+    paths:
+      - .github/workflows/apply-bigbedroom-routing.yml
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: [self-hosted, Linux, X64, linux-native]
+    timeout-minutes: 10
+    steps:
+      - name: Check out routing tool
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - name: Apply routing with host GitHub CLI credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset GH_TOKEN GITHUB_TOKEN
+          printf 'runner=%s\n' "${{ runner.name }}"
+          gh auth status
+          bash tools/prefer-bigbedroom-runners.sh
