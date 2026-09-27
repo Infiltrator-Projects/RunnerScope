@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: Configure runner routing labels
+name: Clean runner routing probe
 
 on:
   push:
@@ -11,37 +11,14 @@ permissions:
   contents: read
 
 jobs:
-  configure:
+  cleanup:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 2
     env:
       GH_TOKEN: ${{ github.token }}
-      ORG: Infiltrator-Projects
     steps:
-      - name: Apply BigBedroom and Latitude routing labels
+      - name: Cancel obsolete queued label probe
         shell: bash
         run: |
           set -euo pipefail
-          runners_json="$(gh api --paginate \"/orgs/$ORG/actions/runners?per_page=100\")"
-          mapfile -t bigbedroom_ids < <(
-            jq -r '.runners[] | select(.name | startswith("BigBedroom-Linux-")) | .id' <<<"$runners_json"
-          )
-          mapfile -t latitude_ids < <(
-            jq -r '.runners[] | select(.name | startswith("Latitude-5550-Linux")) | .id' <<<"$runners_json"
-          )
-          test "${#bigbedroom_ids[@]}" -eq 5
-          test "${#latitude_ids[@]}" -ge 1
-          for id in "${bigbedroom_ids[@]}"; do
-            gh api --method POST \
-              -H "Accept: application/vnd.github+json" \
-              "/orgs/$ORG/actions/runners/$id/labels" \
-              -f 'labels[]=bigbedroom'
-          done
-          for id in "${latitude_ids[@]}"; do
-            gh api --method POST \
-              -H "Accept: application/vnd.github+json" \
-              "/orgs/$ORG/actions/runners/$id/labels" \
-              -f 'labels[]=latitude'
-          done
-          gh api --paginate "/orgs/$ORG/actions/runners?per_page=100" \
-            --jq '.runners[] | select(.name | startswith("BigBedroom-Linux-") or startswith("Latitude-5550-Linux")) | {name, status, busy, labels:[.labels[].name]}'
+          gh api --method POST /repos/Infiltrator-Projects/RunnerScope/actions/runs/36316958448/cancel || true
