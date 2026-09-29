@@ -1,3 +1,15 @@
+infiltrator-runner-monitor (1.2.21) unstable; urgency=medium
+
+  * Replace the radio-button navigation workaround with a compact GtkListBox
+    rail so the navigation occupies exactly one left column instead of creating
+    a second blank allocation beside the visible controls.
+  * Remove the fixed 188 px navigation-content request, reduce rail padding and
+    return the reclaimed width to the runner tables.
+  * Preserve the visible icon/title/subtitle navigation and Night-mode footer
+    contrast repair from 1.2.20.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 29 Sep 2026 17:58:00 +1000
+
 infiltrator-runner-monitor (1.2.20) unstable; urgency=medium
 
   * Replace fragile vertical GtkNotebook tabs with explicit left-side navigation
