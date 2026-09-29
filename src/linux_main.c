@@ -649,7 +649,7 @@ static void apply_theme(RunnerScopeApp *app)
         css,
         ".runner-content-shell { background:%s; border:1px solid %s; border-radius:16px; }\n"
         ".runner-sidebar { background:%s; border-right:1px solid %s;"
-        " border-radius:16px 0 0 16px; padding:8px 6px; min-width:196px; }\n"
+        " border-radius:16px 0 0 16px; padding:8px 6px; }\n"
         "notebook.runner-notebook { background:%s; border:0; border-radius:0 16px 16px 0; }\n"
         ".runner-nav-list { background:transparent; color:%s; border:0; }\n"
         ".runner-nav-list row { background:transparent; color:%s;"
@@ -2314,8 +2314,11 @@ static void build_ui(RunnerScopeApp *app)
     /*
      * GtkNotebook's vertical custom tabs can lose or clip their child widgets
      * under some GTK themes/scaling combinations. Keep GtkNotebook as the page
-     * host, but use explicit radio-style navigation buttons so the left-hand
-     * controls always have stable allocation and readable labels.
+     * host and use a compact GtkListBox rail for stable, readable navigation.
+     *
+     * Do not combine a CSS min-width with gtk_widget_set_size_request() here:
+     * GTK can account the style minimum in addition to the widget request,
+     * producing the large empty gutter seen in 1.2.20/1.2.21.
      */
     GtkWidget *content_shell = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_hexpand(content_shell, TRUE);
@@ -2326,14 +2329,17 @@ static void build_ui(RunnerScopeApp *app)
 
     GtkWidget *navigation = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(navigation, 196, -1);
+    gtk_widget_set_hexpand(navigation, FALSE);
+    gtk_widget_set_halign(navigation, GTK_ALIGN_START);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(navigation), "runner-sidebar");
-    gtk_box_pack_start(GTK_BOX(content_shell), navigation, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content_shell), navigation, FALSE, TRUE, 0);
 
     GtkWidget *nav_list = gtk_list_box_new();
     gtk_list_box_set_selection_mode(GTK_LIST_BOX(nav_list), GTK_SELECTION_BROWSE);
     gtk_list_box_set_activate_on_single_click(GTK_LIST_BOX(nav_list), TRUE);
     gtk_widget_set_hexpand(nav_list, TRUE);
+    gtk_widget_set_halign(nav_list, GTK_ALIGN_FILL);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(nav_list), "runner-nav-list");
     gtk_box_pack_start(GTK_BOX(navigation), nav_list, FALSE, FALSE, 0);
