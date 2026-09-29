@@ -679,15 +679,18 @@ static void apply_theme(RunnerScopeApp *app)
         "treeview.view header button { background:%s; color:%s; border:0; border-bottom:1px solid %s;"
         " min-height:34px; font-weight:%u; }\n"
         "treeview.view header button:hover { background:%s; }\n"
-        "scrollbar { background:transparent; min-width:10px; min-height:10px; }\n"
-        "scrollbar slider { min-width:8px; min-height:28px; border-radius:999px; background:%s; }\n"
+        "scrollbar { background:transparent; }\n"
+        "scrollbar.vertical { min-width:10px; }\n"
+        "scrollbar.horizontal { min-height:10px; }\n"
+        "scrollbar.vertical slider { min-width:8px; min-height:28px; border-radius:999px; background:%s; }\n"
+        "scrollbar.horizontal slider { min-width:28px; min-height:8px; border-radius:999px; background:%s; }\n"
         "scrollbar slider:hover { background:%s; }\n",
         card,
         card, text,
         select_bg, select_fg,
         panel, title, border, (unsigned int)type->ui_bold_weight,
         hover,
-        subtle, accent);
+        subtle, subtle, accent);
 
     g_string_append_printf(
         css,
