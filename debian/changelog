@@ -1,3 +1,14 @@
+infiltrator-runner-monitor (1.2.22) unstable; urgency=medium
+
+  * Remove the duplicated sidebar width constraint that caused GTK to reserve
+    a second empty navigation-width gutter beside the visible navigation rail.
+  * Keep a single explicit 196 px rail allocation, force start alignment and
+    let the runner table consume all remaining horizontal space.
+  * Preserve the visible navigation and Night-mode contrast fixes from 1.2.20
+    and 1.2.21.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 29 Sep 2026 18:12:00 +1000
+
 infiltrator-runner-monitor (1.2.21) unstable; urgency=medium
 
   * Replace the radio-button navigation workaround with a compact GtkListBox
