@@ -12,47 +12,29 @@ permissions:
   contents: read
 
 jobs:
-  provision:
-    name: Provision shared BigBedroom Linux host
+  report:
+    name: Report shared BigBedroom Linux capabilities
     runs-on: bigbedroom
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
-      - name: Ensure build and checkout prerequisites
+      - name: Report build and checkout prerequisites
         shell: bash
         run: |
-          set -euo pipefail
-          export DEBIAN_FRONTEND=noninteractive
-
-          missing=0
+          set -u
           for command_name in git cmake ctest make gcc g++ clang pkg-config dpkg-deb xvfb-run; do
-            if ! command -v "$command_name" >/dev/null 2>&1; then
-              echo "Missing command: $command_name"
-              missing=1
+            if command -v "$command_name" >/dev/null 2>&1; then
+              printf 'present: %s -> %s\n' "$command_name" "$(command -v "$command_name")"
+            else
+              printf 'missing: %s\n' "$command_name"
             fi
           done
-          for module in x11 gtk4 libusb-1.0; do
-            if ! pkg-config --exists "$module" 2>/dev/null; then
-              echo "Missing pkg-config module: $module"
-              missing=1
-            fi
-          done
-
-          if [[ "$missing" -ne 0 ]]; then
-            sudo apt-get -o DPkg::Lock::Timeout=180 update
-            sudo apt-get -o DPkg::Lock::Timeout=180 install -y --no-install-recommends \
-              git build-essential clang cmake pkg-config dpkg-dev \
-              libx11-dev libgtk-4-dev libbluetooth-dev libusb-1.0-0-dev \
-              xvfb xauth
+          if command -v pkg-config >/dev/null 2>&1; then
+            for module in x11 gtk4 libusb-1.0; do
+              if pkg-config --exists "$module" 2>/dev/null; then
+                printf 'present pkg-config module: %s\n' "$module"
+              else
+                printf 'missing pkg-config module: %s\n' "$module"
+              fi
+            done
           fi
-
-          for command_name in git cmake ctest make gcc g++ clang pkg-config dpkg-deb xvfb-run; do
-            command -v "$command_name" >/dev/null 2>&1
-          done
-          pkg-config --exists x11
-          pkg-config --exists gtk4
-          pkg-config --exists libusb-1.0
-
-          git --version
-          cmake --version
-          gcc --version | head -n 1
-          clang --version | head -n 1
+          printf 'This workflow reports host capability only; it does not require privileged package installation.\n'
