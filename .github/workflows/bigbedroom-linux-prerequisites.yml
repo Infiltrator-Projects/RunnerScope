@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: BigBedroom Linux prerequisites
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/bigbedroom-linux-prerequisites.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    name: Provision shared BigBedroom Linux host
+    runs-on: bigbedroom
+    timeout-minutes: 20
+    steps:
+      - name: Ensure build and checkout prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+
+          missing=0
+          for command_name in git cmake ctest make gcc g++ clang pkg-config dpkg-deb xvfb-run; do
+            if ! command -v "$command_name" >/dev/null 2>&1; then
+              echo "Missing command: $command_name"
+              missing=1
+            fi
+          done
+          for module in x11 gtk4 libusb-1.0; do
+            if ! pkg-config --exists "$module" 2>/dev/null; then
+              echo "Missing pkg-config module: $module"
+              missing=1
+            fi
+          done
+
+          if [[ "$missing" -ne 0 ]]; then
+            sudo apt-get -o DPkg::Lock::Timeout=180 update
+            sudo apt-get -o DPkg::Lock::Timeout=180 install -y --no-install-recommends \
+              git build-essential clang cmake pkg-config dpkg-dev \
+              libx11-dev libgtk-4-dev libbluetooth-dev libusb-1.0-0-dev \
+              xvfb xauth
+          fi
+
+          for command_name in git cmake ctest make gcc g++ clang pkg-config dpkg-deb xvfb-run; do
+            command -v "$command_name" >/dev/null 2>&1
+          done
+          pkg-config --exists x11
+          pkg-config --exists gtk4
+          pkg-config --exists libusb-1.0
+
+          git --version
+          cmake --version
+          gcc --version | head -n 1
+          clang --version | head -n 1
