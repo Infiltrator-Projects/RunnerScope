@@ -647,21 +647,27 @@ static void apply_theme(RunnerScopeApp *app)
 
     g_string_append_printf(
         css,
-        "notebook.runner-notebook { background:%s; border:1px solid %s; border-radius:16px; }\n"
-        "notebook.runner-notebook > header.left { background:%s; border-right:1px solid %s;"
-        " padding:10px 8px; min-width:218px; }\n"
-        "notebook.runner-notebook > header.left > tabs > tab { background:transparent; color:%s;"
-        " border:1px solid transparent; border-radius:11px; padding:10px 11px; margin:3px 0; min-height:48px; }\n"
-        "notebook.runner-notebook > header.left > tabs > tab:hover { background:%s; }\n"
-        "notebook.runner-notebook > header.left > tabs > tab:checked { background:%s;"
-        " border-color:%s; border-left:3px solid %s; }\n"
+        ".runner-content-shell { background:%s; border:1px solid %s; border-radius:16px; }\n"
+        ".runner-sidebar { background:%s; border-right:1px solid %s;"
+        " border-radius:16px 0 0 16px; padding:10px 8px; min-width:218px; }\n"
+        "notebook.runner-notebook { background:%s; border:0; border-radius:0 16px 16px 0; }\n"
+        "button.runner-nav-button { background:transparent; color:%s;"
+        " border:1px solid transparent; border-radius:11px; padding:10px 11px;"
+        " min-height:58px; }\n"
+        "button.runner-nav-button:hover { background:%s; }\n"
+        "button.runner-nav-button:checked { background:%s; border-color:%s;"
+        " border-left:3px solid %s; }\n"
+        "button.runner-nav-button:focus { border-color:%s; }\n"
         ".runner-tab-icon { background:%s; border:1px solid %s; border-radius:10px; padding:6px; }\n"
+        ".runner-tab-icon image { color:%s; }\n"
         ".nav-primary { color:%s; font-size:13px; font-weight:%u; }\n"
         ".nav-secondary { color:%s; font-size:10px; }\n",
         card, border,
-        panel, border, text,
+        panel, border,
+        card, text,
         hover, select_bg, accent, accent,
-        surface, border,
+        status_border,
+        surface, border, accent,
         title, (unsigned int)type->ui_bold_weight, muted);
 
     g_string_append_printf(
@@ -688,13 +694,13 @@ static void apply_theme(RunnerScopeApp *app)
         "#footer-actions button { background:%s; color:%s; border:1px solid %s;"
         " border-radius:%upx; min-height:32px; padding:4px 10px; }\n"
         "#footer-actions button:hover { background:%s; border-color:%s; }\n"
-        "#footer-actions button:disabled { background:%s; color:%s; border-color:%s; opacity:0.55; }\n"
+        "#footer-actions button:disabled { background:%s; color:%s; border-color:%s; opacity:0.78; }\n"
         ".status-text { color:%s; font-size:11px; }\n"
         ".version-text { color:%s; font-size:10px; }\n",
         card, border,
         surface, text, status_border, (unsigned int)metrics->control_radius,
         hover, accent,
-        panel, subtle, border,
+        panel, muted, status_border,
         muted, muted);
 
     GtkCssProvider *provider = gtk_css_provider_new();
@@ -2079,6 +2085,43 @@ static GtkWidget *make_tab_label(const char *icon_name,
     return box;
 }
 
+static void on_nav_toggled(GtkToggleButton *button, gpointer user_data)
+{
+    if (!gtk_toggle_button_get_active(button)) return;
+
+    RunnerScopeApp *app = user_data;
+    const gint stored_page = GPOINTER_TO_INT(
+        g_object_get_data(G_OBJECT(button), "runner-page-index"));
+    const gint page = stored_page - 1;
+    if (page >= 0 && page < 4)
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);
+}
+
+static GtkWidget *make_nav_button(RunnerScopeApp *app,
+                                  GtkWidget *group_member,
+                                  gint page,
+                                  const char *icon_name,
+                                  const char *title,
+                                  const char *subtitle)
+{
+    GtkWidget *button = group_member
+        ? gtk_radio_button_new_from_widget(GTK_RADIO_BUTTON(group_member))
+        : gtk_radio_button_new(NULL);
+
+    gtk_toggle_button_set_mode(GTK_TOGGLE_BUTTON(button), FALSE);
+    gtk_button_set_relief(GTK_BUTTON(button), GTK_RELIEF_NONE);
+    gtk_widget_set_hexpand(button, TRUE);
+    gtk_widget_set_halign(button, GTK_ALIGN_FILL);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(button), "runner-nav-button");
+    gtk_container_add(
+        GTK_CONTAINER(button), make_tab_label(icon_name, title, subtitle));
+    g_object_set_data(
+        G_OBJECT(button), "runner-page-index", GINT_TO_POINTER(page + 1));
+    g_signal_connect(button, "toggled", G_CALLBACK(on_nav_toggled), app);
+    return button;
+}
+
 static void build_ui(RunnerScopeApp *app)
 {
     app->window = gtk_application_window_new(app->application);
@@ -2278,15 +2321,33 @@ static void build_ui(RunnerScopeApp *app)
         G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,
         G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);
 
+    /*
+     * GtkNotebook's vertical custom tabs can lose or clip their child widgets
+     * under some GTK themes/scaling combinations. Keep GtkNotebook as the page
+     * host, but use explicit radio-style navigation buttons so the left-hand
+     * controls always have stable allocation and readable labels.
+     */
+    GtkWidget *content_shell = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_hexpand(content_shell, TRUE);
+    gtk_widget_set_vexpand(content_shell, TRUE);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(content_shell), "runner-content-shell");
+    gtk_box_pack_start(GTK_BOX(outer), content_shell, TRUE, TRUE, 0);
+
+    GtkWidget *navigation = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_widget_set_size_request(navigation, 218, -1);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(navigation), "runner-sidebar");
+    gtk_box_pack_start(GTK_BOX(content_shell), navigation, FALSE, FALSE, 0);
+
     app->notebook = gtk_notebook_new();
-    gtk_notebook_set_tab_pos(GTK_NOTEBOOK(app->notebook), GTK_POS_LEFT);
-    gtk_notebook_set_scrollable(GTK_NOTEBOOK(app->notebook), TRUE);
+    gtk_notebook_set_show_tabs(GTK_NOTEBOOK(app->notebook), FALSE);
     gtk_notebook_set_show_border(GTK_NOTEBOOK(app->notebook), FALSE);
     gtk_widget_set_hexpand(app->notebook, TRUE);
     gtk_widget_set_vexpand(app->notebook, TRUE);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->notebook), "runner-notebook");
-    gtk_box_pack_start(GTK_BOX(outer), app->notebook, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(content_shell), app->notebook, TRUE, TRUE, 0);
 
     GtkWidget *scroll = scrolled_tree(app->runner_store);
     gtk_style_context_add_class(
@@ -2298,8 +2359,7 @@ static void build_ui(RunnerScopeApp *app)
     for (gint i = 0; i < RUNNER_N_COLS; i++)
         tree_add_text_column(app->runner_tree, runner_titles[i], i, runner_widths[i]);
     gtk_notebook_append_page(
-        GTK_NOTEBOOK(app->notebook), scroll,
-        make_tab_label("computer-symbolic", "Runners", "Fleet state & utilisation"));
+        GTK_NOTEBOOK(app->notebook), scroll, NULL);
 
     scroll = scrolled_tree(app->activity_store);
     gtk_style_context_add_class(
@@ -2311,9 +2371,7 @@ static void build_ui(RunnerScopeApp *app)
     for (gint i = 0; i < 10; i++)
         tree_add_text_column(app->activity_tree, act_titles[i], i, act_widths[i]);
     gtk_notebook_append_page(
-        GTK_NOTEBOOK(app->notebook), scroll,
-        make_tab_label("media-playback-start-symbolic", "Active jobs",
-                       "Work executing now"));
+        GTK_NOTEBOOK(app->notebook), scroll, NULL);
     GtkTreeSelection *selection =
         gtk_tree_view_get_selection(GTK_TREE_VIEW(app->activity_tree));
     g_signal_connect(
@@ -2328,9 +2386,7 @@ static void build_ui(RunnerScopeApp *app)
     tree_add_text_column(app->history_tree, "Event", HIST_COL_EVENT, 100);
     tree_add_text_column(app->history_tree, "Detail", HIST_COL_DETAIL, 500);
     gtk_notebook_append_page(
-        GTK_NOTEBOOK(app->notebook), scroll,
-        make_tab_label("document-open-recent-symbolic", "History",
-                       "Session activity"));
+        GTK_NOTEBOOK(app->notebook), scroll, NULL);
 
     scroll = scrolled_tree(app->local_store);
     gtk_style_context_add_class(
@@ -2342,12 +2398,29 @@ static void build_ui(RunnerScopeApp *app)
     for (gint i = 0; i < 9; i++)
         tree_add_text_column(app->local_tree, local_titles[i], i, local_widths[i]);
     gtk_notebook_append_page(
-        GTK_NOTEBOOK(app->notebook), scroll,
-        make_tab_label("utilities-system-monitor-symbolic", "Local Linux health",
-                       "Services & diagnostics"));
+        GTK_NOTEBOOK(app->notebook), scroll, NULL);
     selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->local_tree));
     g_signal_connect(
         selection, "changed", G_CALLBACK(on_local_selection), app);
+
+    GtkWidget *nav_runners = make_nav_button(
+        app, NULL, 0, "computer-symbolic",
+        "Runners", "Fleet state & utilisation");
+    GtkWidget *nav_active = make_nav_button(
+        app, nav_runners, 1, "media-playback-start-symbolic",
+        "Active jobs", "Work executing now");
+    GtkWidget *nav_history = make_nav_button(
+        app, nav_runners, 2, "document-open-recent-symbolic",
+        "History", "Session activity");
+    GtkWidget *nav_local = make_nav_button(
+        app, nav_runners, 3, "utilities-system-monitor-symbolic",
+        "Local Linux health", "Services & diagnostics");
+
+    gtk_box_pack_start(GTK_BOX(navigation), nav_runners, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(navigation), nav_active, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(navigation), nav_history, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(navigation), nav_local, FALSE, FALSE, 0);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(nav_runners), TRUE);
 
     GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
     gtk_style_context_add_class(
