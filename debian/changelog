@@ -1,3 +1,13 @@
+infiltrator-runner-monitor (1.2.23) unstable; urgency=medium
+
+  * Fix the oversized horizontal scrollbar by separating GTK scrollbar
+    thickness from slider minimum length for horizontal and vertical
+    orientations.
+  * Keep the horizontal track at 10 px with an 8 px slider thickness while
+    retaining the 28 px minimum slider length needed for usability.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 29 Sep 2026 18:24:00 +1000
+
 infiltrator-runner-monitor (1.2.22) unstable; urgency=medium
 
   * Remove the duplicated sidebar width constraint that caused GTK to reserve
