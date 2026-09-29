@@ -649,22 +649,23 @@ static void apply_theme(RunnerScopeApp *app)
         css,
         ".runner-content-shell { background:%s; border:1px solid %s; border-radius:16px; }\n"
         ".runner-sidebar { background:%s; border-right:1px solid %s;"
-        " border-radius:16px 0 0 16px; padding:10px 8px; min-width:218px; }\n"
+        " border-radius:16px 0 0 16px; padding:8px 6px; min-width:196px; }\n"
         "notebook.runner-notebook { background:%s; border:0; border-radius:0 16px 16px 0; }\n"
-        "button.runner-nav-button { background:transparent; color:%s;"
-        " border:1px solid transparent; border-radius:11px; padding:10px 11px;"
-        " min-height:58px; }\n"
-        "button.runner-nav-button:hover { background:%s; }\n"
-        "button.runner-nav-button:checked { background:%s; border-color:%s;"
+        ".runner-nav-list { background:transparent; color:%s; border:0; }\n"
+        ".runner-nav-list row { background:transparent; color:%s;"
+        " border:1px solid transparent; border-radius:9px; margin:2px 0;"
+        " padding:7px 8px; min-height:46px; }\n"
+        ".runner-nav-list row:hover { background:%s; }\n"
+        ".runner-nav-list row:selected { background:%s; border-color:%s;"
         " border-left:3px solid %s; }\n"
-        "button.runner-nav-button:focus { border-color:%s; }\n"
-        ".runner-tab-icon { background:%s; border:1px solid %s; border-radius:10px; padding:6px; }\n"
+        ".runner-nav-list row:focus { border-color:%s; }\n"
+        ".runner-tab-icon { background:%s; border:1px solid %s; border-radius:9px; padding:5px; }\n"
         ".runner-tab-icon image { color:%s; }\n"
         ".nav-primary { color:%s; font-size:13px; font-weight:%u; }\n"
         ".nav-secondary { color:%s; font-size:10px; }\n",
         card, border,
         panel, border,
-        card, text,
+        card, text, text,
         hover, select_bg, accent, accent,
         status_border,
         surface, border, accent,
@@ -2057,7 +2058,7 @@ static GtkWidget *make_tab_label(const char *icon_name,
                                  const char *title,
                                  const char *subtitle)
 {
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     GtkWidget *icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     GtkWidget *icon = gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_MENU);
     GtkWidget *copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
@@ -2071,55 +2072,44 @@ static GtkWidget *make_tab_label(const char *icon_name,
     gtk_style_context_add_class(
         gtk_widget_get_style_context(secondary), "nav-secondary");
 
-    gtk_image_set_pixel_size(GTK_IMAGE(icon), 22);
+    gtk_image_set_pixel_size(GTK_IMAGE(icon), 20);
     gtk_box_pack_start(GTK_BOX(icon_well), icon, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(box), icon_well, FALSE, FALSE, 0);
 
     gtk_widget_set_halign(primary, GTK_ALIGN_START);
     gtk_widget_set_halign(secondary, GTK_ALIGN_START);
+    gtk_widget_set_hexpand(copy, TRUE);
     gtk_box_pack_start(GTK_BOX(copy), primary, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(copy), secondary, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), copy, TRUE, TRUE, 0);
-
-    gtk_widget_set_size_request(box, 188, -1);
+    gtk_widget_set_hexpand(box, TRUE);
+    gtk_widget_set_halign(box, GTK_ALIGN_FILL);
     return box;
 }
 
-static void on_nav_toggled(GtkToggleButton *button, gpointer user_data)
+static void on_nav_row_selected(GtkListBox *list,
+                                GtkListBoxRow *row,
+                                gpointer user_data)
 {
-    if (!gtk_toggle_button_get_active(button)) return;
+    (void)list;
+    if (!row) return;
 
     RunnerScopeApp *app = user_data;
-    const gint stored_page = GPOINTER_TO_INT(
-        g_object_get_data(G_OBJECT(button), "runner-page-index"));
-    const gint page = stored_page - 1;
+    const gint page = gtk_list_box_row_get_index(row);
     if (page >= 0 && page < 4)
         gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);
 }
 
-static GtkWidget *make_nav_button(RunnerScopeApp *app,
-                                  GtkWidget *group_member,
-                                  gint page,
-                                  const char *icon_name,
-                                  const char *title,
-                                  const char *subtitle)
+static GtkWidget *make_nav_row(const char *icon_name,
+                               const char *title,
+                               const char *subtitle)
 {
-    GtkWidget *button = group_member
-        ? gtk_radio_button_new_from_widget(GTK_RADIO_BUTTON(group_member))
-        : gtk_radio_button_new(NULL);
-
-    gtk_toggle_button_set_mode(GTK_TOGGLE_BUTTON(button), FALSE);
-    gtk_button_set_relief(GTK_BUTTON(button), GTK_RELIEF_NONE);
-    gtk_widget_set_hexpand(button, TRUE);
-    gtk_widget_set_halign(button, GTK_ALIGN_FILL);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(button), "runner-nav-button");
+    GtkWidget *row = gtk_list_box_row_new();
+    gtk_list_box_row_set_activatable(GTK_LIST_BOX_ROW(row), TRUE);
+    gtk_list_box_row_set_selectable(GTK_LIST_BOX_ROW(row), TRUE);
     gtk_container_add(
-        GTK_CONTAINER(button), make_tab_label(icon_name, title, subtitle));
-    g_object_set_data(
-        G_OBJECT(button), "runner-page-index", GINT_TO_POINTER(page + 1));
-    g_signal_connect(button, "toggled", G_CALLBACK(on_nav_toggled), app);
-    return button;
+        GTK_CONTAINER(row), make_tab_label(icon_name, title, subtitle));
+    return row;
 }
 
 static void build_ui(RunnerScopeApp *app)
@@ -2334,11 +2324,21 @@ static void build_ui(RunnerScopeApp *app)
         gtk_widget_get_style_context(content_shell), "runner-content-shell");
     gtk_box_pack_start(GTK_BOX(outer), content_shell, TRUE, TRUE, 0);
 
-    GtkWidget *navigation = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
-    gtk_widget_set_size_request(navigation, 218, -1);
+    GtkWidget *navigation = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_size_request(navigation, 196, -1);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(navigation), "runner-sidebar");
     gtk_box_pack_start(GTK_BOX(content_shell), navigation, FALSE, FALSE, 0);
+
+    GtkWidget *nav_list = gtk_list_box_new();
+    gtk_list_box_set_selection_mode(GTK_LIST_BOX(nav_list), GTK_SELECTION_BROWSE);
+    gtk_list_box_set_activate_on_single_click(GTK_LIST_BOX(nav_list), TRUE);
+    gtk_widget_set_hexpand(nav_list, TRUE);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(nav_list), "runner-nav-list");
+    gtk_box_pack_start(GTK_BOX(navigation), nav_list, FALSE, FALSE, 0);
+    g_signal_connect(
+        nav_list, "row-selected", G_CALLBACK(on_nav_row_selected), app);
 
     app->notebook = gtk_notebook_new();
     gtk_notebook_set_show_tabs(GTK_NOTEBOOK(app->notebook), FALSE);
@@ -2403,24 +2403,22 @@ static void build_ui(RunnerScopeApp *app)
     g_signal_connect(
         selection, "changed", G_CALLBACK(on_local_selection), app);
 
-    GtkWidget *nav_runners = make_nav_button(
-        app, NULL, 0, "computer-symbolic",
-        "Runners", "Fleet state & utilisation");
-    GtkWidget *nav_active = make_nav_button(
-        app, nav_runners, 1, "media-playback-start-symbolic",
-        "Active jobs", "Work executing now");
-    GtkWidget *nav_history = make_nav_button(
-        app, nav_runners, 2, "document-open-recent-symbolic",
-        "History", "Session activity");
-    GtkWidget *nav_local = make_nav_button(
-        app, nav_runners, 3, "utilities-system-monitor-symbolic",
+    GtkWidget *nav_runners = make_nav_row(
+        "computer-symbolic", "Runners", "Fleet state & utilisation");
+    GtkWidget *nav_active = make_nav_row(
+        "media-playback-start-symbolic", "Active jobs", "Work executing now");
+    GtkWidget *nav_history = make_nav_row(
+        "document-open-recent-symbolic", "History", "Session activity");
+    GtkWidget *nav_local = make_nav_row(
+        "utilities-system-monitor-symbolic",
         "Local Linux health", "Services & diagnostics");
 
-    gtk_box_pack_start(GTK_BOX(navigation), nav_runners, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(navigation), nav_active, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(navigation), nav_history, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(navigation), nav_local, FALSE, FALSE, 0);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(nav_runners), TRUE);
+    gtk_list_box_insert(GTK_LIST_BOX(nav_list), nav_runners, -1);
+    gtk_list_box_insert(GTK_LIST_BOX(nav_list), nav_active, -1);
+    gtk_list_box_insert(GTK_LIST_BOX(nav_list), nav_history, -1);
+    gtk_list_box_insert(GTK_LIST_BOX(nav_list), nav_local, -1);
+    gtk_list_box_select_row(
+        GTK_LIST_BOX(nav_list), GTK_LIST_BOX_ROW(nav_runners));
 
     GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
     gtk_style_context_add_class(
