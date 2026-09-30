@@ -914,7 +914,6 @@ static GtkWidget *scrolled_tree(GtkListStore *store)
     gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(tree), TRUE);
     gtk_tree_view_set_enable_search(GTK_TREE_VIEW(tree), TRUE);
     gtk_tree_view_set_grid_lines(GTK_TREE_VIEW(tree), GTK_TREE_VIEW_GRID_LINES_HORIZONTAL);
-    gtk_tree_view_set_rules_hint(GTK_TREE_VIEW(tree), TRUE);
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scroll), GTK_SHADOW_NONE);
     gtk_scrolled_window_set_policy(
@@ -1012,7 +1011,7 @@ static void show_selection_card(RunnerScopeApp *app,
     gtk_label_set_text(GTK_LABEL(app->selection_title), title ? title : "Selection");
     gtk_label_set_text(GTK_LABEL(app->selection_primary), primary ? primary : "—");
     gtk_label_set_text(GTK_LABEL(app->selection_secondary), secondary ? secondary : "—");
-    gtk_widget_show(app->selection_card);
+    gtk_widget_show_all(app->selection_card);
 }
 
 static void update_workspace_context(RunnerScopeApp *app, gint page)
