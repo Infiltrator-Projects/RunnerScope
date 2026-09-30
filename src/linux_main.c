@@ -1937,20 +1937,6 @@ static void on_settings(GtkButton *button, gpointer user_data)
 }
 
 
-static void on_menu_export(GtkMenuItem *item, gpointer user_data)
-{
-    (void)item;
-    on_export(NULL, user_data);
-}
-
-static void on_menu_quit(GtkMenuItem *item, gpointer user_data)
-{
-    (void)item;
-    RunnerScopeApp *app = user_data;
-    if (app && app->application)
-        g_application_quit(G_APPLICATION(app->application));
-}
-
 static void on_system_theme_changed(
     GObject *object, GParamSpec *pspec, gpointer user_data)
 {
@@ -2004,24 +1990,10 @@ static GtkWidget *build_menu_bar(RunnerScopeApp *app)
     GtkWidget *bar = gtk_menu_bar_new();
 
     /*
-     * Settings and theme selection deliberately live in the Settings dialog,
-     * and refresh is already a first-class footer action.  Keep the title-bar
-     * menu limited to commands that do not duplicate visible application
-     * controls.
+     * Export, settings, refresh and window closing already have direct UI
+     * controls.  Keep only Help/About in the title bar instead of duplicating
+     * those actions in conventional application menus.
      */
-    GtkWidget *file_root = gtk_menu_item_new_with_mnemonic("_File");
-    GtkWidget *file_menu = gtk_menu_new();
-    gtk_menu_shell_append(
-        GTK_MENU_SHELL(file_menu),
-        menu_item("_Export CSV…", G_CALLBACK(on_menu_export), app));
-    gtk_menu_shell_append(
-        GTK_MENU_SHELL(file_menu), gtk_separator_menu_item_new());
-    gtk_menu_shell_append(
-        GTK_MENU_SHELL(file_menu),
-        menu_item("_Quit", G_CALLBACK(on_menu_quit), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_root), file_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), file_root);
-
     GtkWidget *help_root = gtk_menu_item_new_with_mnemonic("_Help");
     GtkWidget *help_menu = gtk_menu_new();
     gtk_menu_shell_append(
