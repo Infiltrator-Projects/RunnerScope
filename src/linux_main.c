@@ -175,6 +175,14 @@ typedef struct {
     GtkWidget *restart_button;
     GtkWidget *theme_menu_items[3];
     GtkWidget *counter_labels[7];
+    GtkWidget *workspace_title;
+    GtkWidget *workspace_subtitle;
+    GtkWidget *workspace_metric_caption[4];
+    GtkWidget *workspace_metric_value[4];
+    GtkWidget *selection_card;
+    GtkWidget *selection_title;
+    GtkWidget *selection_primary;
+    GtkWidget *selection_secondary;
 
     GtkListStore *runner_store;
     GtkListStore *activity_store;
@@ -650,7 +658,16 @@ static void apply_theme(RunnerScopeApp *app)
         ".runner-content-shell { background:%s; border:1px solid %s; border-radius:16px; }\n"
         ".runner-sidebar { background:%s; border-right:1px solid %s;"
         " border-radius:16px 0 0 16px; padding:8px 6px; }\n"
-        "notebook.runner-notebook { background:%s; border:0; border-radius:0 16px 16px 0; }\n"
+        ".runner-workspace { background:%s; border-radius:0 16px 16px 0; }\n"
+        ".workspace-header { background:%s; border-bottom:1px solid %s;"
+        " padding:12px 14px; }\n"
+        ".workspace-title { color:%s; font-size:18px; font-weight:%u; }\n"
+        ".workspace-subtitle { color:%s; font-size:11px; }\n"
+        ".workspace-metric { min-width:76px; background:%s; border:1px solid %s;"
+        " border-radius:9px; padding:6px 9px; }\n"
+        ".workspace-metric-caption { color:%s; font-size:9px; font-weight:%u; }\n"
+        ".workspace-metric-value { color:%s; font-size:14px; font-weight:%u; }\n"
+        "notebook.runner-notebook { background:%s; border:0; }\n"
         ".runner-nav-list { background:transparent; color:%s; border:0; }\n"
         ".runner-nav-list row { background:transparent; color:%s;"
         " border:1px solid transparent; border-radius:9px; margin:2px 0;"
@@ -665,6 +682,13 @@ static void apply_theme(RunnerScopeApp *app)
         ".nav-secondary { color:%s; font-size:10px; }\n",
         card, border,
         panel, border,
+        card,
+        panel, border,
+        title, (unsigned int)type->ui_bold_weight,
+        muted,
+        surface, status_border,
+        muted, (unsigned int)type->ui_bold_weight,
+        title, (unsigned int)type->ui_bold_weight,
         card, text, text,
         hover, select_bg, accent, accent,
         status_border,
@@ -674,11 +698,17 @@ static void apply_theme(RunnerScopeApp *app)
     g_string_append_printf(
         css,
         "scrolledwindow.runner-table { background:%s; border:0; }\n"
-        "treeview.view { background:%s; color:%s; border:0; }\n"
+        "treeview.view { background:%s; color:%s; border:0;"
+        " -GtkTreeView-horizontal-separator:0; -GtkTreeView-vertical-separator:0; }\n"
         "treeview.view:selected { background:%s; color:%s; }\n"
         "treeview.view header button { background:%s; color:%s; border:0; border-bottom:1px solid %s;"
-        " min-height:34px; font-weight:%u; }\n"
+        " min-height:36px; padding:0 5px; font-weight:%u; }\n"
         "treeview.view header button:hover { background:%s; }\n"
+        ".selection-card { background:%s; border-top:1px solid %s; padding:10px 14px; }\n"
+        ".selection-icon { color:%s; padding:4px; }\n"
+        ".selection-title { color:%s; font-size:9px; font-weight:%u; }\n"
+        ".selection-primary { color:%s; font-size:13px; font-weight:%u; }\n"
+        ".selection-secondary { color:%s; font-size:10px; }\n"
         "scrollbar { background:transparent; }\n"
         "scrollbar.vertical { min-width:10px; }\n"
         "scrollbar.horizontal { min-height:10px; }\n"
@@ -690,6 +720,11 @@ static void apply_theme(RunnerScopeApp *app)
         select_bg, select_fg,
         panel, title, border, (unsigned int)type->ui_bold_weight,
         hover,
+        panel, border,
+        accent,
+        muted, (unsigned int)type->ui_bold_weight,
+        title, (unsigned int)type->ui_bold_weight,
+        muted,
         subtle, subtle, accent);
 
     g_string_append_printf(
@@ -852,27 +887,208 @@ static void load_history(RunnerScopeApp *app)
     g_free(contents); g_free(path);
 }
 
-static void tree_add_text_column(GtkWidget *tree, const char *title,
-                                 gint column, gint min_width)
+static GtkTreeViewColumn *tree_add_text_column(GtkWidget *tree,
+                                             const char *title,
+                                             gint column,
+                                             gint min_width)
 {
     GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+    g_object_set(
+        renderer,
+        "ellipsize", PANGO_ELLIPSIZE_END,
+        "ypad", 7,
+        "xpad", 5,
+        NULL);
     GtkTreeViewColumn *view_column =
         gtk_tree_view_column_new_with_attributes(title, renderer, "text", column, NULL);
     gtk_tree_view_column_set_resizable(view_column, TRUE);
     gtk_tree_view_column_set_min_width(view_column, min_width);
     gtk_tree_view_column_set_sort_column_id(view_column, column);
     gtk_tree_view_append_column(GTK_TREE_VIEW(tree), view_column);
+    return view_column;
 }
 
 static GtkWidget *scrolled_tree(GtkListStore *store)
 {
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
     gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(tree), TRUE);
+    gtk_tree_view_set_enable_search(GTK_TREE_VIEW(tree), TRUE);
+    gtk_tree_view_set_grid_lines(GTK_TREE_VIEW(tree), GTK_TREE_VIEW_GRID_LINES_HORIZONTAL);
+    gtk_tree_view_set_rules_hint(GTK_TREE_VIEW(tree), TRUE);
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scroll), GTK_SHADOW_NONE);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_container_add(GTK_CONTAINER(scroll), tree);
     gtk_widget_set_hexpand(scroll, TRUE);
     gtk_widget_set_vexpand(scroll, TRUE);
     return scroll;
+}
+
+static GtkWidget *make_workspace_metric(const char *caption,
+                                        GtkWidget **caption_out,
+                                        GtkWidget **value_out)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    GtkWidget *caption_label = gtk_label_new(caption);
+    GtkWidget *value_label = gtk_label_new("—");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(box), "workspace-metric");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(caption_label), "workspace-metric-caption");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(value_label), "workspace-metric-value");
+    gtk_widget_set_halign(caption_label, GTK_ALIGN_START);
+    gtk_widget_set_halign(value_label, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(box), caption_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), value_label, FALSE, FALSE, 0);
+    *caption_out = caption_label;
+    *value_out = value_label;
+    return box;
+}
+
+static void workspace_metric(RunnerScopeApp *app, guint index,
+                             const char *caption, const char *value)
+{
+    if (!app || index >= 4U || !app->workspace_metric_caption[index] ||
+        !app->workspace_metric_value[index])
+        return;
+    gtk_label_set_text(
+        GTK_LABEL(app->workspace_metric_caption[index]), caption ? caption : "—");
+    gtk_label_set_text(
+        GTK_LABEL(app->workspace_metric_value[index]), value ? value : "—");
+}
+
+static guint count_local_state(RunnerScopeApp *app, const char *state)
+{
+    guint count = 0U;
+    if (!app || !state) return 0U;
+    for (guint i = 0U; i < app->local_rows->len; i++) {
+        LocalRow *row = g_ptr_array_index(app->local_rows, i);
+        if (row->service_state && g_ascii_strcasecmp(row->service_state, state) == 0)
+            count++;
+    }
+    return count;
+}
+
+static guint count_local_github(RunnerScopeApp *app)
+{
+    guint count = 0U;
+    if (!app) return 0U;
+    for (guint i = 0U; i < app->local_rows->len; i++) {
+        LocalRow *row = g_ptr_array_index(app->local_rows, i);
+        if (row->github_state && *row->github_state &&
+            strcmp(row->github_state, "—") != 0 &&
+            g_ascii_strcasecmp(row->github_state, "unknown") != 0)
+            count++;
+    }
+    return count;
+}
+
+static guint count_local_diagnostics(RunnerScopeApp *app)
+{
+    guint count = 0U;
+    if (!app) return 0U;
+    for (guint i = 0U; i < app->local_rows->len; i++) {
+        LocalRow *row = g_ptr_array_index(app->local_rows, i);
+        if (row->diag && *row->diag && strcmp(row->diag, "—") != 0)
+            count++;
+    }
+    return count;
+}
+
+static void clear_selection_card(RunnerScopeApp *app)
+{
+    if (!app || !app->selection_card) return;
+    gtk_widget_hide(app->selection_card);
+}
+
+static void show_selection_card(RunnerScopeApp *app,
+                                const char *title,
+                                const char *primary,
+                                const char *secondary)
+{
+    if (!app || !app->selection_card) return;
+    gtk_label_set_text(GTK_LABEL(app->selection_title), title ? title : "Selection");
+    gtk_label_set_text(GTK_LABEL(app->selection_primary), primary ? primary : "—");
+    gtk_label_set_text(GTK_LABEL(app->selection_secondary), secondary ? secondary : "—");
+    gtk_widget_show(app->selection_card);
+}
+
+static void update_workspace_context(RunnerScopeApp *app, gint page)
+{
+    if (!app || !app->workspace_title || !app->workspace_subtitle) return;
+
+    char a[32], b[32], d[32], uptime[64];
+    switch (page) {
+        case 0:
+            gtk_label_set_text(GTK_LABEL(app->workspace_title), "Runner fleet");
+            gtk_label_set_text(
+                GTK_LABEL(app->workspace_subtitle),
+                "Capacity, state changes, workload ownership and utilisation across every self-hosted runner.");
+            g_snprintf(a, sizeof(a), "%u", app->runners_total);
+            g_snprintf(b, sizeof(b), "%u", app->runners_running);
+            g_snprintf(d, sizeof(d), "%u", app->runners_idle);
+            workspace_metric(app, 0U, "TOTAL", a);
+            workspace_metric(app, 1U, "RUNNING", b);
+            workspace_metric(app, 2U, "IDLE", d);
+            g_snprintf(a, sizeof(a), "%u", app->runners_offline);
+            workspace_metric(app, 3U, "OFFLINE", a);
+            break;
+        case 1:
+            gtk_label_set_text(GTK_LABEL(app->workspace_title), "Active work");
+            gtk_label_set_text(
+                GTK_LABEL(app->workspace_subtitle),
+                "Live workflow execution across local self-hosted capacity and GitHub-hosted jobs.");
+            g_snprintf(a, sizeof(a), "%u", app->local_active);
+            g_snprintf(b, sizeof(b), "%u", app->hosted_active);
+            g_snprintf(d, sizeof(d), "%u", app->queued);
+            workspace_metric(app, 0U, "LOCAL", a);
+            workspace_metric(app, 1U, "GITHUB", b);
+            workspace_metric(app, 2U, "QUEUED", d);
+            g_snprintf(a, sizeof(a), "%u", app->local_active + app->hosted_active);
+            workspace_metric(app, 3U, "ACTIVE", a);
+            break;
+        case 2: {
+            gtk_label_set_text(GTK_LABEL(app->workspace_title), "Session history");
+            gtk_label_set_text(
+                GTK_LABEL(app->workspace_subtitle),
+                "State transitions and work observed by this monitor session.");
+            g_snprintf(a, sizeof(a), "%u", app->history_rows->len);
+            g_snprintf(b, sizeof(b), "%u", g_hash_table_size(app->sessions));
+            const char *filter = gtk_entry_get_text(GTK_ENTRY(app->filter_entry));
+            char *uptime_text =
+                duration_text(now_monotonic() - app->session_started);
+            g_strlcpy(uptime, uptime_text ? uptime_text : "—", sizeof(uptime));
+            g_free(uptime_text);
+            workspace_metric(app, 0U, "EVENTS", a);
+            workspace_metric(app, 1U, "RUNNERS", b);
+            workspace_metric(app, 2U, "UPTIME", uptime);
+            workspace_metric(app, 3U, "FILTER", filter && *filter ? "ACTIVE" : "ALL");
+            break;
+        }
+        default:
+            gtk_label_set_text(GTK_LABEL(app->workspace_title), "Local Linux health");
+            gtk_label_set_text(
+                GTK_LABEL(app->workspace_subtitle),
+                "Installed runner services, process identity, GitHub linkage and latest diagnostic evidence.");
+            g_snprintf(a, sizeof(a), "%u", app->local_rows->len);
+            g_snprintf(b, sizeof(b), "%u", count_local_state(app, "RUNNING"));
+            g_snprintf(d, sizeof(d), "%u", count_local_github(app));
+            workspace_metric(app, 0U, "SERVICES", a);
+            workspace_metric(app, 1U, "RUNNING", b);
+            workspace_metric(app, 2U, "GITHUB", d);
+            g_snprintf(a, sizeof(a), "%u", count_local_diagnostics(app));
+            workspace_metric(app, 3U, "DIAGNOSTICS", a);
+            break;
+    }
+
+    if (app->open_job_button)
+        gtk_widget_set_visible(app->open_job_button, page == 1);
+    if (app->open_diag_button)
+        gtk_widget_set_visible(app->open_diag_button, page == 3);
+    if (app->restart_button)
+        gtk_widget_set_visible(app->restart_button, page == 3);
 }
 
 static void render_history(RunnerScopeApp *app)
@@ -1003,6 +1219,10 @@ static void update_summary(RunnerScopeApp *app)
     gtk_label_set_text(GTK_LABEL(app->summary_label), summary);
     g_free(summary);
     g_free(up_text);
+
+    if (app->notebook)
+        update_workspace_context(
+            app, gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
 }
 
 static gboolean runner_apply_idle(gpointer data)
@@ -2026,13 +2246,87 @@ static void on_restart(GtkButton *button, gpointer user_data)
     g_free(service);
 }
 
+static void on_runner_selection(GtkTreeSelection *selection, gpointer user_data)
+{
+    RunnerScopeApp *app = user_data;
+    GtkTreeModel *model = NULL;
+    GtkTreeIter iter;
+    if (!gtk_tree_selection_get_selected(selection, &model, &iter)) {
+        clear_selection_card(app);
+        return;
+    }
+    char *name = NULL, *state = NULL, *repo = NULL, *job = NULL, *state_for = NULL;
+    gtk_tree_model_get(model, &iter,
+        RUNNER_COL_NAME, &name,
+        RUNNER_COL_STATE, &state,
+        RUNNER_COL_REPO, &repo,
+        RUNNER_COL_JOB, &job,
+        RUNNER_COL_STATE_FOR, &state_for, -1);
+    char *primary = g_strdup_printf(
+        "%s  •  %s for %s", state ? state : "—", name ? name : "—",
+        state_for ? state_for : "—");
+    char *secondary = g_strdup_printf(
+        "%s  •  %s", repo ? repo : "No repository", job ? job : "No active job");
+    show_selection_card(app, "Selected runner", primary, secondary);
+    g_free(primary); g_free(secondary);
+    g_free(name); g_free(state); g_free(repo); g_free(job); g_free(state_for);
+}
+
 static void on_activity_selection(GtkTreeSelection *selection, gpointer user_data)
 {
     RunnerScopeApp *app = user_data;
     GtkTreeModel *model = NULL;
     GtkTreeIter iter;
-    gtk_widget_set_sensitive(app->open_job_button,
-        gtk_tree_selection_get_selected(selection, &model, &iter));
+    const gboolean selected =
+        gtk_tree_selection_get_selected(selection, &model, &iter);
+    gtk_widget_set_sensitive(app->open_job_button, selected);
+    if (!selected) {
+        clear_selection_card(app);
+        return;
+    }
+    char *repo = NULL, *workflow = NULL, *job = NULL, *step = NULL;
+    char *status = NULL, *runner = NULL;
+    gtk_tree_model_get(model, &iter,
+        ACT_COL_REPO, &repo,
+        ACT_COL_WORKFLOW, &workflow,
+        ACT_COL_JOB, &job,
+        ACT_COL_STEP, &step,
+        ACT_COL_STATUS, &status,
+        ACT_COL_RUNNER, &runner, -1);
+    char *primary = g_strdup_printf(
+        "%s  •  %s", status ? status : "—", job ? job : "—");
+    char *secondary = g_strdup_printf(
+        "%s / %s  •  %s  •  %s",
+        repo ? repo : "—", workflow ? workflow : "—",
+        runner ? runner : "—", step ? step : "—");
+    show_selection_card(app, "Selected job", primary, secondary);
+    g_free(primary); g_free(secondary);
+    g_free(repo); g_free(workflow); g_free(job); g_free(step);
+    g_free(status); g_free(runner);
+}
+
+static void on_history_selection(GtkTreeSelection *selection, gpointer user_data)
+{
+    RunnerScopeApp *app = user_data;
+    GtkTreeModel *model = NULL;
+    GtkTreeIter iter;
+    if (!gtk_tree_selection_get_selected(selection, &model, &iter)) {
+        clear_selection_card(app);
+        return;
+    }
+    char *time_text = NULL, *runner = NULL, *event = NULL, *detail = NULL;
+    gtk_tree_model_get(model, &iter,
+        HIST_COL_TIME, &time_text,
+        HIST_COL_RUNNER, &runner,
+        HIST_COL_EVENT, &event,
+        HIST_COL_DETAIL, &detail, -1);
+    char *primary = g_strdup_printf(
+        "%s  •  %s", event ? event : "—", runner ? runner : "—");
+    char *secondary = g_strdup_printf(
+        "%s  •  %s", time_text ? time_text : "—", detail ? detail : "—");
+    show_selection_card(app, "History event", primary, secondary);
+    g_free(primary); g_free(secondary);
+    g_free(time_text); g_free(runner); g_free(event); g_free(detail);
 }
 
 static void on_local_selection(GtkTreeSelection *selection, gpointer user_data)
@@ -2043,6 +2337,28 @@ static void on_local_selection(GtkTreeSelection *selection, gpointer user_data)
     const gboolean selected = gtk_tree_selection_get_selected(selection, &model, &iter);
     gtk_widget_set_sensitive(app->open_diag_button, selected);
     gtk_widget_set_sensitive(app->restart_button, selected);
+    if (!selected) {
+        clear_selection_card(app);
+        return;
+    }
+    char *runner = NULL, *service = NULL, *github = NULL, *pid = NULL;
+    char *diag = NULL, *age = NULL;
+    gtk_tree_model_get(model, &iter,
+        LOCAL_COL_RUNNER, &runner,
+        LOCAL_COL_SERVICE, &service,
+        LOCAL_COL_GITHUB, &github,
+        LOCAL_COL_PID, &pid,
+        LOCAL_COL_DIAG, &diag,
+        LOCAL_COL_DIAG_AGE, &age, -1);
+    char *primary = g_strdup_printf(
+        "%s  •  service %s  •  PID %s",
+        runner ? runner : "—", service ? service : "—", pid ? pid : "—");
+    char *secondary = g_strdup_printf(
+        "GitHub %s  •  diagnostic %s  •  age %s",
+        github ? github : "—", diag ? diag : "—", age ? age : "—");
+    show_selection_card(app, "Selected local runner", primary, secondary);
+    g_free(primary); g_free(secondary);
+    g_free(runner); g_free(service); g_free(github); g_free(pid); g_free(diag); g_free(age);
 }
 
 static GtkWidget *make_counter(const char *name, const char *css_class)
@@ -2099,8 +2415,11 @@ static void on_nav_row_selected(GtkListBox *list,
 
     RunnerScopeApp *app = user_data;
     const gint page = gtk_list_box_row_get_index(row);
-    if (page >= 0 && page < 4)
+    if (page >= 0 && page < 4) {
         gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);
+        update_workspace_context(app, page);
+        clear_selection_card(app);
+    }
 }
 
 static GtkWidget *make_nav_row(const char *icon_name,
@@ -2349,6 +2668,49 @@ static void build_ui(RunnerScopeApp *app)
     g_signal_connect(
         nav_list, "row-selected", G_CALLBACK(on_nav_row_selected), app);
 
+    GtkWidget *workspace = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_hexpand(workspace, TRUE);
+    gtk_widget_set_vexpand(workspace, TRUE);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(workspace), "runner-workspace");
+    gtk_box_pack_start(GTK_BOX(content_shell), workspace, TRUE, TRUE, 0);
+
+    GtkWidget *workspace_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(workspace_header), "workspace-header");
+    gtk_box_pack_start(GTK_BOX(workspace), workspace_header, FALSE, FALSE, 0);
+
+    GtkWidget *workspace_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(workspace_copy, TRUE);
+    app->workspace_title = gtk_label_new("Runner fleet");
+    app->workspace_subtitle = gtk_label_new(
+        "Capacity, state changes, workload ownership and utilisation across every self-hosted runner.");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->workspace_title), "workspace-title");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->workspace_subtitle), "workspace-subtitle");
+    gtk_widget_set_halign(app->workspace_title, GTK_ALIGN_START);
+    gtk_widget_set_halign(app->workspace_subtitle, GTK_ALIGN_START);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(app->workspace_subtitle), PANGO_ELLIPSIZE_END);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_copy), app->workspace_title, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_copy), app->workspace_subtitle, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(workspace_header), workspace_copy, TRUE, TRUE, 0);
+
+    GtkWidget *workspace_metrics = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(workspace_metrics), 6);
+    gtk_grid_set_column_homogeneous(GTK_GRID(workspace_metrics), TRUE);
+    for (guint i = 0U; i < 4U; i++) {
+        GtkWidget *metric = make_workspace_metric(
+            "—", &app->workspace_metric_caption[i],
+            &app->workspace_metric_value[i]);
+        gtk_grid_attach(GTK_GRID(workspace_metrics), metric, (gint)i, 0, 1, 1);
+    }
+    gtk_box_pack_end(
+        GTK_BOX(workspace_header), workspace_metrics, FALSE, FALSE, 0);
+
     app->notebook = gtk_notebook_new();
     gtk_notebook_set_show_tabs(GTK_NOTEBOOK(app->notebook), FALSE);
     gtk_notebook_set_show_border(GTK_NOTEBOOK(app->notebook), FALSE);
@@ -2356,7 +2718,45 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_set_vexpand(app->notebook, TRUE);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->notebook), "runner-notebook");
-    gtk_box_pack_start(GTK_BOX(content_shell), app->notebook, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(workspace), app->notebook, TRUE, TRUE, 0);
+
+    app->selection_card = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_no_show_all(app->selection_card, TRUE);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->selection_card), "selection-card");
+    GtkWidget *selection_icon =
+        gtk_image_new_from_icon_name("dialog-information-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_image_set_pixel_size(GTK_IMAGE(selection_icon), 22);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(selection_icon), "selection-icon");
+    gtk_box_pack_start(
+        GTK_BOX(app->selection_card), selection_icon, FALSE, FALSE, 0);
+    GtkWidget *selection_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+    gtk_widget_set_hexpand(selection_copy, TRUE);
+    app->selection_title = gtk_label_new("Selection");
+    app->selection_primary = gtk_label_new("—");
+    app->selection_secondary = gtk_label_new("—");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->selection_title), "selection-title");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->selection_primary), "selection-primary");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->selection_secondary), "selection-secondary");
+    gtk_widget_set_halign(app->selection_title, GTK_ALIGN_START);
+    gtk_widget_set_halign(app->selection_primary, GTK_ALIGN_START);
+    gtk_widget_set_halign(app->selection_secondary, GTK_ALIGN_START);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(app->selection_secondary), PANGO_ELLIPSIZE_END);
+    gtk_box_pack_start(
+        GTK_BOX(selection_copy), app->selection_title, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(selection_copy), app->selection_primary, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(selection_copy), app->selection_secondary, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(app->selection_card), selection_copy, TRUE, TRUE, 0);
+    gtk_box_pack_end(
+        GTK_BOX(workspace), app->selection_card, FALSE, FALSE, 0);
 
     GtkWidget *scroll = scrolled_tree(app->runner_store);
     gtk_style_context_add_class(
@@ -2364,9 +2764,17 @@ static void build_ui(RunnerScopeApp *app)
     app->runner_tree = gtk_bin_get_child(GTK_BIN(scroll));
     const char *runner_titles[] = {"Runner","OS","State","Repository","Current job",
         "Runtime","State for","Jobs","Busy","Labels"};
-    const gint runner_widths[] = {180,65,80,140,250,90,80,50,55,280};
-    for (gint i = 0; i < RUNNER_N_COLS; i++)
-        tree_add_text_column(app->runner_tree, runner_titles[i], i, runner_widths[i]);
+    const gint runner_widths[] = {165,55,70,120,180,72,72,42,48,130};
+    for (gint i = 0; i < RUNNER_N_COLS; i++) {
+        GtkTreeViewColumn *column =
+            tree_add_text_column(app->runner_tree, runner_titles[i], i, runner_widths[i]);
+        if (i == RUNNER_COL_JOB || i == RUNNER_COL_LABELS)
+            gtk_tree_view_column_set_expand(column, TRUE);
+    }
+    GtkTreeSelection *selection =
+        gtk_tree_view_get_selection(GTK_TREE_VIEW(app->runner_tree));
+    g_signal_connect(
+        selection, "changed", G_CALLBACK(on_runner_selection), app);
     gtk_notebook_append_page(
         GTK_NOTEBOOK(app->notebook), scroll, NULL);
 
@@ -2376,13 +2784,16 @@ static void build_ui(RunnerScopeApp *app)
     app->activity_tree = gtk_bin_get_child(GTK_BIN(scroll));
     const char *act_titles[] = {"Where","Repository","Workflow","Job","Current step",
         "Status","Runner","Runtime","Event","Branch"};
-    const gint act_widths[] = {85,140,180,210,180,90,170,90,70,100};
-    for (gint i = 0; i < 10; i++)
-        tree_add_text_column(app->activity_tree, act_titles[i], i, act_widths[i]);
+    const gint act_widths[] = {70,105,125,150,135,78,135,70,60,85};
+    for (gint i = 0; i < 10; i++) {
+        GtkTreeViewColumn *column =
+            tree_add_text_column(app->activity_tree, act_titles[i], i, act_widths[i]);
+        if (i == ACT_COL_JOB || i == ACT_COL_STEP)
+            gtk_tree_view_column_set_expand(column, TRUE);
+    }
     gtk_notebook_append_page(
         GTK_NOTEBOOK(app->notebook), scroll, NULL);
-    GtkTreeSelection *selection =
-        gtk_tree_view_get_selection(GTK_TREE_VIEW(app->activity_tree));
+    selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->activity_tree));
     g_signal_connect(
         selection, "changed", G_CALLBACK(on_activity_selection), app);
 
@@ -2390,10 +2801,15 @@ static void build_ui(RunnerScopeApp *app)
     gtk_style_context_add_class(
         gtk_widget_get_style_context(scroll), "runner-table");
     app->history_tree = gtk_bin_get_child(GTK_BIN(scroll));
-    tree_add_text_column(app->history_tree, "Time", HIST_COL_TIME, 110);
-    tree_add_text_column(app->history_tree, "Runner", HIST_COL_RUNNER, 180);
-    tree_add_text_column(app->history_tree, "Event", HIST_COL_EVENT, 100);
-    tree_add_text_column(app->history_tree, "Detail", HIST_COL_DETAIL, 500);
+    tree_add_text_column(app->history_tree, "Time", HIST_COL_TIME, 100);
+    tree_add_text_column(app->history_tree, "Runner", HIST_COL_RUNNER, 155);
+    tree_add_text_column(app->history_tree, "Event", HIST_COL_EVENT, 90);
+    GtkTreeViewColumn *history_detail =
+        tree_add_text_column(app->history_tree, "Detail", HIST_COL_DETAIL, 260);
+    gtk_tree_view_column_set_expand(history_detail, TRUE);
+    selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->history_tree));
+    g_signal_connect(
+        selection, "changed", G_CALLBACK(on_history_selection), app);
     gtk_notebook_append_page(
         GTK_NOTEBOOK(app->notebook), scroll, NULL);
 
@@ -2403,9 +2819,13 @@ static void build_ui(RunnerScopeApp *app)
     app->local_tree = gtk_bin_get_child(GTK_BIN(scroll));
     const char *local_titles[] = {"Runner","Service","GitHub","PID","Start","Account",
         "Latest diagnostic","Age","Path"};
-    const gint local_widths[] = {180,80,80,60,80,100,180,80,300};
-    for (gint i = 0; i < 9; i++)
-        tree_add_text_column(app->local_tree, local_titles[i], i, local_widths[i]);
+    const gint local_widths[] = {175,72,72,52,65,82,155,58,160};
+    for (gint i = 0; i < 9; i++) {
+        GtkTreeViewColumn *column =
+            tree_add_text_column(app->local_tree, local_titles[i], i, local_widths[i]);
+        if (i == LOCAL_COL_PATH)
+            gtk_tree_view_column_set_expand(column, TRUE);
+    }
     gtk_notebook_append_page(
         GTK_NOTEBOOK(app->notebook), scroll, NULL);
     selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(app->local_tree));
@@ -2521,6 +2941,8 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_end(
         GTK_BOX(status_row), version_box, FALSE, FALSE, 0);
 
+    update_workspace_context(app, 0);
+    clear_selection_card(app);
     apply_theme(app);
     GtkSettings *settings = gtk_settings_get_default();
     if (settings) {
