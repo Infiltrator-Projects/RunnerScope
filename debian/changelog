@@ -1,3 +1,21 @@
+infiltrator-runner-monitor (1.2.24) unstable; urgency=medium
+
+  * Finish the lower workspace presentation so each view has its own contextual
+    title, explanation and four live summary metrics instead of dropping
+    directly from the fleet hero into a raw table.
+  * Add selection detail surfaces for runners, active jobs, history events and
+    local Linux services, keeping the most useful context visible without
+    widening the tables.
+  * Tighten and ellipsize table columns, add deliberate row spacing and
+    selection treatment, and allow the information-heavy columns to consume
+    remaining width instead of forcing unnecessary horizontal scrolling.
+  * Make contextual actions page-aware so job actions appear with Active jobs
+    and diagnostic/restart actions appear with Local Linux health.
+  * Preserve the compact navigation, corrected scrollbar geometry and the
+    existing native monitoring behaviour.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Wed, 30 Sep 2026 17:55:00 +1000
+
 infiltrator-runner-monitor (1.2.23) unstable; urgency=medium
 
   * Fix the oversized horizontal scrollbar by separating GTK scrollbar
