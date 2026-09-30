@@ -1,3 +1,12 @@
+infiltrator-runner-monitor (1.2.26) unstable; urgency=medium
+
+  * Remove the redundant File menu from the title bar.
+  * Keep Export CSV as the direct workspace action and use the native window
+    close control instead of duplicating both commands in a menu.
+  * Leave Help/About as the only title-bar menu.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Wed, 30 Sep 2026 19:58:00 +1000
+
 infiltrator-runner-monitor (1.2.25) unstable; urgency=medium
 
   * Remove the redundant Edit/Settings and View menus from the title bar.
