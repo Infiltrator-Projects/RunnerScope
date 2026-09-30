@@ -1,3 +1,12 @@
+infiltrator-runner-monitor (1.2.25) unstable; urgency=medium
+
+  * Remove the redundant Edit/Settings and View menus from the title bar.
+  * Keep settings, theme selection and refresh in their existing first-class
+    application controls: Settings, the Settings theme selector and Refresh now.
+  * Remove the now-unused menu theme synchronisation state and callbacks.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Wed, 30 Sep 2026 19:25:00 +1000
+
 infiltrator-runner-monitor (1.2.24) unstable; urgency=medium
 
   * Finish the lower workspace presentation so each view has its own contextual
