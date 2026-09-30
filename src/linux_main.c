@@ -173,7 +173,6 @@ typedef struct {
     GtkWidget *open_job_button;
     GtkWidget *open_diag_button;
     GtkWidget *restart_button;
-    GtkWidget *theme_menu_items[3];
     GtkWidget *counter_labels[7];
     GtkWidget *workspace_title;
     GtkWidget *workspace_subtitle;
@@ -1914,17 +1913,8 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         break;
     }
     gtk_widget_destroy(dialog);
-    if (saved && app->window) {
+    if (saved && app->window)
         apply_theme(app);
-        for (gint mode = INFILTRATR_THEME_SYSTEM;
-             mode <= INFILTRATR_THEME_NIGHT; mode++) {
-            GtkWidget *item = app->theme_menu_items[mode];
-            if (item)
-                gtk_check_menu_item_set_active(
-                    GTK_CHECK_MENU_ITEM(item),
-                    mode == (gint)app->config.theme_mode);
-        }
-    }
     return saved;
 }
 
@@ -1947,22 +1937,10 @@ static void on_settings(GtkButton *button, gpointer user_data)
 }
 
 
-static void on_menu_refresh(GtkMenuItem *item, gpointer user_data)
-{
-    (void)item;
-    on_refresh(NULL, user_data);
-}
-
 static void on_menu_export(GtkMenuItem *item, gpointer user_data)
 {
     (void)item;
     on_export(NULL, user_data);
-}
-
-static void on_menu_settings(GtkMenuItem *item, gpointer user_data)
-{
-    (void)item;
-    on_settings(NULL, user_data);
 }
 
 static void on_menu_quit(GtkMenuItem *item, gpointer user_data)
@@ -1981,31 +1959,6 @@ static void on_system_theme_changed(
     RunnerScopeApp *app = user_data;
     if (app && app->config.theme_mode == INFILTRATR_THEME_SYSTEM)
         apply_theme(app);
-}
-
-static void on_theme_menu_selected(
-    GtkCheckMenuItem *item, gpointer user_data)
-{
-    if (!gtk_check_menu_item_get_active(item)) return;
-    RunnerScopeApp *app = user_data;
-    if (!app) return;
-
-    const gint mode = GPOINTER_TO_INT(
-        g_object_get_data(G_OBJECT(item), "runner-monitor-theme-mode"));
-    if (mode < INFILTRATR_THEME_SYSTEM || mode > INFILTRATR_THEME_NIGHT)
-        return;
-    if ((gint)app->config.theme_mode == mode) return;
-
-    app->config.theme_mode = (InfiltratrThemeMode)mode;
-    GError *error = NULL;
-    if (!save_config(&app->config, &error)) {
-        if (app->status_label)
-            gtk_label_set_text(
-                GTK_LABEL(app->status_label),
-                error ? error->message : "Unable to save theme setting");
-        g_clear_error(&error);
-    }
-    apply_theme(app);
 }
 
 static void on_menu_about(GtkMenuItem *item, gpointer user_data)
@@ -2050,6 +2003,12 @@ static GtkWidget *build_menu_bar(RunnerScopeApp *app)
 {
     GtkWidget *bar = gtk_menu_bar_new();
 
+    /*
+     * Settings and theme selection deliberately live in the Settings dialog,
+     * and refresh is already a first-class footer action.  Keep the title-bar
+     * menu limited to commands that do not duplicate visible application
+     * controls.
+     */
     GtkWidget *file_root = gtk_menu_item_new_with_mnemonic("_File");
     GtkWidget *file_menu = gtk_menu_new();
     gtk_menu_shell_append(
@@ -2062,48 +2021,6 @@ static GtkWidget *build_menu_bar(RunnerScopeApp *app)
         menu_item("_Quit", G_CALLBACK(on_menu_quit), app));
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_root), file_menu);
     gtk_menu_shell_append(GTK_MENU_SHELL(bar), file_root);
-
-    GtkWidget *edit_root = gtk_menu_item_new_with_mnemonic("_Edit");
-    GtkWidget *edit_menu = gtk_menu_new();
-    gtk_menu_shell_append(
-        GTK_MENU_SHELL(edit_menu),
-        menu_item("_Settings…", G_CALLBACK(on_menu_settings), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(edit_root), edit_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), edit_root);
-
-    GtkWidget *view_root = gtk_menu_item_new_with_mnemonic("_View");
-    GtkWidget *view_menu = gtk_menu_new();
-    gtk_menu_shell_append(
-        GTK_MENU_SHELL(view_menu),
-        menu_item("_Refresh now", G_CALLBACK(on_menu_refresh), app));
-    gtk_menu_shell_append(
-        GTK_MENU_SHELL(view_menu), gtk_separator_menu_item_new());
-
-    GtkWidget *theme_root = gtk_menu_item_new_with_mnemonic("_Theme");
-    GtkWidget *theme_menu = gtk_menu_new();
-    GSList *theme_group = NULL;
-    for (gint mode = INFILTRATR_THEME_SYSTEM;
-         mode <= INFILTRATR_THEME_NIGHT; mode++) {
-        const char *label = mode == INFILTRATR_THEME_SYSTEM
-            ? "Follow system"
-            : infiltratr_theme_mode_name((InfiltratrThemeMode)mode);
-        GtkWidget *radio = gtk_radio_menu_item_new_with_label(theme_group, label);
-        theme_group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(radio));
-        g_object_set_data(
-            G_OBJECT(radio), "runner-monitor-theme-mode",
-            GINT_TO_POINTER(mode));
-        g_signal_connect(
-            radio, "toggled", G_CALLBACK(on_theme_menu_selected), app);
-        app->theme_menu_items[mode] = radio;
-        gtk_menu_shell_append(GTK_MENU_SHELL(theme_menu), radio);
-    }
-    gtk_check_menu_item_set_active(
-        GTK_CHECK_MENU_ITEM(
-            app->theme_menu_items[(gint)app->config.theme_mode]), TRUE);
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(theme_root), theme_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), theme_root);
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_root), view_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), view_root);
 
     GtkWidget *help_root = gtk_menu_item_new_with_mnemonic("_Help");
     GtkWidget *help_menu = gtk_menu_new();
