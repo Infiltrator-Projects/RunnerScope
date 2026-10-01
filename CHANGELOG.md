@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.2.27 - 2026-10-01
+
+- Stop rebuilding the runner and active-job GTK models every second; live time fields now update in place.
+- Debounce search filtering and rebuild only the visible page.
+- Batch persistent-history writes after runner state changes.
+- Remove repeated local-runner correlation allocations.
+- Remove the retired `src/native2/` parallel implementation, its duplicate tests/build targets and stale documentation.
+- Keep one supported native implementation per platform.
+
 ## 1.2.18 - 2026-09-25
 
 - Align the Linux default window with the 1220x780 publisher desktop geometry.
