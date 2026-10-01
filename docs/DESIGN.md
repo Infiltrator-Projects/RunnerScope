@@ -15,13 +15,13 @@ The application therefore separates provider facts from application interpretati
 - durable per-user configuration/history;
 - local runner health distinct from provider state;
 - platform-native presentation without semantic drift;
-- progressive dependency reduction without replacing working native code with an interpreted compatibility shell.
+- dependency changes made directly against the supported native product without parallel replacement shells.
 
 ## Provider semantics
 
 GitHub is authoritative for GitHub runner/workflow facts. Runner Monitor owns caching, correlation, timing, presentation and persistence.
 
-The current release line uses GitHub CLI as the authenticated provider adapter. `src/native2/` exists to remove that dependency only when the replacement is at least as correct.
+The current release line uses GitHub CLI as the authenticated provider adapter. Any future provider replacement must be integrated and qualified in the shipping native path rather than maintained as a second implementation.
 
 ## Common usage
 
