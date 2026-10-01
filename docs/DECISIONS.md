@@ -24,13 +24,13 @@
 
 **Consequence.** Platform UI code stays local while runner/provider semantics remain aligned.
 
-## ADR-004 — Dependency minimisation is incremental
+## ADR-004 — One implementation per shipping platform
 
-**Decision.** `src/native2/` remains the first-party dependency-minimisation core, but it does not replace the shipping application until it has parity.
+**Decision.** Experimental replacement cores do not live beside the shipping product.
 
-**Rationale.** Removing GTK/GLib or GitHub CLI is useful only if functionality and correctness are preserved.
+**Rationale.** Parallel implementations duplicate semantics, tests and maintenance while making it easier for behaviour to drift. Dependency or provider improvements belong in the shipping native path once they are ready.
 
-**Consequence.** The product remains native C throughout the migration.
+**Consequence.** Linux and Windows each have one supported implementation and CI validates those directly.
 
 ## ADR-005 — Cloud and local service state are independent
 
