@@ -13,14 +13,14 @@ There is no Python or Tk/Tkinter runtime in the 1.2 native product line.
 - Shared dependency: Infiltratr Common 1.19.35 at `7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f`.
 - Common owns the product-neutral palette, typography/metrics contract, formatting and other shared primitives.
 - Runner Monitor owns runner/provider semantics, local-service behaviour and application policy.
-- The current provider credential/API boundary remains the authenticated GitHub CLI (`gh`) while the dependency-minimisation core in `src/native2/` is qualified to replace it.
+- The current provider credential/API boundary is the authenticated GitHub CLI (`gh`); there is one shipping implementation per platform rather than a parallel experimental product path.
 - Python/Tk compatibility sources and the old Common helper bridge are not part of the repository or release product.
 
 The user-facing name is **Runner Monitor**. The stable Linux executable and desktop identity remain `runnerscope`, and the Debian package identity remains `infiltrator-runner-monitor`.
 
 ## Appearance
 
-Both native shells consume Common directly. On Linux, the native menu bar exposes File, Edit, View and Help. View → Theme provides **Follow system**, **Day** and **Night**; the selected mode is persisted in the existing Runner Monitor configuration, and Follow system tracks live GTK host-theme changes. Help → About Runner Monitor exposes the application version, linked Common version and project identity.
+Both native shells consume Common directly. On Linux, direct buttons own refresh, export and settings; theme selection lives inside Settings, and the only title-bar menu is Help → About Runner Monitor. The selected theme mode is persisted in the existing Runner Monitor configuration, and Follow system tracks live GTK host-theme changes.
 
 The Linux footer keeps selection-specific actions in a dedicated action row and status/version information in a separate row so controls remain readable at ordinary desktop widths. Enabled and disabled actions use Common palette roles instead of falling back to bright toolkit defaults in Night mode.
 
@@ -96,7 +96,7 @@ On Windows, configure with the Visual Studio generator and build the Release con
 
 ## Privacy and credentials
 
-Runner Monitor does not store a GitHub token. The current shipping provider adapter uses the authenticated GitHub CLI credential store. The native dependency-minimisation core is being developed separately so that this adapter can eventually be replaced without changing the product back to an interpreted runtime.
+Runner Monitor does not store a GitHub token. The shipping provider adapter uses the authenticated GitHub CLI credential store. Provider changes must be made directly in the shipping native implementation rather than through a second experimental product path.
 
 ## Licence
 
