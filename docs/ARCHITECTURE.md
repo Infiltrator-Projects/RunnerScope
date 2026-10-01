@@ -17,7 +17,7 @@ The previous Python compatibility shell and native helper bridge were removed af
 
 The current shipping product uses GitHub CLI as its authenticated provider adapter. GitHub remains authoritative for runner/workflow facts; Runner Monitor owns correlation, timing, history, presentation and local-service policy.
 
-The long-term dependency-minimisation work in `src/native2/` is deliberately separate from the shipping architecture. It may replace the current provider/helper boundary only after it reaches behavioural parity. It must never cause the product to fall back to Python again.
+There is no parallel provider implementation in the repository. Provider work is made directly against the shipping native applications so behaviour cannot drift between a product path and an experimental replacement.
 
 ## Common boundary
 
