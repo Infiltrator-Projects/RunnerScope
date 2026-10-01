@@ -208,6 +208,8 @@ typedef struct {
     guint activity_timer;
     guint local_timer;
     guint tick_timer;
+    guint filter_timer;
+    guint history_save_timer;
     GThread *runner_thread;
     GThread *activity_thread;
     GThread *local_thread;
@@ -818,15 +820,64 @@ static const char *field(char **fields, guint index)
     return fields[index] ? fields[index] : "";
 }
 
-static gboolean text_matches_filter(RunnerScopeApp *app, const char *text)
+static char *filter_needle_casefold(RunnerScopeApp *app)
 {
+    if (!app || !app->filter_entry) return NULL;
     const char *needle = gtk_entry_get_text(GTK_ENTRY(app->filter_entry));
-    if (!needle || !*needle) return TRUE;
+    return needle && *needle ? g_utf8_casefold(needle, -1) : NULL;
+}
+
+static gboolean text_matches_folded(const char *folded_needle, const char *text)
+{
+    if (!folded_needle || !*folded_needle) return TRUE;
     char *folded_text = g_utf8_casefold(text ? text : "", -1);
-    char *folded_needle = g_utf8_casefold(needle, -1);
     const gboolean matches = strstr(folded_text, folded_needle) != NULL;
-    g_free(folded_text); g_free(folded_needle);
+    g_free(folded_text);
     return matches;
+}
+
+static void persist_history(RunnerScopeApp *app)
+{
+    if (!app || !app->history_rows) return;
+
+    GString *state = g_string_new(NULL);
+    for (guint i = 0U; i < app->history_rows->len; i++) {
+        HistoryRow *entry = g_ptr_array_index(app->history_rows, i);
+        g_string_append_printf(state, "%s\t%s\t%s\t%s\n",
+                               entry->time_text, entry->runner,
+                               entry->event, entry->detail);
+    }
+
+    char *path = state_path();
+    char *directory = g_path_get_dirname(path);
+    if (g_mkdir_with_parents(directory, 0700) == 0) {
+        const InfiltratrAtomicFileMode mode =
+            access(path, F_OK) == 0
+                ? INFILTRATR_ATOMIC_FILE_PRESERVE_PERMISSIONS
+                : INFILTRATR_ATOMIC_FILE_PRIVATE;
+        (void)infiltratr_atomic_file_write_bytes(
+            path, mode, state->str, state->len);
+    }
+    g_free(directory);
+    g_free(path);
+    g_string_free(state, TRUE);
+}
+
+static gboolean persist_history_cb(gpointer data)
+{
+    RunnerScopeApp *app = data;
+    app->history_save_timer = 0U;
+    persist_history(app);
+    return G_SOURCE_REMOVE;
+}
+
+static void schedule_history_persist(RunnerScopeApp *app)
+{
+    if (!app || g_atomic_int_get(&app->shutting_down)) return;
+    if (app->history_save_timer != 0U)
+        g_source_remove(app->history_save_timer);
+    app->history_save_timer =
+        g_timeout_add(250U, persist_history_cb, app);
 }
 
 static void add_history(RunnerScopeApp *app, const char *runner,
@@ -841,24 +892,12 @@ static void add_history(RunnerScopeApp *app, const char *runner,
     while (app->history_rows->len > 300U)
         g_ptr_array_remove_index(app->history_rows, app->history_rows->len - 1U);
 
-    GString *state = g_string_new(NULL);
-    for (guint i = 0U; i < app->history_rows->len; i++) {
-        HistoryRow *entry = g_ptr_array_index(app->history_rows, i);
-        g_string_append_printf(state, "%s\t%s\t%s\t%s\n",
-                               entry->time_text, entry->runner,
-                               entry->event, entry->detail);
-    }
-    char *path = state_path();
-    char *directory = g_path_get_dirname(path);
-    if (g_mkdir_with_parents(directory, 0700) == 0) {
-        const InfiltratrAtomicFileMode mode =
-            access(path, F_OK) == 0
-                ? INFILTRATR_ATOMIC_FILE_PRESERVE_PERMISSIONS
-                : INFILTRATR_ATOMIC_FILE_PRIVATE;
-        (void)infiltratr_atomic_file_write_bytes(
-            path, mode, state->str, state->len);
-    }
-    g_free(directory); g_free(path); g_string_free(state, TRUE);
+    /*
+     * Runner state changes commonly arrive as a batch.  Persist once after the
+     * batch settles instead of serialising and atomically rewriting the entire
+     * history file once per changed runner on the GTK main thread.
+     */
+    schedule_history_persist(app);
 }
 
 static void load_history(RunnerScopeApp *app)
@@ -1091,12 +1130,13 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
 
 static void render_history(RunnerScopeApp *app)
 {
+    char *folded_needle = filter_needle_casefold(app);
     gtk_list_store_clear(app->history_store);
     for (guint i = 0U; i < app->history_rows->len; i++) {
         HistoryRow *row = g_ptr_array_index(app->history_rows, i);
         char *search = g_strdup_printf("%s %s %s %s", row->time_text, row->runner,
                                        row->event, row->detail);
-        const gboolean visible = text_matches_filter(app, search);
+        const gboolean visible = text_matches_folded(folded_needle, search);
         g_free(search);
         if (!visible) continue;
         GtkTreeIter iter;
@@ -1107,16 +1147,18 @@ static void render_history(RunnerScopeApp *app)
             HIST_COL_EVENT, row->event,
             HIST_COL_DETAIL, row->detail, -1);
     }
+    g_free(folded_needle);
 }
 
 static void render_runners(RunnerScopeApp *app)
 {
+    char *folded_needle = filter_needle_casefold(app);
     gtk_list_store_clear(app->runner_store);
     for (guint i = 0U; i < app->runner_rows->len; i++) {
         RunnerRow *row = g_ptr_array_index(app->runner_rows, i);
         char *search = g_strdup_printf("%s %s %s %s %s %s", row->name, row->os,
                                        row->state, row->repo, row->job, row->labels);
-        const gboolean visible = text_matches_filter(app, search);
+        const gboolean visible = text_matches_folded(folded_needle, search);
         g_free(search);
         if (!visible) continue;
         GtkTreeIter iter;
@@ -1128,17 +1170,19 @@ static void render_runners(RunnerScopeApp *app)
             RUNNER_COL_STATE_FOR, row->state_for, RUNNER_COL_JOBS, row->jobs,
             RUNNER_COL_BUSY, row->busy_pct, RUNNER_COL_LABELS, row->labels, -1);
     }
+    g_free(folded_needle);
 }
 
 static void render_activity(RunnerScopeApp *app)
 {
+    char *folded_needle = filter_needle_casefold(app);
     gtk_list_store_clear(app->activity_store);
     for (guint i = 0U; i < app->activity_rows->len; i++) {
         ActivityRow *row = g_ptr_array_index(app->activity_rows, i);
         char *search = g_strdup_printf("%s %s %s %s %s %s %s %s",
             row->environment, row->repo, row->workflow, row->job,
             row->step, row->status, row->runner, row->branch);
-        const gboolean visible = text_matches_filter(app, search);
+        const gboolean visible = text_matches_folded(folded_needle, search);
         g_free(search);
         if (!visible) continue;
         GtkTreeIter iter;
@@ -1151,16 +1195,18 @@ static void render_activity(RunnerScopeApp *app)
             ACT_COL_EVENT, row->event, ACT_COL_BRANCH, row->branch,
             ACT_COL_URL, row->url, -1);
     }
+    g_free(folded_needle);
 }
 
 static void render_local(RunnerScopeApp *app)
 {
+    char *folded_needle = filter_needle_casefold(app);
     gtk_list_store_clear(app->local_store);
     for (guint i = 0U; i < app->local_rows->len; i++) {
         LocalRow *row = g_ptr_array_index(app->local_rows, i);
         char *search = g_strdup_printf("%s %s %s %s %s", row->runner,
             row->service_state, row->github_state, row->diag, row->path);
-        const gboolean visible = text_matches_filter(app, search);
+        const gboolean visible = text_matches_folded(folded_needle, search);
         g_free(search);
         if (!visible) continue;
         GtkTreeIter iter;
@@ -1172,6 +1218,18 @@ static void render_local(RunnerScopeApp *app)
             LOCAL_COL_DIAG, row->diag, LOCAL_COL_DIAG_AGE, row->diag_age,
             LOCAL_COL_PATH, row->path, LOCAL_COL_DIAG_PATH, row->diag_path,
             LOCAL_COL_SERVICE_NAME, row->service_name, -1);
+    }
+    g_free(folded_needle);
+}
+
+static void render_page(RunnerScopeApp *app, gint page)
+{
+    switch (page) {
+        case 0: render_runners(app); break;
+        case 1: render_activity(app); break;
+        case 2: render_history(app); break;
+        case 3: render_local(app); break;
+        default: break;
     }
 }
 
@@ -1781,28 +1839,145 @@ static gboolean local_timer_cb(gpointer data)
     return G_SOURCE_CONTINUE;
 }
 
+static RunnerRow *find_runner_row(RunnerScopeApp *app, const char *name)
+{
+    if (!app || !name) return NULL;
+    for (guint i = 0U; i < app->runner_rows->len; i++) {
+        RunnerRow *row = g_ptr_array_index(app->runner_rows, i);
+        if (row->name && strcmp(row->name, name) == 0)
+            return row;
+    }
+    return NULL;
+}
+
+static ActivityRow *find_activity_row(RunnerScopeApp *app, const char *url)
+{
+    if (!app || !url) return NULL;
+    for (guint i = 0U; i < app->activity_rows->len; i++) {
+        ActivityRow *row = g_ptr_array_index(app->activity_rows, i);
+        if (row->url && strcmp(row->url, url) == 0)
+            return row;
+    }
+    return NULL;
+}
+
+static void refresh_runner_clock_cells(RunnerScopeApp *app,
+                                       double monotonic_now,
+                                       double wall_now)
+{
+    for (guint i = 0U; i < app->runner_rows->len; i++) {
+        RunnerRow *row = g_ptr_array_index(app->runner_rows, i);
+        RunnerSession *session = g_hash_table_lookup(app->sessions, row->name);
+        if (!session) continue;
+
+        g_free(row->state_for);
+        row->state_for =
+            duration_text(MAX(0.0, monotonic_now - session->state_since));
+
+        double busy_seconds = session->busy_seconds;
+        if (strcmp(session->state, "RUNNING") == 0 && session->busy_started > 0.0)
+            busy_seconds += monotonic_now - session->busy_started;
+        const double elapsed = MAX(1.0, monotonic_now - app->session_started);
+        g_free(row->busy_pct);
+        row->busy_pct = g_strdup_printf(
+            "%.1f%%", MIN(100.0, busy_seconds * 100.0 / elapsed));
+
+        if (strcmp(row->state, "RUNNING") == 0) {
+            JobSummary *summary = g_hash_table_lookup(app->job_by_runner, row->name);
+            if (summary && summary->started_at > 0.0) {
+                g_free(row->runtime);
+                row->runtime =
+                    duration_text(MAX(0.0, wall_now - summary->started_at));
+            }
+        }
+    }
+
+    GtkTreeIter iter;
+    gboolean valid = gtk_tree_model_get_iter_first(
+        GTK_TREE_MODEL(app->runner_store), &iter);
+    while (valid) {
+        char *name = NULL;
+        gtk_tree_model_get(
+            GTK_TREE_MODEL(app->runner_store), &iter,
+            RUNNER_COL_NAME, &name, -1);
+        RunnerRow *row = find_runner_row(app, name);
+        if (row) {
+            gtk_list_store_set(
+                app->runner_store, &iter,
+                RUNNER_COL_RUNTIME, row->runtime,
+                RUNNER_COL_STATE_FOR, row->state_for,
+                RUNNER_COL_BUSY, row->busy_pct, -1);
+        }
+        g_free(name);
+        valid = gtk_tree_model_iter_next(
+            GTK_TREE_MODEL(app->runner_store), &iter);
+    }
+}
+
+static void refresh_activity_clock_cells(RunnerScopeApp *app, double wall_now)
+{
+    for (guint i = 0U; i < app->activity_rows->len; i++) {
+        ActivityRow *row = g_ptr_array_index(app->activity_rows, i);
+        if (row->started_epoch <= 0.0) continue;
+        g_free(row->runtime);
+        row->runtime =
+            duration_text(MAX(0.0, wall_now - row->started_epoch));
+    }
+
+    GtkTreeIter iter;
+    gboolean valid = gtk_tree_model_get_iter_first(
+        GTK_TREE_MODEL(app->activity_store), &iter);
+    while (valid) {
+        char *url = NULL;
+        gtk_tree_model_get(
+            GTK_TREE_MODEL(app->activity_store), &iter,
+            ACT_COL_URL, &url, -1);
+        ActivityRow *row = find_activity_row(app, url);
+        if (row)
+            gtk_list_store_set(
+                app->activity_store, &iter,
+                ACT_COL_RUNTIME, row->runtime, -1);
+        g_free(url);
+        valid = gtk_tree_model_iter_next(
+            GTK_TREE_MODEL(app->activity_store), &iter);
+    }
+}
+
 static gboolean tick_timer_cb(gpointer data)
 {
     RunnerScopeApp *app = data;
+    const double monotonic_now = now_monotonic();
     const double wall_now = (double)time(NULL);
-    for (guint i = 0U; i < app->activity_rows->len; i++) {
-        ActivityRow *row = g_ptr_array_index(app->activity_rows, i);
-        if (row->started_epoch > 0.0) {
-            g_free(row->runtime);
-            row->runtime = duration_text(MAX(0.0, wall_now - row->started_epoch));
-        }
-    }
-    render_runners(app);
-    render_activity(app);
+
+    /*
+     * Time-dependent cells used to trigger complete GtkListStore rebuilds once
+     * a second.  Update those cells in place instead; this preserves selection,
+     * scroll position and responsiveness while keeping the clocks live.
+     */
+    refresh_runner_clock_cells(app, monotonic_now, wall_now);
+    refresh_activity_clock_cells(app, wall_now);
     update_summary(app);
     return G_SOURCE_CONTINUE;
+}
+
+static gboolean apply_filter_cb(gpointer data)
+{
+    RunnerScopeApp *app = data;
+    app->filter_timer = 0U;
+    const gint page =
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
+    render_page(app, page);
+    update_workspace_context(app, page);
+    return G_SOURCE_REMOVE;
 }
 
 static void on_filter_changed(GtkEditable *editable, gpointer user_data)
 {
     (void)editable;
     RunnerScopeApp *app = user_data;
-    render_runners(app); render_activity(app); render_history(app); render_local(app);
+    if (app->filter_timer != 0U)
+        g_source_remove(app->filter_timer);
+    app->filter_timer = g_timeout_add(120U, apply_filter_cb, app);
 }
 
 static void on_refresh(GtkButton *button, gpointer user_data)
@@ -2305,6 +2480,7 @@ static void on_nav_row_selected(GtkListBox *list,
     const gint page = gtk_list_box_row_get_index(row);
     if (page >= 0 && page < 4) {
         gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);
+        render_page(app, page);
         update_workspace_context(app, page);
         clear_selection_card(app);
     }
@@ -2526,9 +2702,8 @@ static void build_ui(RunnerScopeApp *app)
      * under some GTK themes/scaling combinations. Keep GtkNotebook as the page
      * host and use a compact GtkListBox rail for stable, readable navigation.
      *
-     * Do not combine a CSS min-width with gtk_widget_set_size_request() here:
-     * GTK can account the style minimum in addition to the widget request,
-     * producing the large empty gutter seen in 1.2.20/1.2.21.
+     * Keep exactly one width constraint on the navigation rail.  Combining
+     * CSS and widget minimums can make GTK reserve duplicate horizontal space.
      */
     GtkWidget *content_shell = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_hexpand(content_shell, TRUE);
@@ -2936,6 +3111,15 @@ static void app_destroy(RunnerScopeApp *app)
     if (app->activity_timer) g_source_remove(app->activity_timer);
     if (app->local_timer) g_source_remove(app->local_timer);
     if (app->tick_timer) g_source_remove(app->tick_timer);
+    if (app->filter_timer) {
+        g_source_remove(app->filter_timer);
+        app->filter_timer = 0U;
+    }
+    if (app->history_save_timer) {
+        g_source_remove(app->history_save_timer);
+        app->history_save_timer = 0U;
+        persist_history(app);
+    }
     if (app->runner_thread) {
         g_thread_join(app->runner_thread);
         app->runner_thread = NULL;
