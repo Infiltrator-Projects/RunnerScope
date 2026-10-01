@@ -6,7 +6,6 @@ CI validates the product as native software on both supported platforms.
 
 Linux:
 - configures and builds the C application against the pinned Common gitlink;
-- builds the first-party core/contracts;
 - runs all CTest contracts and the native application self-test;
 - verifies the application is an ELF binary;
 - rejects Python/Tk runtime linkage;
@@ -20,10 +19,6 @@ Windows:
 - stages and uploads the native EXE.
 
 Release publication consumes only those qualified native artifacts.
-
-## Dependency-minimisation evidence
-
-`tools/check-first-party-native.sh` applies the stricter dependency boundary only to `src/native2/` and its contracts. This keeps long-term dependency reduction measurable without redefining the shipping product.
 
 ## Parity rule
 
