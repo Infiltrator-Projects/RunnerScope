@@ -7,17 +7,15 @@
 - exact Common linked directly into both platform binaries;
 - Python/Tk product files removed;
 - Linux runner/job/history/local-service feature surface restored;
-- first-party C model/HTTP/config/Linux-service core retained as a dependency-minimisation track;
 - CI builds native Linux and Windows artifacts and package validation rejects Python/Tk runtime dependencies.
 
 ## Near-term work
 
 1. bring the Win32 feature surface to parity with Linux for active-job correlation, history and local-service controls;
 2. preserve/migrate all existing native configuration/history data;
-3. move provider parsing/correlation into shared project-owned C modules where that improves parity;
-4. qualify first-party provider HTTP/authentication work against the shipping GitHub CLI adapter;
-5. replace helper/runtime dependencies only after parity evidence exists.
+3. move provider parsing/correlation into project-owned C modules inside the shipping implementation where that improves parity;
+4. replace helper/runtime dependencies only when the shipping path retains behavioural parity.
 
 ## Completion rule
 
-Dependency minimisation is complete when the first-party core can replace the remaining helper/toolkit boundaries without functionality loss. Native C delivery itself is no longer conditional on that work.
+Architecture work is complete only when the shipping native applications preserve behaviour, responsiveness and release quality without parallel compatibility or experimental product paths.
