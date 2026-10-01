@@ -1790,21 +1790,24 @@ static gboolean local_apply_idle(gpointer data)
         row->diag=g_strdup(src->diag); row->diag_age=g_strdup(src->diag_age);
         row->path=g_strdup(src->path); row->diag_path=g_strdup(src->diag_path);
         row->service_name=g_strdup(src->service_name);
+
+        char *service_lower = g_ascii_strdown(row->service_name, -1);
+        char *description_lower = g_ascii_strdown(row->runner, -1);
         for (guint runner_index = 0U; runner_index < app->runner_rows->len; runner_index++) {
             RunnerRow *runner = g_ptr_array_index(app->runner_rows, runner_index);
-            char *service_lower = g_ascii_strdown(row->service_name, -1);
-            char *description_lower = g_ascii_strdown(row->runner, -1);
             char *runner_lower = g_ascii_strdown(runner->name, -1);
             const gboolean matches =
                 strstr(service_lower, runner_lower) != NULL ||
                 strstr(description_lower, runner_lower) != NULL;
-            g_free(service_lower); g_free(description_lower); g_free(runner_lower);
+            g_free(runner_lower);
             if (matches) {
                 g_free(row->runner); row->runner = g_strdup(runner->name);
                 g_free(row->github_state); row->github_state = g_strdup(runner->state);
                 break;
             }
         }
+        g_free(service_lower);
+        g_free(description_lower);
         g_ptr_array_add(app->local_rows, row);
     }
     render_local(app);
