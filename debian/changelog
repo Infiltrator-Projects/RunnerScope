@@ -1,3 +1,20 @@
+infiltrator-runner-monitor (1.2.27) unstable; urgency=medium
+
+  * Replace the once-per-second full GtkListStore rebuilds with in-place
+    updates of runtime, state-duration and utilisation cells.
+  * Debounce filtering and rebuild only the active page instead of all four
+    tables for every keystroke.
+  * Batch history persistence so a runner-state refresh writes the bounded
+    history file once rather than once per changed runner.
+  * Reuse local-service correlation strings instead of reallocating them for
+    every runner comparison.
+  * Remove the obsolete src/native2 parallel implementation, its duplicate
+    model/HTTP/config/service tests, build targets, package tests and stale
+    architecture documentation.
+  * Keep one supported native implementation per platform.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 01 Oct 2026 22:20:00 +1000
+
 infiltrator-runner-monitor (1.2.26) unstable; urgency=medium
 
   * Remove the redundant File menu from the title bar.
