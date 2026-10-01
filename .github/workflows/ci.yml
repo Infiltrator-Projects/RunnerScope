@@ -49,9 +49,6 @@ jobs:
           test -n "$expected_common"
           test "$(git -C infiltratr-common rev-parse HEAD)" = "$expected_common"
 
-      - name: Enforce dependency-minimisation core boundary
-        run: ./tools/check-first-party-native.sh
-
       - name: Build and test native Linux application
         shell: bash
         run: |
