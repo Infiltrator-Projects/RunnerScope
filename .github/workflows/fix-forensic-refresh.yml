@@ -25,37 +25,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('.github/workflows/forensic-refresh.yml')
-          text = path.read_text()
-
-          old = "readme = Path('README.md').read_text().replace('Common 1.19.35', 'Common 1.19.38')"
-          new = "readme = (Path('README.md').read_text()\n          .replace('Common 1.19.35', 'Common 1.19.38')\n          .replace('7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f', '7070c5812b50821fd7580101cb2289a3184f6b2c'))"
-          if text.count(old) != 1:
-              raise SystemExit(f'README transform anchor count={text.count(old)}')
-          text = text.replace(old, new, 1)
-
-          old_guard = """          if grep -R -n --exclude-dir=.git --exclude-dir=infiltratr-common \\
-              -E '1\\.19\\.35|7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f|runnerscope-firstparty|src/native2' \\
-              CMakeLists.txt README.md docs .github debian src tools 2>/dev/null; then
-            echo 'Retired implementation/Common references remain.' >&2
-            exit 1
-          fi
-"""
-          new_guard = """          if grep -R -n --exclude-dir=.git --exclude-dir=infiltratr-common \\
-              -E '1\\.19\\.35|7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f|runnerscope-firstparty|src/native2' \\
-              CMakeLists.txt README.md docs src tools 2>/dev/null; then
-            echo 'Retired live implementation/Common references remain.' >&2
-            exit 1
-          fi
-"""
-          if text.count(old_guard) != 1:
-              raise SystemExit(f'guard anchor count={text.count(old_guard)}')
-          text = text.replace(old_guard, new_guard, 1)
-          path.write_text(text)
-          PY
-
+          sed -i "s|readme = Path('README.md').read_text().replace('Common 1.19.35', 'Common 1.19.38')|readme = Path('README.md').read_text().replace('Common 1.19.35', 'Common 1.19.38').replace('7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f', '7070c5812b50821fd7580101cb2289a3184f6b2c')|" .github/workflows/forensic-refresh.yml
+          sed -i 's|CMakeLists.txt README.md docs .github debian src tools|CMakeLists.txt README.md docs src tools|' .github/workflows/forensic-refresh.yml
+          sed -i 's|Retired implementation/Common references remain.|Retired live implementation/Common references remain.|' .github/workflows/forensic-refresh.yml
+          grep -F "7070c5812b50821fd7580101cb2289a3184f6b2c')" .github/workflows/forensic-refresh.yml >/dev/null
+          grep -F 'CMakeLists.txt README.md docs src tools' .github/workflows/forensic-refresh.yml >/dev/null
           rm -f .github/workflows/fix-forensic-refresh.yml
           git config user.name 'Shannon Smith'
           git config user.email 'infiltratr@yandex.com'
