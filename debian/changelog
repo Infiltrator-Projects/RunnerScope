@@ -1,3 +1,14 @@
+infiltrator-runner-monitor (1.2.35) unstable; urgency=medium
+
+  * Restore the graphical Infiltrator OS visual hierarchy while preserving the
+    current responsiveness architecture.
+  * Restore gradients, depth, icon wells, stronger shaped surfaces and
+    graphical action treatment across the native Linux shell.
+  * Add a page-identity icon well and icon-led contextual/footer actions.
+  * Keep the exact current Infiltratr Common 1.19.38 pin.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 15:25:00 +1000
+
 infiltrator-runner-monitor (1.2.34) unstable; urgency=medium
 
   * Remove remaining dead activity/theme compatibility code.

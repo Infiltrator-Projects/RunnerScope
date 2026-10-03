@@ -4,6 +4,14 @@
 
 No unreleased changes.
 
+## 1.2.35 - 2026-10-03
+
+- Restore the graphical Infiltrator OS visual language without reverting the 1.2.27-1.2.34 responsiveness work.
+- Reintroduce deliberate gradients, depth, stronger shaped surfaces, icon wells and accent hierarchy in the header, workspace, navigation, metrics, selection surface and footer.
+- Add a page-identity icon well to the workspace and icon-led footer actions so the application is not dominated by text and flat GTK controls.
+- Keep fixed-height tables, detached model rebuilds, contextual provider scanning and all current performance protections intact.
+- Keep the exact current Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.
+
 ## 1.2.34 - 2026-10-03
 
 - Remove the dead activity-scan result field left after the old scan-summary UI was retired and replace the private theme persistence parser with Common's canonical parser/key API.

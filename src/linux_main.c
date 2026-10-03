@@ -179,6 +179,7 @@ typedef struct {
     GtkWidget *restart_button;
     GtkWidget *workspace_title;
     GtkWidget *workspace_subtitle;
+    GtkWidget *workspace_icon;
     GtkWidget *workspace_metric_caption[4];
     GtkWidget *workspace_metric_value[4];
     GtkWidget *selection_card;
@@ -635,7 +636,9 @@ static void apply_theme(RunnerScopeApp *app)
         " background-color:@rm_background; color:@rm_text;"
         "}\n"
         "#runner-root {"
-        " background-image:none; background-color:@rm_background;"
+        " background-color:@rm_background;"
+        " background-image:linear-gradient(145deg, alpha(@rm_neutral, 0.055),"
+        " alpha(@rm_operation, 0.018) 42%, transparent 78%);"
         "}\n"
         "label { color:@rm_text; }\n"
         "button, combobox button {"
@@ -673,13 +676,20 @@ static void apply_theme(RunnerScopeApp *app)
         css,
         "headerbar.runner-header {"
         " min-height:58px; padding:%upx %upx;"
-        " background-image:none; background-color:@rm_titlebar;"
-        " border-bottom:1px solid @rm_border;"
+        " background-color:@rm_titlebar;"
+        " background-image:linear-gradient(110deg, alpha(@rm_neutral, 0.24),"
+        " @rm_titlebar 42%%, alpha(@rm_operation, 0.18));"
+        " border-bottom:1px solid alpha(@rm_neutral, 0.52);"
+        " box-shadow:0 3px 14px alpha(#000000, 0.28);"
         "}\n"
         ".header-brand { padding:2px 4px; }\n"
         ".header-brand-icon {"
-        " background-color:@rm_card; border:1px solid @rm_border;"
-        " border-radius:%upx; padding:%upx; box-shadow:none;"
+        " background-color:@rm_card;"
+        " background-image:linear-gradient(135deg, alpha(@rm_neutral, 0.28),"
+        " alpha(@rm_operation, 0.12));"
+        " border:1px solid alpha(@rm_neutral, 0.62);"
+        " border-radius:%upx; padding:%upx;"
+        " box-shadow:0 2px 9px alpha(@rm_neutral, 0.16);"
         "}\n"
         ".header-brand-icon image { color:@rm_neutral; }\n"
         ".header-brand-title { color:@rm_title; font-size:20px; }\n"
@@ -692,8 +702,11 @@ static void apply_theme(RunnerScopeApp *app)
         ".runner-window-controls { margin-left:%upx; }\n"
         ".runner-window-control {"
         " min-width:30px; min-height:30px; padding:4px;"
-        " background-image:none; background-color:transparent;"
-        " border:1px solid transparent; border-radius:%upx; box-shadow:none;"
+        " background-color:alpha(@rm_surface, 0.72);"
+        " background-image:linear-gradient(to bottom, alpha(@rm_neutral, 0.08),"
+        " alpha(@rm_surface, 0.42));"
+        " border:1px solid alpha(@rm_connection_border, 0.72);"
+        " border-radius:%upx; box-shadow:0 1px 4px alpha(#000000, 0.18);"
         "}\n"
         ".runner-window-control:hover {"
         " background-color:@rm_surface_hover; border-color:@rm_border;"
@@ -714,22 +727,38 @@ static void apply_theme(RunnerScopeApp *app)
     g_string_append_printf(
         css,
         ".runner-content-shell {"
-        " background:@rm_card; border:1px solid @rm_border;"
+        " background:@rm_card; border:1px solid @rm_connection_border;"
         " border-radius:%upx;"
+        " box-shadow:0 5px 18px alpha(#000000, 0.22);"
         "}\n"
         ".runner-workspace {"
         " background:@rm_card; border-radius:0 %upx %upx 0;"
         "}\n"
         ".workspace-header {"
-        " background:@rm_connection; border-bottom:1px solid @rm_connection_border;"
+        " background-color:@rm_connection;"
+        " background-image:linear-gradient(105deg, alpha(@rm_neutral, 0.16),"
+        " @rm_connection 48%%, alpha(@rm_operation, 0.10));"
+        " border-bottom:1px solid alpha(@rm_neutral, 0.36);"
         " padding:%upx %upx;"
         "}\n"
-        ".workspace-title { color:@rm_heading; font-size:18px; font-weight:%u; }\n"
+        ".workspace-icon-well {"
+        " min-width:48px; min-height:48px;"
+        " background-color:@rm_surface;"
+        " background-image:linear-gradient(135deg, alpha(@rm_neutral, 0.30),"
+        " alpha(@rm_operation, 0.12));"
+        " border:1px solid alpha(@rm_neutral, 0.56); border-radius:16px;"
+        " box-shadow:0 3px 10px alpha(@rm_neutral, 0.14); padding:7px;"
+        "}\n"
+        ".workspace-icon { color:@rm_accent_foreground; }\n"
+        ".workspace-title { color:@rm_heading; font-size:20px; font-weight:%u; }\n"
         ".workspace-subtitle { color:@rm_summary; font-size:11px; }\n"
         ".workspace-metric {"
-        " min-width:76px; background:@rm_surface;"
-        " border:1px solid @rm_connection_border; border-radius:%upx;"
-        " padding:%upx %upx;"
+        " min-width:76px; background-color:@rm_surface;"
+        " background-image:linear-gradient(145deg, alpha(@rm_neutral, 0.08),"
+        " alpha(@rm_card, 0.82));"
+        " border:1px solid @rm_connection_border; border-top:2px solid @rm_neutral;"
+        " border-radius:%upx; padding:%upx %upx;"
+        " box-shadow:0 2px 8px alpha(#000000, 0.16);"
         "}\n"
         ".workspace-metric-caption {"
         " color:@rm_detail_label; font-size:9px; font-weight:%u;"
@@ -737,7 +766,11 @@ static void apply_theme(RunnerScopeApp *app)
         ".workspace-metric-value {"
         " color:@rm_heading; font-size:14px; font-weight:%u;"
         "}\n"
-        "notebook.runner-notebook { background:@rm_card; border:0; }\n",
+        "notebook.runner-notebook { background:@rm_card; border:0; }\n"
+        ".workspace-metric.metric-one { border-top-color:@rm_info; }\n"
+        ".workspace-metric.metric-two { border-top-color:@rm_success; }\n"
+        ".workspace-metric.metric-three { border-top-color:@rm_warning; }\n"
+        ".workspace-metric.metric-four { border-top-color:@rm_operation; }\n",
         (unsigned int)metrics->panel_radius,
         (unsigned int)metrics->panel_radius,
         (unsigned int)metrics->panel_radius,
@@ -753,7 +786,9 @@ static void apply_theme(RunnerScopeApp *app)
     g_string_append(
         css,
         "#runner-main-navigation, #runner-main-navigation viewport {"
-        " background-image:none; background-color:@rm_panel;"
+        " background-color:@rm_panel;"
+        " background-image:linear-gradient(to bottom, alpha(@rm_neutral, 0.055),"
+        " transparent 38%, alpha(@rm_operation, 0.025));"
         " border-color:@rm_connection_border;"
         "}\n"
         "#runner-main-navigation { border-right:1px solid @rm_border; }\n"
@@ -767,9 +802,11 @@ static void apply_theme(RunnerScopeApp *app)
         " background-color:@rm_surface_hover; border-color:@rm_border;"
         "}\n"
         "#runner-main-nav-button:checked {"
-        " background-image:none; background-color:@rm_selection;"
-        " color:@rm_selection_text; border-color:@rm_neutral;"
-        " box-shadow:none;"
+        " background-color:@rm_selection;"
+        " background-image:linear-gradient(100deg, alpha(@rm_neutral, 0.34),"
+        " @rm_selection 58%, alpha(@rm_operation, 0.16));"
+        " color:@rm_selection_text; border-color:alpha(@rm_neutral, 0.76);"
+        " box-shadow:0 3px 12px alpha(@rm_neutral, 0.14);"
         "}\n"
         "#runner-main-nav-button .runner-main-nav-label {"
         " color:@rm_summary; font-size:14px; font-weight:700;"
@@ -777,9 +814,19 @@ static void apply_theme(RunnerScopeApp *app)
         "#runner-main-nav-button:hover .runner-main-nav-label { color:@rm_title; }\n"
         "#runner-main-nav-button:checked .runner-main-nav-label { color:@rm_selection_text; }\n"
         "#runner-main-nav-button .runner-main-nav-icon {"
-        " min-width:38px; min-height:38px;"
-        " color:@rm_neutral; background-color:@rm_surface;"
-        " border:1px solid @rm_border; border-radius:10px; padding:5px;"
+        " min-width:38px; min-height:38px; color:@rm_neutral;"
+        " background-color:@rm_surface;"
+        " background-image:linear-gradient(135deg, alpha(@rm_neutral, 0.20),"
+        " alpha(@rm_card, 0.76));"
+        " border:1px solid alpha(@rm_connection_border, 0.88);"
+        " border-radius:12px; padding:5px;"
+        " box-shadow:0 2px 8px alpha(#000000, 0.18);"
+        "}\n"
+        "#runner-main-nav-button:checked .runner-main-nav-icon {"
+        " color:@rm_accent_foreground;"
+        " background-image:linear-gradient(135deg, @rm_neutral, @rm_operation);"
+        " border-color:alpha(@rm_accent_foreground, 0.48);"
+        " box-shadow:0 3px 10px alpha(@rm_neutral, 0.26);"
         "}\n"
         ".runner-main-nav-separator {"
         " background-color:alpha(@rm_connection_border, 0.78); min-height:1px;"
@@ -787,7 +834,10 @@ static void apply_theme(RunnerScopeApp *app)
 
     g_string_append_printf(
         css,
-        "scrolledwindow.runner-table { background:@rm_card; border:0; }\n"
+        "scrolledwindow.runner-table {"
+        " background:@rm_card; border:1px solid @rm_connection_border;"
+        " border-radius:10px; box-shadow:inset 0 1px 0 alpha(@rm_neutral, 0.08);"
+        "}\n"
         "treeview.view {"
         " background:@rm_input; color:@rm_text; border:0;"
         " -GtkTreeView-horizontal-separator:0;"
@@ -797,16 +847,26 @@ static void apply_theme(RunnerScopeApp *app)
         " background:@rm_selection; color:@rm_selection_text;"
         "}\n"
         "treeview.view header button {"
-        " background-image:none; background:@rm_panel; color:@rm_title;"
+        " background-color:@rm_panel; color:@rm_title;"
+        " background-image:linear-gradient(to bottom, alpha(@rm_neutral, 0.10),"
+        " alpha(@rm_panel, 0.94));"
         " border:0; border-bottom:1px solid @rm_connection_border;"
         " min-height:36px; padding:0 5px; font-weight:%u;"
         "}\n"
         "treeview.view header button:hover { background:@rm_surface_hover; }\n"
         ".selection-card {"
-        " background:@rm_connection; border-top:1px solid @rm_connection_border;"
+        " background-color:@rm_connection;"
+        " background-image:linear-gradient(100deg, alpha(@rm_neutral, 0.12),"
+        " @rm_connection 58%%, alpha(@rm_operation, 0.08));"
+        " border-top:1px solid alpha(@rm_neutral, 0.34);"
         " padding:%upx %upx;"
         "}\n"
-        ".selection-icon { color:@rm_neutral; padding:4px; }\n"
+        ".selection-icon-well {"
+        " background-image:linear-gradient(135deg, alpha(@rm_neutral, 0.26),"
+        " alpha(@rm_operation, 0.10)); border:1px solid @rm_connection_border;"
+        " border-radius:12px; padding:6px;"
+        "}\n"
+        ".selection-icon { color:@rm_neutral; }\n"
         ".selection-title { color:@rm_detail_label; font-size:9px; font-weight:%u; }\n"
         ".selection-primary { color:@rm_heading; font-size:13px; font-weight:%u; }\n"
         ".selection-secondary { color:@rm_summary; font-size:10px; }\n"
@@ -829,14 +889,30 @@ static void apply_theme(RunnerScopeApp *app)
     g_string_append_printf(
         css,
         ".footer-card {"
-        " background:@rm_card; border:1px solid @rm_border;"
-        " border-radius:%upx; padding:%upx %upx;"
+        " background-color:@rm_card;"
+        " background-image:linear-gradient(105deg, alpha(@rm_neutral, 0.06),"
+        " @rm_card 54%%, alpha(@rm_operation, 0.035));"
+        " border:1px solid @rm_connection_border; border-radius:%upx;"
+        " padding:%upx %upx; box-shadow:0 3px 12px alpha(#000000, 0.18);"
         "}\n"
         "#footer-actions button {"
-        " border-radius:%upx; min-height:30px; padding:4px 10px;"
+        " border-radius:%upx; min-height:34px; padding:5px 11px;"
         "}\n"
         ".status-text { color:@rm_summary; font-size:11px; }\n"
-        ".version-text { color:@rm_detail_label; font-size:10px; }\n",
+        ".version-text { color:@rm_detail_label; font-size:10px; }\n"
+        ".runner-action-button {"
+        " background-color:@rm_surface;"
+        " background-image:linear-gradient(to bottom, alpha(@rm_neutral, 0.10),"
+        " alpha(@rm_surface, 0.88)); border:1px solid @rm_connection_border;"
+        " box-shadow:0 2px 7px alpha(#000000, 0.18);"
+        "}\n"
+        ".runner-action-button:hover { border-color:@rm_neutral; }\n"
+        ".runner-action-primary {"
+        " background-image:linear-gradient(135deg, @rm_neutral, @rm_operation);"
+        " color:@rm_accent_foreground; border-color:alpha(@rm_accent_foreground, 0.42);"
+        "}\n"
+        ".runner-action-primary label, .runner-action-primary image { color:@rm_accent_foreground; }\n"
+        ".runner-action-warning { border-color:alpha(@rm_warning, 0.58); }\n",
         (unsigned int)metrics->card_radius,
         (unsigned int)metrics->compact_spacing,
         (unsigned int)metrics->control_spacing,
@@ -1177,6 +1253,10 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
     char a[32], b[32], d[32], uptime[64];
     switch (page) {
         case 0:
+            if (app->workspace_icon) {
+                gtk_image_set_from_icon_name(GTK_IMAGE(app->workspace_icon), "computer-symbolic", GTK_ICON_SIZE_BUTTON);
+                gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
+            }
             label_set_if_changed(app->workspace_title, "Runner fleet");
             label_set_if_changed(
                 app->workspace_subtitle,
@@ -1191,6 +1271,10 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             workspace_metric(app, 3U, "OFFLINE", a);
             break;
         case 1:
+            if (app->workspace_icon) {
+                gtk_image_set_from_icon_name(GTK_IMAGE(app->workspace_icon), "media-playback-start-symbolic", GTK_ICON_SIZE_BUTTON);
+                gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
+            }
             label_set_if_changed(app->workspace_title, "Active work");
             label_set_if_changed(
                 app->workspace_subtitle,
@@ -1205,6 +1289,10 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             workspace_metric(app, 3U, "ACTIVE", a);
             break;
         case 2: {
+            if (app->workspace_icon) {
+                gtk_image_set_from_icon_name(GTK_IMAGE(app->workspace_icon), "document-open-recent-symbolic", GTK_ICON_SIZE_BUTTON);
+                gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
+            }
             label_set_if_changed(app->workspace_title, "Session history");
             label_set_if_changed(
                 app->workspace_subtitle,
@@ -1223,6 +1311,10 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             break;
         }
         default:
+            if (app->workspace_icon) {
+                gtk_image_set_from_icon_name(GTK_IMAGE(app->workspace_icon), "utilities-system-monitor-symbolic", GTK_ICON_SIZE_BUTTON);
+                gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
+            }
             label_set_if_changed(app->workspace_title, "Local Linux health");
             label_set_if_changed(
                 app->workspace_subtitle,
@@ -2866,6 +2958,28 @@ static GtkWidget *make_window_control(const char *icon_name,
     return button;
 }
 
+static GtkWidget *make_action_button(const char *icon_name,
+                                     const char *label,
+                                     const char *tooltip,
+                                     const char *css_class)
+{
+    GtkWidget *button = gtk_button_new();
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    GtkWidget *icon = gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
+    GtkWidget *text = gtk_label_new(label);
+    gtk_image_set_pixel_size(GTK_IMAGE(icon), 18);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(text, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(row), icon, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), text, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(button), row);
+    gtk_style_context_add_class(gtk_widget_get_style_context(button), "runner-action-button");
+    if (css_class)
+        gtk_style_context_add_class(gtk_widget_get_style_context(button), css_class);
+    if (tooltip && *tooltip) gtk_widget_set_tooltip_text(button, tooltip);
+    return button;
+}
+
 static void build_ui(RunnerScopeApp *app)
 {
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
@@ -2999,6 +3113,19 @@ static void build_ui(RunnerScopeApp *app)
         gtk_widget_get_style_context(workspace_header), "workspace-header");
     gtk_box_pack_start(GTK_BOX(workspace), workspace_header, FALSE, FALSE, 0);
 
+    GtkWidget *workspace_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(workspace_icon_well), "workspace-icon-well");
+    app->workspace_icon =
+        gtk_image_new_from_icon_name("computer-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->workspace_icon), "workspace-icon");
+    gtk_box_pack_start(
+        GTK_BOX(workspace_icon_well), app->workspace_icon, TRUE, TRUE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_header), workspace_icon_well, FALSE, FALSE, 0);
+
     GtkWidget *workspace_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_hexpand(workspace_copy, TRUE);
     app->workspace_title = gtk_label_new("Runner fleet");
@@ -3036,6 +3163,11 @@ static void build_ui(RunnerScopeApp *app)
         GtkWidget *metric = make_workspace_metric(
             "—", &app->workspace_metric_caption[i],
             &app->workspace_metric_value[i]);
+        const char *metric_classes[] = {
+            "metric-one", "metric-two", "metric-three", "metric-four"
+        };
+        gtk_style_context_add_class(
+            gtk_widget_get_style_context(metric), metric_classes[i]);
         gtk_grid_attach(GTK_GRID(workspace_metrics), metric, (gint)i, 0, 1, 1);
     }
     gtk_box_pack_end(
@@ -3054,13 +3186,19 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_set_no_show_all(app->selection_card, TRUE);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->selection_card), "selection-card");
+    GtkWidget *selection_icon_well =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(selection_icon_well), "selection-icon-well");
     GtkWidget *selection_icon =
         gtk_image_new_from_icon_name("dialog-information-symbolic", GTK_ICON_SIZE_BUTTON);
     gtk_image_set_pixel_size(GTK_IMAGE(selection_icon), 22);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(selection_icon), "selection-icon");
     gtk_box_pack_start(
-        GTK_BOX(app->selection_card), selection_icon, FALSE, FALSE, 0);
+        GTK_BOX(selection_icon_well), selection_icon, TRUE, TRUE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(app->selection_card), selection_icon_well, FALSE, FALSE, 0);
     GtkWidget *selection_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
     gtk_widget_set_hexpand(selection_copy, TRUE);
     app->selection_title = gtk_label_new("Selection");
@@ -3200,7 +3338,7 @@ static void build_ui(RunnerScopeApp *app)
     GtkWidget *context_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
     gtk_box_pack_start(GTK_BOX(action_row), context_actions, FALSE, FALSE, 0);
 
-    app->open_job_button = gtk_button_new_with_label("Open selected job");
+    app->open_job_button = make_action_button("emblem-web-symbolic", "Open selected job", "Open the selected workflow job in GitHub.", NULL);
     gtk_widget_set_sensitive(app->open_job_button, FALSE);
     gtk_widget_set_tooltip_text(
         app->open_job_button, "Select an active job to open it in GitHub.");
@@ -3209,7 +3347,7 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(
         GTK_BOX(context_actions), app->open_job_button, FALSE, FALSE, 0);
 
-    app->open_diag_button = gtk_button_new_with_label("Open _diag");
+    app->open_diag_button = make_action_button("folder-open-symbolic", "Open diagnostic", "Open the selected runner diagnostic.", NULL);
     gtk_widget_set_sensitive(app->open_diag_button, FALSE);
     gtk_widget_set_tooltip_text(
         app->open_diag_button,
@@ -3219,7 +3357,7 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(
         GTK_BOX(context_actions), app->open_diag_button, FALSE, FALSE, 0);
 
-    app->restart_button = gtk_button_new_with_label("Restart selected runner");
+    app->restart_button = make_action_button("view-refresh-symbolic", "Restart selected runner", "Restart the selected local runner service.", "runner-action-warning");
     gtk_widget_set_sensitive(app->restart_button, FALSE);
     gtk_widget_set_tooltip_text(
         app->restart_button,
@@ -3232,15 +3370,15 @@ static void build_ui(RunnerScopeApp *app)
     GtkWidget *general_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
     gtk_box_pack_end(GTK_BOX(action_row), general_actions, FALSE, FALSE, 0);
 
-    GtkWidget *button = gtk_button_new_with_label("Export CSV");
+    GtkWidget *button = make_action_button("document-save-symbolic", "Export CSV", "Export the current workspace as CSV.", NULL);
     g_signal_connect(button, "clicked", G_CALLBACK(on_export), app);
     gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
 
-    button = gtk_button_new_with_label("About");
+    button = make_action_button("help-about-symbolic", "About", "About Runner Monitor.", NULL);
     g_signal_connect(button, "clicked", G_CALLBACK(on_about), app);
     gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
 
-    button = gtk_button_new_with_label("Refresh now");
+    button = make_action_button("view-refresh-symbolic", "Refresh now", "Refresh the active workspace now.", "runner-action-primary");
     g_signal_connect(button, "clicked", G_CALLBACK(on_refresh), app);
     gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
 
