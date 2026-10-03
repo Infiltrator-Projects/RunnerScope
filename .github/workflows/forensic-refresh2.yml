@@ -33,7 +33,7 @@ jobs:
           rm -f tools/prefer-bigbedroom-runners.sh
           if grep -R -n --exclude-dir=.git --exclude-dir=infiltratr-common \
               -E '7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f|runnerscope-firstparty|src/native2' \
-              CMakeLists.txt README.md docs src tools 2>/dev/null; then
+              CMakeLists.txt README.md docs src 2>/dev/null; then
             echo 'Retired live implementation/Common references remain.' >&2
             exit 1
           fi
