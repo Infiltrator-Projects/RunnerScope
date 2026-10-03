@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Repair forensic refresh workflow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-forensic-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event.head_commit.message == 'Fix forensic refresh'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Repair guard and retrigger forensic refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/forensic-refresh.yml')
+          text = path.read_text()
+
+          old = "readme = Path('README.md').read_text().replace('Common 1.19.35', 'Common 1.19.38')"
+          new = "readme = (Path('README.md').read_text()\n          .replace('Common 1.19.35', 'Common 1.19.38')\n          .replace('7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f', '7070c5812b50821fd7580101cb2289a3184f6b2c'))"
+          if text.count(old) != 1:
+              raise SystemExit(f'README transform anchor count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old_guard = """          if grep -R -n --exclude-dir=.git --exclude-dir=infiltratr-common \\
+              -E '1\\.19\\.35|7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f|runnerscope-firstparty|src/native2' \\
+              CMakeLists.txt README.md docs .github debian src tools 2>/dev/null; then
+            echo 'Retired implementation/Common references remain.' >&2
+            exit 1
+          fi
+"""
+          new_guard = """          if grep -R -n --exclude-dir=.git --exclude-dir=infiltratr-common \\
+              -E '1\\.19\\.35|7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f|runnerscope-firstparty|src/native2' \\
+              CMakeLists.txt README.md docs src tools 2>/dev/null; then
+            echo 'Retired live implementation/Common references remain.' >&2
+            exit 1
+          fi
+"""
+          if text.count(old_guard) != 1:
+              raise SystemExit(f'guard anchor count={text.count(old_guard)}')
+          text = text.replace(old_guard, new_guard, 1)
+          path.write_text(text)
+          PY
+
+          rm -f .github/workflows/fix-forensic-refresh.yml
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Run forensic refresh'
+          git push origin HEAD:main
