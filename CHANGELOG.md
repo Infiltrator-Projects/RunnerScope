@@ -4,6 +4,14 @@
 
 No unreleased changes.
 
+## 1.2.30 - 2026-10-03
+
+- Replace the temporary GtkListBox navigation workaround with the same compact toggle-button rail used by the current Infiltrator OS/System Monitor shell.
+- Remove the remaining obsolete list-row navigation CSS, subtitle widgets and historical navigation helper code.
+- Add direct runner/activity row indexes so one-second live-cell updates no longer perform repeated linear searches through backing arrays.
+- Suspend presentation-only one-second repaints while the window is iconified; provider polling continues in the background and the display catches up immediately on restore.
+- Keep the exact latest Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.
+
 ## 1.2.29 - 2026-10-03
 
 - Remove the superseded first-pass GTK CSS layer so the Linux shell has one authoritative Common-driven style projection instead of stacked historical overrides.

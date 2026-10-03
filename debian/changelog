@@ -1,3 +1,14 @@
+infiltrator-runner-monitor (1.2.30) unstable; urgency=medium
+
+  * Replace the temporary GtkListBox navigation with the current Infiltrator OS
+    toggle-button rail and remove its superseded CSS/helpers.
+  * Index live runner and activity rows for constant-time one-second updates.
+  * Skip presentation-only repaint work while the window is iconified without
+    stopping provider polling.
+  * Keep the exact latest Infiltratr Common 1.19.38 pin.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 12:10:00 +1000
+
 infiltrator-runner-monitor (1.2.29) unstable; urgency=medium
 
   * Remove the superseded duplicate GTK CSS projection and use one flat,

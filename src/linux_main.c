@@ -182,6 +182,8 @@ typedef struct {
     GtkWidget *selection_title;
     GtkWidget *selection_primary;
     GtkWidget *selection_secondary;
+    GtkWidget *nav_buttons[4];
+    gboolean navigation_syncing;
     GtkCssProvider *theme_provider;
 
     GtkListStore *runner_store;
@@ -196,6 +198,8 @@ typedef struct {
     RunnerConfig config;
     GHashTable *sessions;
     GHashTable *job_by_runner;
+    GHashTable *runner_row_by_name;
+    GHashTable *activity_row_by_url;
     GPtrArray *runner_rows;
     GPtrArray *activity_rows;
     GPtrArray *history_rows;
@@ -761,11 +765,6 @@ static void apply_theme(RunnerScopeApp *app)
         " background:@rm_card; border:1px solid @rm_border;"
         " border-radius:%upx;"
         "}\n"
-        ".runner-sidebar {"
-        " background-image:none; background-color:@rm_panel;"
-        " border-right:1px solid @rm_connection_border;"
-        " border-radius:%upx 0 0 %upx; padding:%upx;"
-        "}\n"
         ".runner-workspace {"
         " background:@rm_card; border-radius:0 %upx %upx 0;"
         "}\n"
@@ -790,9 +789,6 @@ static void apply_theme(RunnerScopeApp *app)
         (unsigned int)metrics->panel_radius,
         (unsigned int)metrics->panel_radius,
         (unsigned int)metrics->panel_radius,
-        (unsigned int)metrics->compact_spacing,
-        (unsigned int)metrics->panel_radius,
-        (unsigned int)metrics->panel_radius,
         (unsigned int)metrics->control_spacing,
         (unsigned int)metrics->content_padding,
         (unsigned int)type->ui_bold_weight,
@@ -802,37 +798,35 @@ static void apply_theme(RunnerScopeApp *app)
         (unsigned int)type->ui_bold_weight,
         (unsigned int)type->ui_bold_weight);
 
-    g_string_append_printf(
+    g_string_append(
         css,
-        ".runner-nav-list { background:transparent; color:@rm_summary; border:0; }\n"
-        ".runner-nav-list row {"
+        "#runner-main-navigation, #runner-main-navigation viewport {"
+        " background-image:none; background-color:@rm_panel;"
+        " border-color:@rm_connection_border;"
+        "}\n"
+        "#runner-main-navigation { border-right:1px solid @rm_connection_border; }\n"
+        "#runner-main-nav-button {"
         " background-image:none; background-color:transparent;"
         " color:@rm_summary; border:1px solid transparent;"
-        " border-radius:%upx; margin:2px 0; min-height:48px;"
-        " padding:%upx %upx;"
+        " box-shadow:none; margin:2px 4px; padding:6px 8px;"
         "}\n"
-        ".runner-nav-list row:hover {"
+        "#runner-main-nav-button:hover {"
         " background-color:@rm_surface_hover; border-color:@rm_border;"
         "}\n"
-        ".runner-nav-list row:selected {"
+        "#runner-main-nav-button:checked {"
         " background-image:none; background-color:@rm_selection;"
         " color:@rm_selection_text; border-color:@rm_neutral;"
         " box-shadow:none;"
         "}\n"
-        ".runner-tab-icon {"
-        " background:@rm_surface; border:1px solid @rm_border;"
-        " border-radius:%upx; padding:5px;"
+        "#runner-main-nav-button .runner-main-nav-label {"
+        " color:@rm_summary; font-size:14px; font-weight:700;"
         "}\n"
-        ".runner-tab-icon image { color:@rm_neutral; }\n"
-        ".nav-primary { color:@rm_summary; font-size:14px; font-weight:%u; }\n"
-        ".nav-secondary { color:@rm_detail_label; font-size:10px; }\n"
-        ".runner-nav-list row:selected .nav-primary { color:@rm_selection_text; }\n"
-        ".runner-nav-list row:selected .nav-secondary { color:@rm_selected_summary; }\n",
-        (unsigned int)metrics->control_radius,
-        (unsigned int)metrics->compact_spacing,
-        (unsigned int)metrics->control_spacing,
-        (unsigned int)metrics->control_radius,
-        (unsigned int)type->ui_bold_weight);
+        "#runner-main-nav-button:hover .runner-main-nav-label { color:@rm_title; }\n"
+        "#runner-main-nav-button:checked .runner-main-nav-label { color:@rm_selection_text; }\n"
+        "#runner-main-nav-button .runner-main-nav-icon {"
+        " color:@rm_neutral; background-color:@rm_surface;"
+        " border:1px solid @rm_border; border-radius:10px; padding:5px;"
+        "}\n");
 
     g_string_append_printf(
         css,
@@ -1435,6 +1429,26 @@ static gboolean same_text(const char *left, const char *right)
     return g_strcmp0(left, right) == 0;
 }
 
+static void rebuild_runner_row_index(RunnerScopeApp *app)
+{
+    g_hash_table_remove_all(app->runner_row_by_name);
+    for (guint i = 0U; i < app->runner_rows->len; i++) {
+        RunnerRow *row = g_ptr_array_index(app->runner_rows, i);
+        if (row->name && *row->name)
+            g_hash_table_insert(app->runner_row_by_name, row->name, row);
+    }
+}
+
+static void rebuild_activity_row_index(RunnerScopeApp *app)
+{
+    g_hash_table_remove_all(app->activity_row_by_url);
+    for (guint i = 0U; i < app->activity_rows->len; i++) {
+        ActivityRow *row = g_ptr_array_index(app->activity_rows, i);
+        if (row->url && *row->url)
+            g_hash_table_insert(app->activity_row_by_url, row->url, row);
+    }
+}
+
 static gboolean runner_rows_static_equal(const GPtrArray *left,
                                          const GPtrArray *right)
 {
@@ -1602,6 +1616,7 @@ static gboolean runner_apply_idle(gpointer data)
         !runner_rows_static_equal(app->runner_rows, next_rows);
     GPtrArray *old_rows = app->runner_rows;
     app->runner_rows = next_rows;
+    rebuild_runner_row_index(app);
     g_ptr_array_unref(old_rows);
 
     app->runners_total = total;
@@ -1851,6 +1866,7 @@ static gboolean activity_apply_idle(gpointer data)
     GPtrArray *old_rows = app->activity_rows;
     app->activity_rows = result->rows;
     result->rows = NULL;
+    rebuild_activity_row_index(app);
     g_ptr_array_unref(old_rows);
 
     app->local_active = result->local_active;
@@ -2095,28 +2111,6 @@ static gboolean local_timer_cb(gpointer data)
     return G_SOURCE_CONTINUE;
 }
 
-static RunnerRow *find_runner_row(RunnerScopeApp *app, const char *name)
-{
-    if (!app || !name) return NULL;
-    for (guint i = 0U; i < app->runner_rows->len; i++) {
-        RunnerRow *row = g_ptr_array_index(app->runner_rows, i);
-        if (row->name && strcmp(row->name, name) == 0)
-            return row;
-    }
-    return NULL;
-}
-
-static ActivityRow *find_activity_row(RunnerScopeApp *app, const char *url)
-{
-    if (!app || !url) return NULL;
-    for (guint i = 0U; i < app->activity_rows->len; i++) {
-        ActivityRow *row = g_ptr_array_index(app->activity_rows, i);
-        if (row->url && strcmp(row->url, url) == 0)
-            return row;
-    }
-    return NULL;
-}
-
 static void refresh_runner_clock_cells(RunnerScopeApp *app,
                                        double monotonic_now,
                                        double wall_now)
@@ -2156,7 +2150,7 @@ static void refresh_runner_clock_cells(RunnerScopeApp *app,
         gtk_tree_model_get(
             GTK_TREE_MODEL(app->runner_store), &iter,
             RUNNER_COL_NAME, &name, -1);
-        RunnerRow *row = find_runner_row(app, name);
+        RunnerRow *row = g_hash_table_lookup(app->runner_row_by_name, name);
         if (row) {
             gtk_list_store_set(
                 app->runner_store, &iter,
@@ -2188,7 +2182,7 @@ static void refresh_activity_clock_cells(RunnerScopeApp *app, double wall_now)
         gtk_tree_model_get(
             GTK_TREE_MODEL(app->activity_store), &iter,
             ACT_COL_URL, &url, -1);
-        ActivityRow *row = find_activity_row(app, url);
+        ActivityRow *row = g_hash_table_lookup(app->activity_row_by_url, url);
         if (row)
             gtk_list_store_set(
                 app->activity_store, &iter,
@@ -2202,6 +2196,12 @@ static void refresh_activity_clock_cells(RunnerScopeApp *app, double wall_now)
 static gboolean tick_timer_cb(gpointer data)
 {
     RunnerScopeApp *app = data;
+    if (app->window) {
+        GdkWindow *window = gtk_widget_get_window(app->window);
+        if (window &&
+            (gdk_window_get_state(window) & GDK_WINDOW_STATE_ICONIFIED) != 0)
+            return G_SOURCE_CONTINUE;
+    }
     const double monotonic_now = now_monotonic();
     const double wall_now = (double)time(NULL);
 
@@ -2700,66 +2700,70 @@ static GtkWidget *make_counter(const char *name, const char *css_class)
     return label;
 }
 
-static GtkWidget *make_nav_content(const char *icon_name,
-                                 const char *title,
-                                 const char *subtitle)
+static void sync_navigation(RunnerScopeApp *app, gint page)
 {
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    GtkWidget *icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    GtkWidget *icon = gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_MENU);
-    GtkWidget *copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
-    GtkWidget *primary = gtk_label_new(title);
-    GtkWidget *secondary = gtk_label_new(subtitle);
-
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(icon_well), "runner-tab-icon");
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(primary), "nav-primary");
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(secondary), "nav-secondary");
-
-    gtk_image_set_pixel_size(GTK_IMAGE(icon), 20);
-    gtk_box_pack_start(GTK_BOX(icon_well), icon, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(box), icon_well, FALSE, FALSE, 0);
-
-    gtk_widget_set_halign(primary, GTK_ALIGN_START);
-    gtk_widget_set_halign(secondary, GTK_ALIGN_START);
-    gtk_widget_set_hexpand(copy, TRUE);
-    gtk_box_pack_start(GTK_BOX(copy), primary, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(copy), secondary, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), copy, TRUE, TRUE, 0);
-    gtk_widget_set_hexpand(box, TRUE);
-    gtk_widget_set_halign(box, GTK_ALIGN_FILL);
-    return box;
-}
-
-static void on_nav_row_selected(GtkListBox *list,
-                                GtkListBoxRow *row,
-                                gpointer user_data)
-{
-    (void)list;
-    if (!row) return;
-
-    RunnerScopeApp *app = user_data;
-    const gint page = gtk_list_box_row_get_index(row);
-    if (page >= 0 && page < 4) {
-        gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);
-        render_page(app, page);
-        update_workspace_context(app, page);
-        clear_selection_card(app);
+    if (!app) return;
+    app->navigation_syncing = TRUE;
+    for (gint i = 0; i < 4; i++) {
+        if (app->nav_buttons[i])
+            gtk_toggle_button_set_active(
+                GTK_TOGGLE_BUTTON(app->nav_buttons[i]), i == page);
     }
+    app->navigation_syncing = FALSE;
 }
 
-static GtkWidget *make_nav_row(const char *icon_name,
-                               const char *title,
-                               const char *subtitle)
+static void on_nav_clicked(GtkButton *button, gpointer user_data)
 {
-    GtkWidget *row = gtk_list_box_row_new();
-    gtk_list_box_row_set_activatable(GTK_LIST_BOX_ROW(row), TRUE);
-    gtk_list_box_row_set_selectable(GTK_LIST_BOX_ROW(row), TRUE);
-    gtk_container_add(
-        GTK_CONTAINER(row), make_nav_content(icon_name, title, subtitle));
-    return row;
+    RunnerScopeApp *app = user_data;
+    if (!app || app->navigation_syncing || !app->notebook) return;
+
+    const gint encoded = GPOINTER_TO_INT(
+        g_object_get_data(G_OBJECT(button), "runner-nav-page"));
+    const gint page = encoded - 1;
+    if (page < 0 || page >= 4) return;
+
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);
+    sync_navigation(app, page);
+    render_page(app, page);
+    update_workspace_context(app, page);
+    clear_selection_card(app);
+}
+
+static GtkWidget *make_nav_button(RunnerScopeApp *app,
+                                  gint page,
+                                  const char *icon_name,
+                                  const char *title,
+                                  const char *tooltip)
+{
+    GtkWidget *button = gtk_toggle_button_new();
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *icon =
+        gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
+    GtkWidget *label = gtk_label_new(title);
+
+    gtk_widget_set_name(button, "runner-main-nav-button");
+    gtk_widget_set_size_request(button, -1, 48);
+    gtk_widget_set_hexpand(button, TRUE);
+    gtk_widget_set_halign(button, GTK_ALIGN_FILL);
+    gtk_image_set_pixel_size(GTK_IMAGE(icon), 24);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(icon), "runner-main-nav-icon");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(label), "runner-main-nav-label");
+    gtk_widget_set_halign(label, GTK_ALIGN_START);
+    gtk_widget_set_valign(label, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(row), icon, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), label, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(button), row);
+    if (tooltip && *tooltip)
+        gtk_widget_set_tooltip_text(button, tooltip);
+
+    g_object_set_data(
+        G_OBJECT(button), "runner-nav-page", GINT_TO_POINTER(page + 1));
+    g_signal_connect(
+        button, "clicked", G_CALLBACK(on_nav_clicked), app);
+    app->nav_buttons[page] = button;
+    return button;
 }
 
 static void minimize_window(GtkButton *button, gpointer user_data)
@@ -3027,24 +3031,19 @@ static void build_ui(RunnerScopeApp *app)
         gtk_widget_get_style_context(content_shell), "runner-content-shell");
     gtk_box_pack_start(GTK_BOX(outer), content_shell, TRUE, TRUE, 0);
 
-    GtkWidget *navigation = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_set_size_request(navigation, 214, -1);
+    GtkWidget *navigation = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_name(navigation, "runner-main-navigation");
+    gtk_widget_set_size_request(navigation, 204, -1);
     gtk_widget_set_hexpand(navigation, FALSE);
-    gtk_widget_set_halign(navigation, GTK_ALIGN_START);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(navigation), "runner-sidebar");
+    gtk_widget_set_vexpand(navigation, TRUE);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(navigation),
+        GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
     gtk_box_pack_start(GTK_BOX(content_shell), navigation, FALSE, TRUE, 0);
 
-    GtkWidget *nav_list = gtk_list_box_new();
-    gtk_list_box_set_selection_mode(GTK_LIST_BOX(nav_list), GTK_SELECTION_BROWSE);
-    gtk_list_box_set_activate_on_single_click(GTK_LIST_BOX(nav_list), TRUE);
-    gtk_widget_set_hexpand(nav_list, TRUE);
-    gtk_widget_set_halign(nav_list, GTK_ALIGN_FILL);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(nav_list), "runner-nav-list");
-    gtk_box_pack_start(GTK_BOX(navigation), nav_list, FALSE, FALSE, 0);
-    g_signal_connect(
-        nav_list, "row-selected", G_CALLBACK(on_nav_row_selected), app);
+    GtkWidget *nav_rail = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_container_set_border_width(GTK_CONTAINER(nav_rail), 8);
+    gtk_container_add(GTK_CONTAINER(navigation), nav_rail);
 
     GtkWidget *workspace = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_hexpand(workspace, TRUE);
@@ -3210,22 +3209,24 @@ static void build_ui(RunnerScopeApp *app)
     g_signal_connect(
         selection, "changed", G_CALLBACK(on_local_selection), app);
 
-    GtkWidget *nav_runners = make_nav_row(
-        "computer-symbolic", "Runners", "Fleet state & utilisation");
-    GtkWidget *nav_active = make_nav_row(
-        "media-playback-start-symbolic", "Active jobs", "Work executing now");
-    GtkWidget *nav_history = make_nav_row(
-        "document-open-recent-symbolic", "History", "Session activity");
-    GtkWidget *nav_local = make_nav_row(
-        "utilities-system-monitor-symbolic",
-        "Local Linux health", "Services & diagnostics");
-
-    gtk_list_box_insert(GTK_LIST_BOX(nav_list), nav_runners, -1);
-    gtk_list_box_insert(GTK_LIST_BOX(nav_list), nav_active, -1);
-    gtk_list_box_insert(GTK_LIST_BOX(nav_list), nav_history, -1);
-    gtk_list_box_insert(GTK_LIST_BOX(nav_list), nav_local, -1);
-    gtk_list_box_select_row(
-        GTK_LIST_BOX(nav_list), GTK_LIST_BOX_ROW(nav_runners));
+    const struct {
+        const char *icon;
+        const char *title;
+        const char *tooltip;
+    } nav_items[] = {
+        {"computer-symbolic", "Runners", "Fleet state and utilisation"},
+        {"media-playback-start-symbolic", "Active jobs", "Work executing now"},
+        {"document-open-recent-symbolic", "History", "Session activity"},
+        {"utilities-system-monitor-symbolic", "Local Linux health", "Services and diagnostics"}
+    };
+    for (guint i = 0U; i < G_N_ELEMENTS(nav_items); i++) {
+        GtkWidget *nav_button = make_nav_button(
+            app, (gint)i, nav_items[i].icon,
+            nav_items[i].title, nav_items[i].tooltip);
+        gtk_box_pack_start(
+            GTK_BOX(nav_rail), nav_button, FALSE, TRUE, 0);
+    }
+    sync_navigation(app, 0);
 
     GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, (gint)compact_spacing);
     gtk_style_context_add_class(
@@ -3411,6 +3412,8 @@ static void app_init(RunnerScopeApp *app)
     load_config(&app->config);
     app->sessions = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, session_free);
     app->job_by_runner = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, job_summary_free);
+    app->runner_row_by_name = g_hash_table_new(g_str_hash, g_str_equal);
+    app->activity_row_by_url = g_hash_table_new(g_str_hash, g_str_equal);
     app->runner_rows = g_ptr_array_new_with_free_func(runner_row_free);
     app->activity_rows = g_ptr_array_new_with_free_func(activity_row_free);
     app->history_rows = g_ptr_array_new_with_free_func(history_row_free);
@@ -3457,6 +3460,8 @@ static void app_destroy(RunnerScopeApp *app)
     }
     g_hash_table_unref(app->sessions);
     g_hash_table_unref(app->job_by_runner);
+    g_hash_table_unref(app->runner_row_by_name);
+    g_hash_table_unref(app->activity_row_by_url);
     g_ptr_array_unref(app->runner_rows);
     g_ptr_array_unref(app->activity_rows);
     g_ptr_array_unref(app->history_rows);
