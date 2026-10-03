@@ -25,7 +25,7 @@ jobs:
         if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkg-config libgtk-3-dev
+          sudo apt-get install -y build-essential ca-certificates cmake fontconfig pkg-config libgtk-3-dev
 
       - name: Verify self-hosted native dependencies
         if: runner.environment == 'self-hosted'
@@ -110,7 +110,7 @@ jobs:
       - name: Install clean package build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y             build-essential cmake debhelper devscripts git pkg-config             libgtk-3-dev gh
+          sudo apt-get install -y             build-essential ca-certificates cmake debhelper devscripts fontconfig git pkg-config             libgtk-3-dev gh
 
       - name: Verify exact Common pin
         shell: bash
@@ -150,6 +150,13 @@ jobs:
           test -f /usr/share/applications/runnerscope.desktop
           test -f /usr/share/icons/hicolor/scalable/apps/runnerscope.svg
           test -f /usr/share/icons/hicolor/128x128/apps/runnerscope.png
+          test -f /usr/share/fonts/truetype/runnerscope/mb_corpo_a_cond_regular.ttf
+          test -f /usr/share/fonts/truetype/runnerscope/mb_corpo_s_bold.ttf
+          test -f /usr/share/fonts/truetype/runnerscope/mb_corpo_s_regular.ttf
+          test -f /usr/share/runnerscope/art/hero-runners.png
+          test -f /usr/share/runnerscope/art/nav-infiltrator.png
+          fc-match "MB Corpo S Title WEB" | grep -qi 'MB Corpo'
+          fc-match "MB Corpo A Title Cond WEB" | grep -qi 'MB Corpo'
           grep -qx 'Exec=/usr/bin/runnerscope' /usr/share/applications/runnerscope.desktop
           ! test -e /usr/lib/runnerscope/runnerscope.py
 
