@@ -20,6 +20,10 @@ Windows:
 
 Release publication consumes only those qualified native artifacts.
 
+## 1.2.30 forensic qualification
+
+The 1.2.30 Linux pass verifies that navigation uses the current Infiltrator OS/System Monitor toggle-button rail rather than the retired GtkListBox workaround, that the superseded list-row CSS/helpers are absent, and that one-second live runner/activity updates use direct row indexes instead of repeated linear searches. Presentation-only tick work is suppressed while the window is iconified, while provider polling continues normally. The exact latest Common 1.19.38 gitlink remains enforced.
+
 ## 1.2.29 forensic qualification
 
 The 1.2.29 Linux pass additionally verifies that the shipping tree has one Common-driven GTK style projection, no temporary forensic workflow or transformation script, the latest pinned Common revision, and no superseded tab-label naming. Provider refresh application was qualified after removing redundant visible-model rebuilds and transfer-time deep copies.
