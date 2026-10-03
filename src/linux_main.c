@@ -251,7 +251,6 @@ typedef struct {
     guint local_active;
     guint hosted_active;
     guint queued;
-    guint repos_scanned;
     char *error;
 } ActivityRefreshResult;
 
@@ -269,6 +268,7 @@ typedef struct {
 
 static gboolean activity_apply_idle(gpointer data);
 static gboolean local_apply_idle(gpointer data);
+static void request_activity_refresh(RunnerScopeApp *app);
 static void on_export(GtkButton *button, gpointer user_data);
 static InfiltratrProjectInfo project_info(void);
 
@@ -449,12 +449,9 @@ static void load_config(RunnerConfig *config)
         (void)json_get_uint(contents, "local_health_seconds", &config->local_health_seconds);
         char theme[32] = "";
         if (json_get_string(contents, "theme_mode", theme, sizeof(theme))) {
-            if (g_ascii_strcasecmp(theme, "day") == 0)
-                config->theme_mode = INFILTRATR_THEME_DAY;
-            else if (g_ascii_strcasecmp(theme, "night") == 0)
-                config->theme_mode = INFILTRATR_THEME_NIGHT;
-            else
-                config->theme_mode = INFILTRATR_THEME_SYSTEM;
+            InfiltratrThemeMode parsed_mode = config->theme_mode;
+            if (infiltratr_theme_mode_parse(theme, &parsed_mode))
+                config->theme_mode = parsed_mode;
         }
     }
     g_free(contents);
@@ -484,7 +481,7 @@ static gboolean save_config(const RunnerConfig *config, GError **error)
         return FALSE;
     }
 
-    const char *mode = infiltratr_theme_mode_name(config->theme_mode);
+    const char *mode = infiltratr_theme_mode_key(config->theme_mode);
     char *json = g_strdup_printf(
         "{\n"
         "  \"organisation\": \"%s\",\n"
@@ -497,7 +494,7 @@ static gboolean save_config(const RunnerConfig *config, GError **error)
         "}\n",
         escaped, config->expected_runners, config->runner_poll_seconds,
         config->activity_scan_seconds, config->repository_scan_limit,
-        config->local_health_seconds, mode ? mode : "System");
+        config->local_health_seconds, mode ? mode : "system");
     g_free(escaped);
 
     char *path = config_path();
@@ -759,11 +756,12 @@ static void apply_theme(RunnerScopeApp *app)
         " background-image:none; background-color:@rm_panel;"
         " border-color:@rm_connection_border;"
         "}\n"
-        "#runner-main-navigation { border-right:1px solid @rm_connection_border; }\n"
+        "#runner-main-navigation { border-right:1px solid @rm_border; }\n"
         "#runner-main-nav-button {"
         " background-image:none; background-color:transparent;"
         " color:@rm_summary; border:1px solid transparent;"
-        " box-shadow:none; margin:2px 4px; padding:6px 8px;"
+        " border-radius:12px; box-shadow:none;"
+        " margin:2px 4px; padding:7px 9px;"
         "}\n"
         "#runner-main-nav-button:hover {"
         " background-color:@rm_surface_hover; border-color:@rm_border;"
@@ -779,8 +777,12 @@ static void apply_theme(RunnerScopeApp *app)
         "#runner-main-nav-button:hover .runner-main-nav-label { color:@rm_title; }\n"
         "#runner-main-nav-button:checked .runner-main-nav-label { color:@rm_selection_text; }\n"
         "#runner-main-nav-button .runner-main-nav-icon {"
+        " min-width:38px; min-height:38px;"
         " color:@rm_neutral; background-color:@rm_surface;"
         " border:1px solid @rm_border; border-radius:10px; padding:5px;"
+        "}\n"
+        ".runner-main-nav-separator {"
+        " background-color:alpha(@rm_connection_border, 0.78); min-height:1px;"
         "}\n");
 
     g_string_append_printf(
@@ -978,7 +980,7 @@ static void schedule_history_persist(RunnerScopeApp *app)
     if (app->history_save_timer != 0U)
         g_source_remove(app->history_save_timer);
     app->history_save_timer =
-        g_timeout_add(250U, persist_history_cb, app);
+        g_timeout_add(750U, persist_history_cb, app);
 }
 
 static void add_history(RunnerScopeApp *app, const char *runner,
@@ -1040,6 +1042,8 @@ static GtkTreeViewColumn *tree_add_text_column(GtkWidget *tree,
         NULL);
     GtkTreeViewColumn *view_column =
         gtk_tree_view_column_new_with_attributes(title, renderer, "text", column, NULL);
+    gtk_tree_view_column_set_sizing(view_column, GTK_TREE_VIEW_COLUMN_FIXED);
+    gtk_tree_view_column_set_fixed_width(view_column, min_width);
     gtk_tree_view_column_set_resizable(view_column, TRUE);
     gtk_tree_view_column_set_min_width(view_column, min_width);
     gtk_tree_view_column_set_sort_column_id(view_column, column);
@@ -1052,6 +1056,7 @@ static GtkWidget *scrolled_tree(GtkListStore *store)
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
     gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(tree), TRUE);
     gtk_tree_view_set_enable_search(GTK_TREE_VIEW(tree), TRUE);
+    gtk_tree_view_set_fixed_height_mode(GTK_TREE_VIEW(tree), TRUE);
     gtk_tree_view_set_grid_lines(GTK_TREE_VIEW(tree), GTK_TREE_VIEW_GRID_LINES_HORIZONTAL);
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scroll), GTK_SHADOW_NONE);
@@ -1061,6 +1066,18 @@ static GtkWidget *scrolled_tree(GtkListStore *store)
     gtk_widget_set_hexpand(scroll, TRUE);
     gtk_widget_set_vexpand(scroll, TRUE);
     return scroll;
+}
+
+static void tree_model_rebuild_begin(GtkWidget *tree)
+{
+    if (tree)
+        gtk_tree_view_set_model(GTK_TREE_VIEW(tree), NULL);
+}
+
+static void tree_model_rebuild_end(GtkWidget *tree, GtkListStore *store)
+{
+    if (tree && store)
+        gtk_tree_view_set_model(GTK_TREE_VIEW(tree), GTK_TREE_MODEL(store));
 }
 
 static GtkWidget *make_workspace_metric(const char *caption,
@@ -1232,6 +1249,7 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
 static void render_history(RunnerScopeApp *app)
 {
     char *folded_needle = filter_needle_casefold(app);
+    tree_model_rebuild_begin(app->history_tree);
     gtk_list_store_clear(app->history_store);
     for (guint i = 0U; i < app->history_rows->len; i++) {
         HistoryRow *row = g_ptr_array_index(app->history_rows, i);
@@ -1248,12 +1266,14 @@ static void render_history(RunnerScopeApp *app)
             HIST_COL_EVENT, row->event,
             HIST_COL_DETAIL, row->detail, -1);
     }
+    tree_model_rebuild_end(app->history_tree, app->history_store);
     g_free(folded_needle);
 }
 
 static void render_runners(RunnerScopeApp *app)
 {
     char *folded_needle = filter_needle_casefold(app);
+    tree_model_rebuild_begin(app->runner_tree);
     gtk_list_store_clear(app->runner_store);
     for (guint i = 0U; i < app->runner_rows->len; i++) {
         RunnerRow *row = g_ptr_array_index(app->runner_rows, i);
@@ -1271,12 +1291,14 @@ static void render_runners(RunnerScopeApp *app)
             RUNNER_COL_STATE_FOR, row->state_for, RUNNER_COL_JOBS, row->jobs,
             RUNNER_COL_BUSY, row->busy_pct, RUNNER_COL_LABELS, row->labels, -1);
     }
+    tree_model_rebuild_end(app->runner_tree, app->runner_store);
     g_free(folded_needle);
 }
 
 static void render_activity(RunnerScopeApp *app)
 {
     char *folded_needle = filter_needle_casefold(app);
+    tree_model_rebuild_begin(app->activity_tree);
     gtk_list_store_clear(app->activity_store);
     for (guint i = 0U; i < app->activity_rows->len; i++) {
         ActivityRow *row = g_ptr_array_index(app->activity_rows, i);
@@ -1296,12 +1318,14 @@ static void render_activity(RunnerScopeApp *app)
             ACT_COL_EVENT, row->event, ACT_COL_BRANCH, row->branch,
             ACT_COL_URL, row->url, -1);
     }
+    tree_model_rebuild_end(app->activity_tree, app->activity_store);
     g_free(folded_needle);
 }
 
 static void render_local(RunnerScopeApp *app)
 {
     char *folded_needle = filter_needle_casefold(app);
+    tree_model_rebuild_begin(app->local_tree);
     gtk_list_store_clear(app->local_store);
     for (guint i = 0U; i < app->local_rows->len; i++) {
         LocalRow *row = g_ptr_array_index(app->local_rows, i);
@@ -1320,6 +1344,7 @@ static void render_local(RunnerScopeApp *app)
             LOCAL_COL_PATH, row->path, LOCAL_COL_DIAG_PATH, row->diag_path,
             LOCAL_COL_SERVICE_NAME, row->service_name, -1);
     }
+    tree_model_rebuild_end(app->local_tree, app->local_store);
     g_free(folded_needle);
 }
 
@@ -1529,6 +1554,7 @@ static gboolean runner_apply_idle(gpointer data)
     rebuild_runner_row_index(app);
     g_ptr_array_unref(old_rows);
 
+    const guint previous_running = app->runners_running;
     app->runners_total = total;
     app->runners_running = running;
     app->runners_idle = idle;
@@ -1557,6 +1583,9 @@ static gboolean runner_apply_idle(gpointer data)
 
     g_ptr_array_unref(result->rows);
     g_atomic_int_set(&app->runner_refreshing, 0);
+    if (page == 0 && running != 0U &&
+        (previous_running == 0U || app->activity_rows->len == 0U))
+        request_activity_refresh(app);
     g_free(result);
     return G_SOURCE_REMOVE;
 }
@@ -1729,7 +1758,6 @@ static gpointer activity_worker(gpointer data)
         g_ptr_array_unref(runs);
     }
     g_strfreev(repos);
-    result->repos_scanned = scanned;
     g_idle_add(activity_apply_idle, result);
     return NULL;
 }
@@ -2004,8 +2032,10 @@ static gboolean runner_timer_cb(gpointer data)
 static gboolean activity_timer_cb(gpointer data)
 {
     RunnerScopeApp *app = data;
-    if (!app->notebook ||
-        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) != 3)
+    if (!app->notebook) return G_SOURCE_CONTINUE;
+    const gint page =
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
+    if (page == 1 || (page == 0 && app->runners_running != 0U))
         request_activity_refresh(app);
     return G_SOURCE_CONTINUE;
 }
@@ -2023,7 +2053,11 @@ static gboolean initial_activity_refresh_cb(gpointer data)
 {
     RunnerScopeApp *app = data;
     app->initial_activity_timer = 0U;
-    request_activity_refresh(app);
+    if (!app->notebook) return G_SOURCE_REMOVE;
+    const gint page =
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
+    if (page == 1 || (page == 0 && app->runners_running != 0U))
+        request_activity_refresh(app);
     return G_SOURCE_REMOVE;
 }
 
@@ -2158,7 +2192,7 @@ static void request_refresh_for_page(RunnerScopeApp *app, gint page)
 {
     if (!app) return;
     request_runner_refresh(app);
-    if (page == 0 || page == 1)
+    if (page == 1 || (page == 0 && app->runners_running != 0U))
         request_activity_refresh(app);
     if (page == 3)
         request_local_refresh(app);
@@ -2679,11 +2713,15 @@ static void on_nav_clicked(GtkButton *button, gpointer user_data)
     const gint page = encoded - 1;
     if (page < 0 || page >= 4) return;
 
+    const gint current_page =
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
+    if (current_page == page) return;
+
     gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);
     sync_navigation(app, page);
     render_page(app, page);
     update_workspace_context(app, page);
-    if (page == 1)
+    if (page == 1 || (page == 0 && app->runners_running != 0U))
         request_activity_refresh(app);
     else if (page == 3)
         request_local_refresh(app);
@@ -3135,6 +3173,13 @@ static void build_ui(RunnerScopeApp *app)
         {"utilities-system-monitor-symbolic", "Local Linux health", "Services and diagnostics"}
     };
     for (guint i = 0U; i < G_N_ELEMENTS(nav_items); i++) {
+        if (i == 3U) {
+            GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+            gtk_style_context_add_class(
+                gtk_widget_get_style_context(separator),
+                "runner-main-nav-separator");
+            gtk_box_pack_start(GTK_BOX(nav_rail), separator, FALSE, FALSE, 5);
+        }
         GtkWidget *nav_button = make_nav_button(
             app, (gint)i, nav_items[i].icon,
             nav_items[i].title, nav_items[i].tooltip);
@@ -3317,7 +3362,7 @@ static void activate(GtkApplication *application, gpointer user_data)
         app->config.activity_scan_seconds, activity_timer_cb, app);
     app->local_timer = g_timeout_add_seconds(
         app->config.local_health_seconds, local_timer_cb, app);
-    app->tick_timer = g_timeout_add_seconds(2U, tick_timer_cb, app);
+    app->tick_timer = g_timeout_add_seconds(4U, tick_timer_cb, app);
 }
 
 static void app_init(RunnerScopeApp *app)

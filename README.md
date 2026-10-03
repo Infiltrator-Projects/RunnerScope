@@ -20,7 +20,7 @@ The user-facing name is **Runner Monitor**. The stable Linux executable and desk
 
 ## Appearance
 
-Both native shells consume Common directly. On Linux, the shell follows the current Infiltrator OS structure: branded header with Settings and window controls, responsive navigation rail, active workspace header/search/metrics, table surface, contextual selection actions and a compact status/version footer. The retired menubar and duplicate hero/counter summary from earlier iterations are not part of the current shell. Theme selection lives inside Settings, and Follow system tracks live GTK host-theme changes.
+Both native shells consume Common directly. On Linux, the shell follows the current Infiltrator OS structure: branded header with Settings and window controls, responsive navigation rail using the same control/icon geometry and grouping as System Monitor, active workspace header/search/metrics, fixed-layout table surface, contextual selection actions and a compact status/version footer. The retired menubar and duplicate hero/counter summary from earlier iterations are not part of the current shell. Theme selection and persistence use Common's canonical System/Day/Night contract, and Follow system tracks live GTK host-theme changes.
 
 The Linux footer keeps selection-specific actions in a dedicated action row and status/version information in a separate row so controls remain readable at ordinary desktop widths. Enabled and disabled actions use Common palette roles instead of falling back to bright toolkit defaults in Night mode.
 

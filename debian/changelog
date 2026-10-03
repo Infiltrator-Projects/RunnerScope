@@ -1,3 +1,13 @@
+infiltrator-runner-monitor (1.2.34) unstable; urgency=medium
+
+  * Remove remaining dead activity/theme compatibility code.
+  * Batch and fixed-size GTK table presentation to reduce refresh churn.
+  * Run expensive activity discovery only where its data is actually needed.
+  * Match current Infiltrator OS navigation geometry and grouping.
+  * Keep the exact latest Infiltratr Common 1.19.38 pin.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 15:55:00 +1000
+
 infiltrator-runner-monitor (1.2.33) unstable; urgency=medium
 
   * Remove the obsolete duplicate hero/counter summary and align the Linux

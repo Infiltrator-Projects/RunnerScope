@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.2.34 - 2026-10-03
+
+- Remove the dead activity-scan result field left after the old scan-summary UI was retired and replace the private theme persistence parser with Common's canonical parser/key API.
+- Put Runner, Active Jobs, History and Local Health tables into GTK fixed-height/fixed-column mode and detach their models while rebuilding, avoiding repeated geometry work and per-row redraws during refresh/filter operations.
+- Restrict the expensive repository/job sweep to Active Jobs or a Runner view with genuinely busy self-hosted runners; trigger it immediately when the fleet transitions into a busy state and skip it on History/Local Health.
+- Ignore clicks on the already-selected navigation page, halve presentation-only duration/utilisation repaint frequency again, and widen the history-write debounce to reduce main-loop churn.
+- Match the current Infiltrator OS/System Monitor navigation geometry exactly: 12 px selected controls, 7/9 px padding, 38 px icon wells and a standard separator before Local Linux Health.
+- Keep the exact latest Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.
+
 ## 1.2.33 - 2026-10-03
 
 - Remove the duplicate hero/counter summary left from the pre-standard Linux shell; the window now follows the current Infiltrator OS header → navigation → workspace → footer hierarchy without repeated fleet state surfaces.
