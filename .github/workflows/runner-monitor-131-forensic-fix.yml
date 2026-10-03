@@ -41,6 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/forensic_fix_131.py
+          python3 tools/forensic_fix_131_retry.py
           test "$(tr -d '[:space:]' < VERSION)" = '1.2.31'
           grep -F 'RUNNERSCOPE_MAIN_NAV_WIDTH 195' src/linux_main.c >/dev/null
           grep -F 'RUNNERSCOPE_MAIN_NAV_COMPACT_WIDTH 64' src/linux_main.c >/dev/null
@@ -73,7 +74,7 @@ jobs:
           set -euo pipefail
           git config user.name 'Shannon Smith'
           git config user.email 'infiltratr@yandex.com'
-          git rm .github/workflows/runner-monitor-131-forensic-fix.yml tools/forensic_fix_131.py
+          git rm .github/workflows/runner-monitor-131-forensic-fix.yml tools/forensic_fix_131.py tools/forensic_fix_131_retry.py
           git add src/linux_main.c VERSION CHANGELOG.md debian/changelog
           git diff --cached --check
           git commit -m 'Release 1.2.31: forensic responsiveness and Infiltrator OS shell'
