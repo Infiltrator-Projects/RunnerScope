@@ -535,11 +535,6 @@ static gboolean system_dark_mode(void)
     return dark;
 }
 
-static void rgb_text(uint32_t rgb, char out[8])
-{
-    (void)g_snprintf(out, 8U, "#%06x", rgb & 0x00ffffffU);
-}
-
 static void label_set_if_changed(GtkWidget *widget, const char *text)
 {
     if (!widget) return;
@@ -547,6 +542,12 @@ static void label_set_if_changed(GtkWidget *widget, const char *text)
     const char *current = gtk_label_get_text(GTK_LABEL(widget));
     if (g_strcmp0(current, next) != 0)
         gtk_label_set_text(GTK_LABEL(widget), next);
+}
+
+static void css_define_color(GString *css, const char *name, uint32_t rgb)
+{
+    g_string_append_printf(
+        css, "@define-color %s #%06x;\n", name, rgb & 0x00ffffffU);
 }
 
 static void apply_theme(RunnerScopeApp *app)
@@ -557,346 +558,338 @@ static void apply_theme(RunnerScopeApp *app)
         infiltratr_theme_resolve(app->config.theme_mode, system_dark_mode());
     const InfiltratrTypography *type = infiltratr_typography();
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
-    if (!p || !type || !metrics || !type->ui_family) return;
-
-    char bg[8], panel[8], card[8], surface[8], input[8], border[8];
-    char text[8], title[8], muted[8], subtle[8], accent[8], accent_fg[8];
-    char hover[8], select_bg[8], select_fg[8], success[8], warning[8];
-    char fault[8], info[8], operation[8], status_border[8];
-    char titlebar[8], connection[8], connection_border[8], heading[8];
-    char summary_color[8], kicker[8], detail_label[8], note[8];
-    char button_bg[8], button_fg[8], card_hover[8], accent_hover[8];
-
-    rgb_text(p->background_rgb, bg);
-    rgb_text(p->panel_rgb, panel);
-    rgb_text(p->card_rgb, card);
-    rgb_text(p->surface_rgb, surface);
-    rgb_text(p->input_rgb, input);
-    rgb_text(p->border_rgb, border);
-    rgb_text(p->text_rgb, text);
-    rgb_text(p->title_rgb, title);
-    rgb_text(p->muted_rgb, muted);
-    rgb_text(p->subtle_rgb, subtle);
-    rgb_text(p->neutral_accent_rgb, accent);
-    rgb_text(p->accent_foreground_rgb, accent_fg);
-    rgb_text(p->surface_hover_rgb, hover);
-    rgb_text(p->selection_background_rgb, select_bg);
-    rgb_text(p->selection_foreground_rgb, select_fg);
-    rgb_text(p->success_rgb, success);
-    rgb_text(p->warning_rgb, warning);
-    rgb_text(p->fault_rgb, fault);
-    rgb_text(p->info_rgb, info);
-    rgb_text(p->operation_rgb, operation);
-    rgb_text(p->status_border_rgb, status_border);
-    rgb_text(p->titlebar_rgb, titlebar);
-    rgb_text(p->connection_rgb, connection);
-    rgb_text(p->connection_border_rgb, connection_border);
-    rgb_text(p->heading_rgb, heading);
-    rgb_text(p->summary_rgb, summary_color);
-    rgb_text(p->kicker_rgb, kicker);
-    rgb_text(p->detail_label_rgb, detail_label);
-    rgb_text(p->note_rgb, note);
-    rgb_text(p->button_background_rgb, button_bg);
-    rgb_text(p->button_foreground_rgb, button_fg);
-    rgb_text(p->card_hover_rgb, card_hover);
-    rgb_text(p->accent_hover_rgb, accent_hover);
+    if (!p || !type || !metrics || !type->ui_family || !type->brand_family)
+        return;
 
     GString *css = g_string_new(NULL);
+    if (!css) return;
+
+    css_define_color(css, "rm_background", p->background_rgb);
+    css_define_color(css, "rm_panel", p->panel_rgb);
+    css_define_color(css, "rm_card", p->card_rgb);
+    css_define_color(css, "rm_surface", p->surface_rgb);
+    css_define_color(css, "rm_input", p->input_rgb);
+    css_define_color(css, "rm_border", p->border_rgb);
+    css_define_color(css, "rm_text", p->text_rgb);
+    css_define_color(css, "rm_title", p->title_rgb);
+    css_define_color(css, "rm_muted", p->muted_rgb);
+    css_define_color(css, "rm_subtle", p->subtle_rgb);
+    css_define_color(css, "rm_button_background", p->button_background_rgb);
+    css_define_color(css, "rm_button_foreground", p->button_foreground_rgb);
+    css_define_color(css, "rm_selection", p->selection_background_rgb);
+    css_define_color(css, "rm_selection_text", p->selection_foreground_rgb);
+    css_define_color(css, "rm_neutral", p->neutral_accent_rgb);
+    css_define_color(css, "rm_success", p->success_rgb);
+    css_define_color(css, "rm_warning", p->warning_rgb);
+    css_define_color(css, "rm_fault", p->fault_rgb);
+    css_define_color(css, "rm_info", p->info_rgb);
+    css_define_color(css, "rm_operation", p->operation_rgb);
+    css_define_color(css, "rm_card_hover", p->card_hover_rgb);
+    css_define_color(css, "rm_surface_hover", p->surface_hover_rgb);
+    css_define_color(css, "rm_titlebar", p->titlebar_rgb);
+    css_define_color(css, "rm_connection", p->connection_rgb);
+    css_define_color(css, "rm_connection_border", p->connection_border_rgb);
+    css_define_color(css, "rm_heading", p->heading_rgb);
+    css_define_color(css, "rm_summary", p->summary_rgb);
+    css_define_color(css, "rm_kicker", p->kicker_rgb);
+    css_define_color(css, "rm_detail_label", p->detail_label_rgb);
+    css_define_color(css, "rm_note", p->note_rgb);
+    css_define_color(css, "rm_status_border", p->status_border_rgb);
+    css_define_color(css, "rm_accent_foreground", p->accent_foreground_rgb);
+    css_define_color(css, "rm_accent_hover", p->accent_hover_rgb);
+    css_define_color(css, "rm_selected_summary", p->selected_summary_rgb);
 
     g_string_append_printf(
         css,
-        "window { background:%s; color:%s; font-family:\"%s\"; font-weight:%u; }\n"
-        "#runner-root { background-image:linear-gradient(to bottom right,%s,%s); }\n"
-        "label { color:%s; }\n",
-        bg, text, type->ui_family, (unsigned int)type->ui_regular_weight,
-        bg, panel, text);
+        "* { font-family:\"%s\"; font-weight:%u; }\n"
+        ".header-brand-title, .page-title, .hero-title {"
+        " font-family:\"%s\", \"%s\"; font-weight:%u; }\n"
+        "button, treeview header button { font-weight:%u; }\n",
+        type->ui_family,
+        (unsigned int)type->ui_regular_weight,
+        type->brand_family,
+        type->ui_family,
+        (unsigned int)type->brand_weight,
+        (unsigned int)type->ui_bold_weight);
+
+    g_string_append(
+        css,
+        "window, dialog, .background {"
+        " background-color:@rm_background; color:@rm_text;"
+        "}\n"
+        "#runner-root {"
+        " background-image:none; background-color:@rm_background;"
+        "}\n"
+        "label { color:@rm_text; }\n"
+        "menu {"
+        " background-color:@rm_panel; color:@rm_text;"
+        " border:1px solid @rm_border;"
+        "}\n"
+        "menu menuitem { color:@rm_summary; }\n"
+        "menu menuitem:hover {"
+        " background-color:@rm_surface_hover; color:@rm_title;"
+        "}\n"
+        "button, combobox button {"
+        " background-image:none; background-color:@rm_button_background;"
+        " color:@rm_button_foreground; border:1px solid @rm_border;"
+        " box-shadow:none;"
+        "}\n"
+        "button > label, button > image,"
+        "combobox button > label, combobox button > image {"
+        " color:@rm_button_foreground;"
+        "}\n"
+        "button:hover, combobox button:hover {"
+        " background-color:@rm_neutral; border-color:@rm_neutral;"
+        "}\n"
+        "button:active, button:checked {"
+        " background-color:@rm_selection; color:@rm_selection_text;"
+        " border-color:@rm_neutral;"
+        "}\n"
+        "button:disabled {"
+        " background-color:@rm_input; color:@rm_subtle;"
+        " border-color:@rm_border;"
+        "}\n"
+        "button:disabled > label, button:disabled > image { color:@rm_subtle; }\n"
+        "entry, spinbutton {"
+        " background-image:none; background-color:@rm_input; color:@rm_text;"
+        " border:1px solid @rm_connection_border; box-shadow:none;"
+        "}\n"
+        "entry:focus, spinbutton:focus { border-color:@rm_neutral; }\n"
+        "tooltip {"
+        " background-color:@rm_card; color:@rm_title;"
+        " border:1px solid @rm_border;"
+        "}\n");
 
     g_string_append_printf(
         css,
-        "headerbar.runner-header { background-image:linear-gradient(to right,%s,%s);"
-        " border-bottom:1px solid %s; min-height:56px; padding:4px 8px; }\n"
+        "headerbar.runner-header {"
+        " min-height:58px; padding:%upx %upx;"
+        " background-image:none; background-color:@rm_titlebar;"
+        " border-bottom:1px solid @rm_border;"
+        "}\n"
         ".header-brand { padding:2px 4px; }\n"
-        ".header-brand-icon { background:%s; border:1px solid %s; border-radius:12px; padding:7px; }\n"
-        ".header-brand-title { color:%s; font-size:20px; font-weight:%u; }\n"
-        ".header-brand-subtitle { color:%s; font-size:11px; }\n"
-        ".header-search { min-width:300px; min-height:34px; background:%s; color:%s;"
-        " border:1px solid %s; border-radius:14px; padding:5px 10px; }\n"
-        ".header-search:focus { border-color:%s; }\n"
-        ".runner-menubar, .runner-menubar menuitem { background:transparent; color:%s; }\n"
-        ".runner-menubar menuitem { padding:5px 7px; border-radius:6px; }\n"
-        ".runner-menubar menuitem:hover { background:%s; color:%s; }\n"
-        "menu { background:%s; color:%s; border:1px solid %s; }\n"
-        "menu menuitem:hover { background:%s; }\n",
-        panel, bg, border,
-        card, border,
-        title, (unsigned int)type->ui_bold_weight,
-        muted,
-        input, text, status_border, accent,
-        muted, hover, title,
-        panel, text, border, hover);
+        ".header-brand-icon {"
+        " background-color:@rm_card; border:1px solid @rm_border;"
+        " border-radius:%upx; padding:%upx; box-shadow:none;"
+        "}\n"
+        ".header-brand-icon image { color:@rm_neutral; }\n"
+        ".header-brand-title { color:@rm_title; font-size:20px; }\n"
+        ".header-brand-subtitle { color:@rm_muted; font-size:11px; }\n"
+        ".header-search {"
+        " min-width:300px; min-height:34px; background:@rm_input; color:@rm_text;"
+        " border:1px solid @rm_connection_border; border-radius:%upx;"
+        " padding:%upx %upx;"
+        "}\n"
+        ".runner-menubar, .runner-menubar menuitem {"
+        " background:transparent; color:@rm_summary;"
+        "}\n"
+        ".runner-menubar menuitem { padding:5px 7px; border-radius:%upx; }\n"
+        ".runner-menubar menuitem:hover {"
+        " background:@rm_surface_hover; color:@rm_title;"
+        "}\n"
+        ".runner-window-controls { margin-left:%upx; }\n"
+        ".runner-window-control {"
+        " min-width:30px; min-height:30px; padding:4px;"
+        " background-image:none; background-color:transparent;"
+        " border:1px solid transparent; border-radius:%upx; box-shadow:none;"
+        "}\n"
+        ".runner-window-control:hover {"
+        " background-color:@rm_surface_hover; border-color:@rm_border;"
+        "}\n"
+        ".runner-window-control-close:hover {"
+        " background-color:@rm_fault; color:@rm_accent_foreground;"
+        "}\n",
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->card_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->small_radius,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->small_radius);
 
     g_string_append_printf(
         css,
         ".page-header { padding:2px 2px 4px 2px; }\n"
-        ".page-eyebrow { color:%s; font-size:10px; font-weight:%u; }\n"
-        ".page-title { color:%s; font-size:34px; font-weight:%u; }\n"
-        ".page-summary { color:%s; font-size:12px; }\n"
-        ".meta { color:%s; font-size:11px; }\n",
-        warning, (unsigned int)type->ui_bold_weight,
-        title, (unsigned int)type->ui_bold_weight,
-        muted, muted);
+        ".page-eyebrow { color:@rm_kicker; font-size:10px; font-weight:%u; }\n"
+        ".page-title { color:@rm_heading; font-size:28px; }\n"
+        ".page-summary { color:@rm_summary; font-size:12px; }\n"
+        ".meta { color:@rm_detail_label; font-size:11px; }\n"
+        ".hero-card {"
+        " background-image:none; background-color:@rm_card;"
+        " border:1px solid @rm_border; border-radius:%upx; padding:%upx;"
+        "}\n"
+        ".hero-icon-well {"
+        " min-width:76px; min-height:76px; background:@rm_surface;"
+        " border:1px solid @rm_connection_border; border-radius:%upx;"
+        " padding:%upx;"
+        "}\n"
+        ".hero-kicker { color:@rm_kicker; font-size:10px; font-weight:%u; }\n"
+        ".hero-title { color:@rm_heading; font-size:20px; }\n"
+        "#summary { color:@rm_summary; font-size:11px; }\n"
+        "#scan { color:@rm_note; font-size:11px; }\n"
+        ".counter {"
+        " background:@rm_surface; border:1px solid @rm_status_border;"
+        " border-radius:%upx; padding:%upx %upx; min-height:44px;"
+        " font-size:15px; font-weight:%u;"
+        "}\n"
+        ".counter:hover {"
+        " background:@rm_surface_hover; border-color:@rm_neutral;"
+        "}\n"
+        ".counter-running { color:@rm_success; border-top:2px solid @rm_success; }\n"
+        ".counter-idle { color:@rm_info; border-top:2px solid @rm_info; }\n"
+        ".counter-offline { color:@rm_fault; border-top:2px solid @rm_fault; }\n"
+        ".counter-local { color:@rm_success; border-top:2px solid @rm_success; }\n"
+        ".counter-hosted { color:@rm_operation; border-top:2px solid @rm_operation; }\n"
+        ".counter-queued { color:@rm_warning; border-top:2px solid @rm_warning; }\n",
+        (unsigned int)type->ui_bold_weight,
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->content_padding,
+        (unsigned int)metrics->card_radius,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)type->ui_bold_weight,
+        (unsigned int)metrics->card_radius,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->content_padding,
+        (unsigned int)type->ui_bold_weight);
 
     g_string_append_printf(
         css,
-        ".hero-card { background-image:linear-gradient(135deg,%s,%s); border:1px solid %s;"
-        " border-radius:18px; padding:18px; }\n"
-        ".hero-icon-well { min-width:86px; min-height:86px; background:%s; border:1px solid %s;"
-        " border-radius:18px; padding:12px; }\n"
-        ".hero-kicker { color:%s; font-size:10px; font-weight:%u; }\n"
-        ".hero-title { color:%s; font-size:20px; font-weight:%u; }\n"
-        "#summary { color:%s; font-size:11px; }\n"
-        "#scan { color:%s; font-size:11px; }\n"
-        ".counter { background:%s; border:1px solid %s; border-radius:13px;"
-        " padding:12px 14px; min-height:46px; font-size:15px; font-weight:%u; }\n"
-        ".counter:hover { background:%s; border-color:%s; }\n"
-        ".counter-running { color:%s; border-top:2px solid %s; }\n"
-        ".counter-idle { color:%s; border-top:2px solid %s; }\n"
-        ".counter-offline { color:%s; border-top:2px solid %s; }\n"
-        ".counter-local { color:%s; border-top:2px solid %s; }\n"
-        ".counter-hosted { color:%s; border-top:2px solid %s; }\n"
-        ".counter-queued { color:%s; border-top:2px solid %s; }\n",
-        card, panel, border,
-        surface, border,
-        warning, (unsigned int)type->ui_bold_weight,
-        title, (unsigned int)type->ui_bold_weight,
-        text, muted,
-        surface, border, (unsigned int)type->ui_bold_weight,
-        hover, accent,
-        success, success,
-        info, info,
-        fault, fault,
-        success, success,
-        operation, operation,
-        warning, warning);
+        ".runner-content-shell {"
+        " background:@rm_card; border:1px solid @rm_border;"
+        " border-radius:%upx;"
+        "}\n"
+        ".runner-sidebar {"
+        " background-image:none; background-color:@rm_panel;"
+        " border-right:1px solid @rm_connection_border;"
+        " border-radius:%upx 0 0 %upx; padding:%upx;"
+        "}\n"
+        ".runner-workspace {"
+        " background:@rm_card; border-radius:0 %upx %upx 0;"
+        "}\n"
+        ".workspace-header {"
+        " background:@rm_connection; border-bottom:1px solid @rm_connection_border;"
+        " padding:%upx %upx;"
+        "}\n"
+        ".workspace-title { color:@rm_heading; font-size:18px; font-weight:%u; }\n"
+        ".workspace-subtitle { color:@rm_summary; font-size:11px; }\n"
+        ".workspace-metric {"
+        " min-width:76px; background:@rm_surface;"
+        " border:1px solid @rm_connection_border; border-radius:%upx;"
+        " padding:%upx %upx;"
+        "}\n"
+        ".workspace-metric-caption {"
+        " color:@rm_detail_label; font-size:9px; font-weight:%u;"
+        "}\n"
+        ".workspace-metric-value {"
+        " color:@rm_heading; font-size:14px; font-weight:%u;"
+        "}\n"
+        "notebook.runner-notebook { background:@rm_card; border:0; }\n",
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->content_padding,
+        (unsigned int)type->ui_bold_weight,
+        (unsigned int)metrics->control_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)type->ui_bold_weight,
+        (unsigned int)type->ui_bold_weight);
 
     g_string_append_printf(
         css,
-        ".runner-content-shell { background:%s; border:1px solid %s; border-radius:16px; }\n"
-        ".runner-sidebar { background:%s; border-right:1px solid %s;"
-        " border-radius:16px 0 0 16px; padding:8px 6px; }\n"
-        ".runner-workspace { background:%s; border-radius:0 16px 16px 0; }\n"
-        ".workspace-header { background:%s; border-bottom:1px solid %s;"
-        " padding:12px 14px; }\n"
-        ".workspace-title { color:%s; font-size:18px; font-weight:%u; }\n"
-        ".workspace-subtitle { color:%s; font-size:11px; }\n"
-        ".workspace-metric { min-width:76px; background:%s; border:1px solid %s;"
-        " border-radius:9px; padding:6px 9px; }\n"
-        ".workspace-metric-caption { color:%s; font-size:9px; font-weight:%u; }\n"
-        ".workspace-metric-value { color:%s; font-size:14px; font-weight:%u; }\n"
-        "notebook.runner-notebook { background:%s; border:0; }\n"
-        ".runner-nav-list { background:transparent; color:%s; border:0; }\n"
-        ".runner-nav-list row { background:transparent; color:%s;"
-        " border:1px solid transparent; border-radius:9px; margin:2px 0;"
-        " padding:7px 8px; min-height:46px; }\n"
-        ".runner-nav-list row:hover { background:%s; }\n"
-        ".runner-nav-list row:selected { background:%s; border-color:%s;"
-        " border-left:3px solid %s; }\n"
-        ".runner-nav-list row:focus { border-color:%s; }\n"
-        ".runner-tab-icon { background:%s; border:1px solid %s; border-radius:9px; padding:5px; }\n"
-        ".runner-tab-icon image { color:%s; }\n"
-        ".nav-primary { color:%s; font-size:13px; font-weight:%u; }\n"
-        ".nav-secondary { color:%s; font-size:10px; }\n",
-        card, border,
-        panel, border,
-        card,
-        panel, border,
-        title, (unsigned int)type->ui_bold_weight,
-        muted,
-        surface, status_border,
-        muted, (unsigned int)type->ui_bold_weight,
-        title, (unsigned int)type->ui_bold_weight,
-        card, text, text,
-        hover, select_bg, accent, accent,
-        status_border,
-        surface, border, accent,
-        title, (unsigned int)type->ui_bold_weight, muted);
+        ".runner-nav-list { background:transparent; color:@rm_summary; border:0; }\n"
+        ".runner-nav-list row {"
+        " background-image:none; background-color:transparent;"
+        " color:@rm_summary; border:1px solid transparent;"
+        " border-radius:%upx; margin:2px 0; min-height:48px;"
+        " padding:%upx %upx;"
+        "}\n"
+        ".runner-nav-list row:hover {"
+        " background-color:@rm_surface_hover; border-color:@rm_border;"
+        "}\n"
+        ".runner-nav-list row:selected {"
+        " background-image:none; background-color:@rm_selection;"
+        " color:@rm_selection_text; border-color:@rm_neutral;"
+        " box-shadow:none;"
+        "}\n"
+        ".runner-tab-icon {"
+        " background:@rm_surface; border:1px solid @rm_border;"
+        " border-radius:%upx; padding:5px;"
+        "}\n"
+        ".runner-tab-icon image { color:@rm_neutral; }\n"
+        ".nav-primary { color:@rm_summary; font-size:14px; font-weight:%u; }\n"
+        ".nav-secondary { color:@rm_detail_label; font-size:10px; }\n"
+        ".runner-nav-list row:selected .nav-primary { color:@rm_selection_text; }\n"
+        ".runner-nav-list row:selected .nav-secondary { color:@rm_selected_summary; }\n",
+        (unsigned int)metrics->control_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->control_radius,
+        (unsigned int)type->ui_bold_weight);
 
     g_string_append_printf(
         css,
-        "scrolledwindow.runner-table { background:%s; border:0; }\n"
-        "treeview.view { background:%s; color:%s; border:0;"
-        " -GtkTreeView-horizontal-separator:0; -GtkTreeView-vertical-separator:0; }\n"
-        "treeview.view:selected { background:%s; color:%s; }\n"
-        "treeview.view header button { background:%s; color:%s; border:0; border-bottom:1px solid %s;"
-        " min-height:36px; padding:0 5px; font-weight:%u; }\n"
-        "treeview.view header button:hover { background:%s; }\n"
-        ".selection-card { background:%s; border-top:1px solid %s; padding:10px 14px; }\n"
-        ".selection-icon { color:%s; padding:4px; }\n"
-        ".selection-title { color:%s; font-size:9px; font-weight:%u; }\n"
-        ".selection-primary { color:%s; font-size:13px; font-weight:%u; }\n"
-        ".selection-secondary { color:%s; font-size:10px; }\n"
-        "scrollbar { background:transparent; }\n"
+        "scrolledwindow.runner-table { background:@rm_card; border:0; }\n"
+        "treeview.view {"
+        " background:@rm_input; color:@rm_text; border:0;"
+        " -GtkTreeView-horizontal-separator:0;"
+        " -GtkTreeView-vertical-separator:0;"
+        "}\n"
+        "treeview.view:selected {"
+        " background:@rm_selection; color:@rm_selection_text;"
+        "}\n"
+        "treeview.view header button {"
+        " background-image:none; background:@rm_panel; color:@rm_title;"
+        " border:0; border-bottom:1px solid @rm_connection_border;"
+        " min-height:36px; padding:0 5px; font-weight:%u;"
+        "}\n"
+        "treeview.view header button:hover { background:@rm_surface_hover; }\n"
+        ".selection-card {"
+        " background:@rm_connection; border-top:1px solid @rm_connection_border;"
+        " padding:%upx %upx;"
+        "}\n"
+        ".selection-icon { color:@rm_neutral; padding:4px; }\n"
+        ".selection-title { color:@rm_detail_label; font-size:9px; font-weight:%u; }\n"
+        ".selection-primary { color:@rm_heading; font-size:13px; font-weight:%u; }\n"
+        ".selection-secondary { color:@rm_summary; font-size:10px; }\n"
+        "scrollbar, scrollbar trough { background-color:transparent; }\n"
         "scrollbar.vertical { min-width:10px; }\n"
         "scrollbar.horizontal { min-height:10px; }\n"
-        "scrollbar.vertical slider { min-width:8px; min-height:28px; border-radius:999px; background:%s; }\n"
-        "scrollbar.horizontal slider { min-width:28px; min-height:8px; border-radius:999px; background:%s; }\n"
-        "scrollbar slider:hover { background:%s; }\n",
-        card,
-        card, text,
-        select_bg, select_fg,
-        panel, title, border, (unsigned int)type->ui_bold_weight,
-        hover,
-        panel, border,
-        accent,
-        muted, (unsigned int)type->ui_bold_weight,
-        title, (unsigned int)type->ui_bold_weight,
-        muted,
-        subtle, subtle, accent);
+        "scrollbar.vertical slider {"
+        " min-width:8px; min-height:28px; border-radius:999px; background:@rm_border;"
+        "}\n"
+        "scrollbar.horizontal slider {"
+        " min-width:28px; min-height:8px; border-radius:999px; background:@rm_border;"
+        "}\n"
+        "scrollbar slider:hover { background:@rm_neutral; }\n",
+        (unsigned int)type->ui_bold_weight,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->content_padding,
+        (unsigned int)type->ui_bold_weight,
+        (unsigned int)type->ui_bold_weight);
 
     g_string_append_printf(
         css,
-        ".footer-card { background:%s; border:1px solid %s; border-radius:13px; padding:8px 10px; }\n"
-        "#footer-actions button { background:%s; color:%s; border:1px solid %s;"
-        " border-radius:%upx; min-height:32px; padding:4px 10px; }\n"
-        "#footer-actions button:hover { background:%s; border-color:%s; }\n"
-        "#footer-actions button:disabled { background:%s; color:%s; border-color:%s; opacity:0.78; }\n"
-        ".status-text { color:%s; font-size:11px; }\n"
-        ".version-text { color:%s; font-size:10px; }\n",
-        card, border,
-        surface, text, status_border, (unsigned int)metrics->control_radius,
-        hover, accent,
-        panel, muted, status_border,
-        muted, muted);
-
-    /* Current Infiltrator OS/Common shell projection. */
-    g_string_append_printf(
-        css,
-        "headerbar.runner-header { background-image:linear-gradient(to right,%s,%s);"
-        " background-color:%s; border-bottom:1px solid %s; min-height:58px;"
-        " padding:%upx %upx; }\n"
-        ".header-brand-icon { background:%s; border-color:%s; border-radius:%upx;"
-        " padding:%upx; }\n"
-        ".header-brand-icon image { color:%s; }\n"
-        ".header-search { background:%s; color:%s; border-color:%s; border-radius:%upx;"
-        " padding:%upx %upx; }\n"
-        ".header-search:focus { border-color:%s; }\n"
-        ".runner-window-controls { margin-left:%upx; }\n"
-        ".runner-window-control { min-width:30px; min-height:30px; padding:4px;"
-        " background:transparent; border:1px solid transparent; border-radius:%upx;"
-        " box-shadow:none; }\n"
-        ".runner-window-control:hover { background:%s; border-color:%s; }\n"
-        ".runner-window-control-close:hover { background:%s; color:%s; }\n",
-        titlebar, connection, titlebar, connection_border,
-        (unsigned int)metrics->compact_spacing,
-        (unsigned int)metrics->control_spacing,
-        card, connection_border, (unsigned int)metrics->card_radius,
-        (unsigned int)metrics->compact_spacing, accent,
-        input, text, connection_border,
-        (unsigned int)metrics->control_radius,
-        (unsigned int)metrics->compact_spacing,
-        (unsigned int)metrics->control_spacing,
-        accent,
-        (unsigned int)metrics->control_spacing,
-        (unsigned int)metrics->small_radius,
-        card_hover, border, fault, accent_fg);
-
-    g_string_append_printf(
-        css,
-        ".page-eyebrow { color:%s; }\n"
-        ".page-title { color:%s; font-size:28px; }\n"
-        ".page-summary { color:%s; }\n"
-        ".meta { color:%s; }\n"
-        ".hero-card { background-image:linear-gradient(135deg,%s,%s); border-color:%s;"
-        " border-radius:%upx; padding:%upx; }\n"
-        ".hero-icon-well { background:%s; border-color:%s; border-radius:%upx;"
-        " padding:%upx; }\n"
-        ".hero-kicker { color:%s; }\n"
-        "#summary { color:%s; }\n"
-        "#scan { color:%s; }\n"
-        ".counter { border-radius:%upx; padding:%upx %upx; min-height:44px; }\n"
-        ".runner-content-shell { border-radius:%upx; }\n"
-        ".runner-sidebar { background-image:linear-gradient(to bottom,%s,%s);"
-        " border-radius:%upx 0 0 %upx; padding:%upx; }\n"
-        ".runner-workspace { border-radius:0 %upx %upx 0; }\n"
-        ".workspace-header { background:%s; border-color:%s; padding:%upx %upx; }\n"
-        ".workspace-title { color:%s; }\n"
-        ".workspace-subtitle { color:%s; }\n"
-        ".workspace-metric { background:%s; border-color:%s; border-radius:%upx;"
-        " padding:%upx %upx; }\n"
-        ".workspace-metric-caption { color:%s; }\n",
-        kicker, heading, summary_color, detail_label,
-        connection, card, connection_border,
-        (unsigned int)metrics->panel_radius,
-        (unsigned int)metrics->content_padding,
-        surface, connection_border,
-        (unsigned int)metrics->card_radius,
-        (unsigned int)metrics->control_spacing,
-        accent, summary_color, note,
-        (unsigned int)metrics->card_radius,
-        (unsigned int)metrics->control_spacing,
-        (unsigned int)metrics->content_padding,
-        (unsigned int)metrics->panel_radius,
-        panel, bg,
-        (unsigned int)metrics->panel_radius,
-        (unsigned int)metrics->panel_radius,
-        (unsigned int)metrics->compact_spacing,
-        (unsigned int)metrics->panel_radius,
-        (unsigned int)metrics->panel_radius,
-        connection, connection_border,
-        (unsigned int)metrics->control_spacing,
-        (unsigned int)metrics->content_padding,
-        heading, summary_color,
-        surface, connection_border,
-        (unsigned int)metrics->control_radius,
-        (unsigned int)metrics->compact_spacing,
-        (unsigned int)metrics->control_spacing,
-        detail_label);
-
-    g_string_append_printf(
-        css,
-        ".runner-nav-list row { border-radius:%upx; margin:2px 0; min-height:48px;"
-        " padding:%upx %upx; }\n"
-        ".runner-nav-list row:hover { background:%s; border-color:%s; }\n"
-        ".runner-nav-list row:selected { background-image:linear-gradient(to right,%s,%s);"
-        " background-color:%s; border:1px solid %s; box-shadow:inset 3px 0 %s; }\n"
-        ".runner-tab-icon { background:%s; border-color:%s; border-radius:%upx; }\n"
-        ".nav-primary { color:%s; font-size:15px; font-weight:600; }\n"
-        ".nav-secondary { color:%s; }\n"
-        "treeview.view { background:%s; }\n"
-        "treeview.view header button { background:%s; color:%s; border-color:%s; }\n"
-        ".selection-card { background:%s; border-color:%s; padding:%upx %upx; }\n"
-        ".selection-title { color:%s; }\n"
-        ".selection-secondary { color:%s; }\n"
-        ".footer-card { background:%s; border-color:%s; border-radius:%upx;"
-        " padding:%upx %upx; }\n"
-        "#footer-actions button { background:%s; color:%s; border-color:%s;"
-        " border-radius:%upx; min-height:30px; }\n"
-        "#footer-actions button:hover { background:%s; color:%s; border-color:%s; }\n"
-        "#footer-actions button:disabled { background:%s; color:%s; border-color:%s; opacity:1.0; }\n"
-        "tooltip { background:%s; color:%s; border:1px solid %s; }\n",
-        (unsigned int)metrics->control_radius,
-        (unsigned int)metrics->compact_spacing,
-        (unsigned int)metrics->control_spacing,
-        card_hover, accent_hover,
-        select_bg, accent_hover, select_bg, accent, accent,
-        surface, connection_border,
-        (unsigned int)metrics->control_radius,
-        title, summary_color,
-        input,
-        panel, title, connection_border,
-        connection, connection_border,
-        (unsigned int)metrics->control_spacing,
-        (unsigned int)metrics->content_padding,
-        detail_label, summary_color,
-        card, connection_border,
+        ".footer-card {"
+        " background:@rm_card; border:1px solid @rm_border;"
+        " border-radius:%upx; padding:%upx %upx;"
+        "}\n"
+        "#footer-actions button {"
+        " border-radius:%upx; min-height:30px; padding:4px 10px;"
+        "}\n"
+        ".status-text { color:@rm_summary; font-size:11px; }\n"
+        ".version-text { color:@rm_detail_label; font-size:10px; }\n",
         (unsigned int)metrics->card_radius,
         (unsigned int)metrics->compact_spacing,
         (unsigned int)metrics->control_spacing,
-        button_bg, button_fg, connection_border,
-        (unsigned int)metrics->control_radius,
-        accent, accent_fg, accent,
-        input, subtle, border,
-        card, title, border);
+        (unsigned int)metrics->control_radius);
 
     GdkScreen *screen = gdk_screen_get_default();
     if (!app->theme_provider) {
@@ -907,8 +900,7 @@ static void apply_theme(RunnerScopeApp *app)
                 GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50U);
         }
     }
-    gtk_css_provider_load_from_data(
-        app->theme_provider, css->str, -1, NULL);
+    gtk_css_provider_load_from_data(app->theme_provider, css->str, -1, NULL);
     g_string_free(css, TRUE);
 }
 
@@ -1438,16 +1430,86 @@ static void update_summary(RunnerScopeApp *app)
             app, gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
 }
 
+static gboolean same_text(const char *left, const char *right)
+{
+    return g_strcmp0(left, right) == 0;
+}
+
+static gboolean runner_rows_static_equal(const GPtrArray *left,
+                                         const GPtrArray *right)
+{
+    if (!left || !right || left->len != right->len) return FALSE;
+    for (guint i = 0U; i < left->len; i++) {
+        const RunnerRow *a = g_ptr_array_index((GPtrArray *)left, i);
+        const RunnerRow *b = g_ptr_array_index((GPtrArray *)right, i);
+        if (!same_text(a->name, b->name) ||
+            !same_text(a->os, b->os) ||
+            !same_text(a->state, b->state) ||
+            !same_text(a->repo, b->repo) ||
+            !same_text(a->job, b->job) ||
+            !same_text(a->jobs, b->jobs) ||
+            !same_text(a->labels, b->labels))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static gboolean activity_rows_static_equal(const GPtrArray *left,
+                                           const GPtrArray *right)
+{
+    if (!left || !right || left->len != right->len) return FALSE;
+    for (guint i = 0U; i < left->len; i++) {
+        const ActivityRow *a = g_ptr_array_index((GPtrArray *)left, i);
+        const ActivityRow *b = g_ptr_array_index((GPtrArray *)right, i);
+        if (!same_text(a->environment, b->environment) ||
+            !same_text(a->repo, b->repo) ||
+            !same_text(a->workflow, b->workflow) ||
+            !same_text(a->job, b->job) ||
+            !same_text(a->step, b->step) ||
+            !same_text(a->status, b->status) ||
+            !same_text(a->runner, b->runner) ||
+            !same_text(a->event, b->event) ||
+            !same_text(a->branch, b->branch) ||
+            !same_text(a->url, b->url) ||
+            a->started_epoch != b->started_epoch)
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static gboolean local_rows_equal(const GPtrArray *left,
+                                 const GPtrArray *right)
+{
+    if (!left || !right || left->len != right->len) return FALSE;
+    for (guint i = 0U; i < left->len; i++) {
+        const LocalRow *a = g_ptr_array_index((GPtrArray *)left, i);
+        const LocalRow *b = g_ptr_array_index((GPtrArray *)right, i);
+        if (!same_text(a->runner, b->runner) ||
+            !same_text(a->service_state, b->service_state) ||
+            !same_text(a->github_state, b->github_state) ||
+            !same_text(a->pid, b->pid) ||
+            !same_text(a->start_mode, b->start_mode) ||
+            !same_text(a->account, b->account) ||
+            !same_text(a->diag, b->diag) ||
+            !same_text(a->diag_age, b->diag_age) ||
+            !same_text(a->path, b->path) ||
+            !same_text(a->diag_path, b->diag_path) ||
+            !same_text(a->service_name, b->service_name))
+            return FALSE;
+    }
+    return TRUE;
+}
+
 static gboolean runner_apply_idle(gpointer data)
 {
     RunnerRefreshResult *result = data;
     RunnerScopeApp *app = result->app;
     if (app->runner_thread) {
-        g_thread_join(app->runner_thread);
+        g_thread_unref(app->runner_thread);
         app->runner_thread = NULL;
     }
     if (result->error) {
-        gtk_label_set_text(GTK_LABEL(app->status_label), result->error);
+        label_set_if_changed(app->status_label, result->error);
         g_free(result->error);
         if (result->rows) g_ptr_array_unref(result->rows);
         g_atomic_int_set(&app->runner_refreshing, 0);
@@ -1455,8 +1517,9 @@ static gboolean runner_apply_idle(gpointer data)
         return G_SOURCE_REMOVE;
     }
 
-    g_ptr_array_set_size(app->runner_rows, 0U);
-    app->runners_total = app->runners_running = app->runners_idle = app->runners_offline = 0U;
+    GPtrArray *next_rows = g_ptr_array_new_with_free_func(runner_row_free);
+    guint total = 0U, running = 0U, idle = 0U, offline = 0U;
+    gboolean history_changed = FALSE;
     const double now = now_monotonic();
 
     for (guint i = 0U; i < result->rows->len; i++) {
@@ -1473,8 +1536,10 @@ static gboolean runner_apply_idle(gpointer data)
             session->jobs = strcmp(state, "RUNNING") == 0 ? 1U : 0U;
             g_hash_table_insert(app->sessions, g_strdup(raw->name), session);
             add_history(app, raw->name, state, "");
+            history_changed = TRUE;
         } else if (strcmp(session->state, state) != 0) {
-            if (strcmp(session->state, "RUNNING") == 0 && session->busy_started > 0.0) {
+            if (strcmp(session->state, "RUNNING") == 0 &&
+                session->busy_started > 0.0) {
                 session->busy_seconds += now - session->busy_started;
                 session->busy_started = 0.0;
             }
@@ -1484,9 +1549,11 @@ static gboolean runner_apply_idle(gpointer data)
             }
             g_strlcpy(session->state, state, sizeof(session->state));
             session->state_since = now;
-            JobSummary *summary = g_hash_table_lookup(app->job_by_runner, raw->name);
+            JobSummary *summary =
+                g_hash_table_lookup(app->job_by_runner, raw->name);
             add_history(app, raw->name, state,
                         summary && summary->job ? summary->job : "");
+            history_changed = TRUE;
         }
 
         RunnerRow *row = g_new0(RunnerRow, 1U);
@@ -1499,18 +1566,19 @@ static gboolean runner_apply_idle(gpointer data)
             row->job = g_strdup(summary->job);
             row->runtime = duration_text(summary->started_at > 0.0
                 ? MAX(0.0, (double)time(NULL) - summary->started_at) : -1.0);
-            g_free(session->last_repo); session->last_repo = g_strdup(summary->repo);
-            g_free(session->last_job); session->last_job = g_strdup(summary->job);
+            g_free(session->last_repo);
+            session->last_repo = g_strdup(summary->repo);
+            g_free(session->last_job);
+            session->last_job = g_strdup(summary->job);
         } else if (strcmp(state, "RUNNING") == 0) {
             row->repo = g_strdup("Resolving…");
             row->job = g_strdup("GitHub reports runner busy");
             row->runtime = duration_text(now - session->state_since);
         } else {
             row->repo = g_strdup(session->last_repo ? session->last_repo : "—");
-            if (session->last_job)
-                row->job = g_strdup_printf("Last: %s", session->last_job);
-            else
-                row->job = g_strdup("—");
+            row->job = session->last_job
+                ? g_strdup_printf("Last: %s", session->last_job)
+                : g_strdup("—");
             row->runtime = g_strdup("—");
         }
         row->state_for = duration_text(now - session->state_since);
@@ -1519,35 +1587,52 @@ static gboolean runner_apply_idle(gpointer data)
         if (strcmp(state, "RUNNING") == 0 && session->busy_started > 0.0)
             busy_seconds += now - session->busy_started;
         const double elapsed = MAX(1.0, now - app->session_started);
-        row->busy_pct = g_strdup_printf("%.1f%%",
-            MIN(100.0, busy_seconds * 100.0 / elapsed));
+        row->busy_pct = g_strdup_printf(
+            "%.1f%%", MIN(100.0, busy_seconds * 100.0 / elapsed));
         row->labels = g_strdup(raw->labels && *raw->labels ? raw->labels : "—");
-        g_ptr_array_add(app->runner_rows, row);
+        g_ptr_array_add(next_rows, row);
 
-        app->runners_total++;
-        if (strcmp(state, "RUNNING") == 0) app->runners_running++;
-        else if (strcmp(state, "IDLE") == 0) app->runners_idle++;
-        else app->runners_offline++;
+        total++;
+        if (strcmp(state, "RUNNING") == 0) running++;
+        else if (strcmp(state, "IDLE") == 0) idle++;
+        else offline++;
     }
+
+    const gboolean rows_changed =
+        !runner_rows_static_equal(app->runner_rows, next_rows);
+    GPtrArray *old_rows = app->runner_rows;
+    app->runner_rows = next_rows;
+    g_ptr_array_unref(old_rows);
+
+    app->runners_total = total;
+    app->runners_running = running;
+    app->runners_idle = idle;
+    app->runners_offline = offline;
 
     const gint page =
         gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
-    if (page == 0)
+    if (page == 0 && rows_changed)
         render_runners(app);
-    else if (page == 2)
+    else if (page == 2 && history_changed)
         render_history(app);
+
     update_summary(app);
     char *clock = clock_text();
     char *updated = g_strdup_printf("Runner data: %s", clock);
-    gtk_label_set_text(GTK_LABEL(app->updated_label), updated);
-    g_free(updated); g_free(clock);
+    label_set_if_changed(app->updated_label, updated);
+    g_free(updated);
+    g_free(clock);
+
     char *status = app->config.expected_runners != 0U
-        ? g_strdup_printf("%u runners detected; expected %u. %u running, %u idle, %u offline.",
-            app->runners_total, app->config.expected_runners, app->runners_running,
-            app->runners_idle, app->runners_offline)
-        : g_strdup_printf("%u runners detected. %u running, %u idle, %u offline.",
-            app->runners_total, app->runners_running, app->runners_idle, app->runners_offline);
-    gtk_label_set_text(GTK_LABEL(app->status_label), status);
+        ? g_strdup_printf(
+            "%u runners detected; expected %u. %u running, %u idle, %u offline.",
+            app->runners_total, app->config.expected_runners,
+            app->runners_running, app->runners_idle, app->runners_offline)
+        : g_strdup_printf(
+            "%u runners detected. %u running, %u idle, %u offline.",
+            app->runners_total, app->runners_running,
+            app->runners_idle, app->runners_offline);
+    label_set_if_changed(app->status_label, status);
     g_free(status);
 
     g_ptr_array_unref(result->rows);
@@ -1734,11 +1819,11 @@ static gboolean activity_apply_idle(gpointer data)
     ActivityRefreshResult *result = data;
     RunnerScopeApp *app = result->app;
     if (app->activity_thread) {
-        g_thread_join(app->activity_thread);
+        g_thread_unref(app->activity_thread);
         app->activity_thread = NULL;
     }
     if (result->error) {
-        gtk_label_set_text(GTK_LABEL(app->status_label), result->error);
+        label_set_if_changed(app->status_label, result->error);
         g_free(result->error);
         if (result->rows) g_ptr_array_unref(result->rows);
         g_atomic_int_set(&app->activity_refreshing, 0);
@@ -1746,43 +1831,43 @@ static gboolean activity_apply_idle(gpointer data)
         return G_SOURCE_REMOVE;
     }
 
-    g_ptr_array_set_size(app->activity_rows, 0U);
+    const gboolean rows_changed =
+        !activity_rows_static_equal(app->activity_rows, result->rows);
+
     g_hash_table_remove_all(app->job_by_runner);
     for (guint i = 0U; i < result->rows->len; i++) {
-        ActivityRow *source = g_ptr_array_index(result->rows, i);
-        ActivityRow *row = g_new0(ActivityRow, 1U);
-        row->environment = g_strdup(source->environment); row->repo = g_strdup(source->repo);
-        row->workflow = g_strdup(source->workflow); row->job = g_strdup(source->job);
-        row->step = g_strdup(source->step); row->status = g_strdup(source->status);
-        row->runner = g_strdup(source->runner); row->runtime = g_strdup(source->runtime);
-        row->event = g_strdup(source->event); row->branch = g_strdup(source->branch);
-        row->url = g_strdup(source->url);
-        row->started_epoch = source->started_epoch;
-        g_ptr_array_add(app->activity_rows, row);
-
-        if (strcmp(row->status, "IN_PROGRESS") == 0 && row->runner &&
-            strcmp(row->runner, "—") != 0) {
+        ActivityRow *row = g_ptr_array_index(result->rows, i);
+        if (strcmp(row->status, "IN_PROGRESS") == 0 &&
+            row->runner && strcmp(row->runner, "—") != 0) {
             JobSummary *summary = g_new0(JobSummary, 1U);
             summary->repo = g_strdup(row->repo);
             summary->job = g_strdup_printf("%s › %s", row->workflow, row->job);
             summary->started_at = row->started_epoch;
-            g_hash_table_replace(app->job_by_runner, g_strdup(row->runner), summary);
+            g_hash_table_replace(
+                app->job_by_runner, g_strdup(row->runner), summary);
         }
     }
+
+    GPtrArray *old_rows = app->activity_rows;
+    app->activity_rows = result->rows;
+    result->rows = NULL;
+    g_ptr_array_unref(old_rows);
+
     app->local_active = result->local_active;
     app->hosted_active = result->hosted_active;
     app->queued = result->queued;
-    if (gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) == 1)
+    if (rows_changed &&
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) == 1)
         render_activity(app);
+
     update_summary(app);
     char *scan = g_strdup_printf(
         "Runner poll %us  •  Activity scan %us  •  %u repositories scanned",
         app->config.runner_poll_seconds, app->config.activity_scan_seconds,
         result->repos_scanned);
-    gtk_label_set_text(GTK_LABEL(app->scan_label), scan);
+    label_set_if_changed(app->scan_label, scan);
     g_free(scan);
 
-    g_ptr_array_unref(result->rows);
     g_atomic_int_set(&app->activity_refreshing, 0);
     g_free(result);
     request_runner_refresh(app);
@@ -1931,50 +2016,55 @@ static gboolean local_apply_idle(gpointer data)
     LocalRefreshResult *result = data;
     RunnerScopeApp *app = result->app;
     if (app->local_thread) {
-        g_thread_join(app->local_thread);
+        g_thread_unref(app->local_thread);
         app->local_thread = NULL;
     }
     if (result->error) {
-        gtk_label_set_text(GTK_LABEL(app->status_label), result->error);
+        label_set_if_changed(app->status_label, result->error);
         g_free(result->error);
         if (result->rows) g_ptr_array_unref(result->rows);
         g_atomic_int_set(&app->local_refreshing, 0);
         g_free(result);
         return G_SOURCE_REMOVE;
     }
-    g_ptr_array_set_size(app->local_rows, 0U);
-    for (guint i = 0U; i < result->rows->len; i++) {
-        LocalRow *src = g_ptr_array_index(result->rows, i);
-        LocalRow *row = g_new0(LocalRow, 1U);
-        row->runner=g_strdup(src->runner); row->service_state=g_strdup(src->service_state);
-        row->github_state=g_strdup(src->github_state); row->pid=g_strdup(src->pid);
-        row->start_mode=g_strdup(src->start_mode); row->account=g_strdup(src->account);
-        row->diag=g_strdup(src->diag); row->diag_age=g_strdup(src->diag_age);
-        row->path=g_strdup(src->path); row->diag_path=g_strdup(src->diag_path);
-        row->service_name=g_strdup(src->service_name);
 
+    for (guint i = 0U; i < result->rows->len; i++) {
+        LocalRow *row = g_ptr_array_index(result->rows, i);
         char *service_lower = g_ascii_strdown(row->service_name, -1);
         char *description_lower = g_ascii_strdown(row->runner, -1);
-        for (guint runner_index = 0U; runner_index < app->runner_rows->len; runner_index++) {
-            RunnerRow *runner = g_ptr_array_index(app->runner_rows, runner_index);
+        for (guint runner_index = 0U;
+             runner_index < app->runner_rows->len;
+             runner_index++) {
+            RunnerRow *runner =
+                g_ptr_array_index(app->runner_rows, runner_index);
             char *runner_lower = g_ascii_strdown(runner->name, -1);
             const gboolean matches =
                 strstr(service_lower, runner_lower) != NULL ||
                 strstr(description_lower, runner_lower) != NULL;
             g_free(runner_lower);
             if (matches) {
-                g_free(row->runner); row->runner = g_strdup(runner->name);
-                g_free(row->github_state); row->github_state = g_strdup(runner->state);
+                g_free(row->runner);
+                row->runner = g_strdup(runner->name);
+                g_free(row->github_state);
+                row->github_state = g_strdup(runner->state);
                 break;
             }
         }
         g_free(service_lower);
         g_free(description_lower);
-        g_ptr_array_add(app->local_rows, row);
     }
-    if (gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) == 3)
+
+    const gboolean rows_changed =
+        !local_rows_equal(app->local_rows, result->rows);
+    GPtrArray *old_rows = app->local_rows;
+    app->local_rows = result->rows;
+    result->rows = NULL;
+    g_ptr_array_unref(old_rows);
+
+    if (rows_changed &&
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) == 3)
         render_local(app);
-    g_ptr_array_unref(result->rows);
+
     g_atomic_int_set(&app->local_refreshing, 0);
     g_free(result);
     return G_SOURCE_REMOVE;
@@ -2610,7 +2700,7 @@ static GtkWidget *make_counter(const char *name, const char *css_class)
     return label;
 }
 
-static GtkWidget *make_tab_label(const char *icon_name,
+static GtkWidget *make_nav_content(const char *icon_name,
                                  const char *title,
                                  const char *subtitle)
 {
@@ -2668,7 +2758,7 @@ static GtkWidget *make_nav_row(const char *icon_name,
     gtk_list_box_row_set_activatable(GTK_LIST_BOX_ROW(row), TRUE);
     gtk_list_box_row_set_selectable(GTK_LIST_BOX_ROW(row), TRUE);
     gtk_container_add(
-        GTK_CONTAINER(row), make_tab_label(icon_name, title, subtitle));
+        GTK_CONTAINER(row), make_nav_content(icon_name, title, subtitle));
     return row;
 }
 

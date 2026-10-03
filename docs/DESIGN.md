@@ -51,6 +51,7 @@ design metrics directly. Screen/content spacing, panel/card/control radii,
 titlebar chrome, navigation selection, buttons, tooltips and detail surfaces
 follow that contract rather than maintaining a second private geometry system.
 
-Repeated telemetry updates update only visible/time-dependent cells. Theme
-changes reuse one CSS provider; provider and service work stays off the GTK
-main thread.
+Repeated telemetry updates update only visible/time-dependent cells and do not
+rebuild a visible model when its static provider snapshot is unchanged. Theme
+changes reuse one CSS provider and one Common-driven CSS projection; provider
+and service work stays off the GTK main thread.

@@ -4,6 +4,16 @@
 
 No unreleased changes.
 
+## 1.2.29 - 2026-10-03
+
+- Remove the superseded first-pass GTK CSS layer so the Linux shell has one authoritative Common-driven style projection instead of stacked historical overrides.
+- Match the current Infiltrator OS shell grammar with flat semantic surfaces, restrained selection, Common typography roles and no decorative shell gradients.
+- Stop rebuilding visible runner, activity and local-service models when a refresh produces the same static data.
+- Transfer worker-owned activity/local rows into the UI state instead of deep-copying every record after each scan.
+- Release completed worker references without waiting on the GTK main thread.
+- Keep the exact latest Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.
+
+
 ## 1.2.28 - 2026-10-03
 
 - Align the Linux shell with the current Infiltrator OS titlebar, navigation, semantic palette and Common design metrics.

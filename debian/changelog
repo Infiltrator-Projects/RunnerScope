@@ -1,3 +1,14 @@
+infiltrator-runner-monitor (1.2.29) unstable; urgency=medium
+
+  * Remove the superseded duplicate GTK CSS projection and use one flat,
+    Common-driven Infiltrator OS shell.
+  * Avoid rebuilding visible GTK models when provider refresh data is unchanged.
+  * Transfer worker-owned activity and local-service rows without redundant
+    deep copies and avoid waiting for completed workers on the GTK main thread.
+  * Keep the exact latest Infiltratr Common 1.19.38 pin.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 11:35:00 +1000
+
 infiltrator-runner-monitor (1.2.28) unstable; urgency=medium
 
   * Align the Linux shell with current Infiltrator OS chrome, semantic colour
