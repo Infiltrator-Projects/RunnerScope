@@ -180,6 +180,7 @@ typedef struct {
     GtkWidget *workspace_title;
     GtkWidget *workspace_subtitle;
     GtkWidget *workspace_icon;
+    GtkWidget *workspace_art;
     GtkWidget *workspace_metric_caption[4];
     GtkWidget *workspace_metric_value[4];
     GtkWidget *selection_card;
@@ -559,6 +560,82 @@ static void css_define_color(GString *css, const char *name, uint32_t rgb)
         css, "@define-color %s #%06x;\n", name, rgb & 0x00ffffffU);
 }
 
+static char *runner_asset_path(const char *name)
+{
+    char *installed = g_build_filename(RUNNERSCOPE_DATA_DIR, "art", name, NULL);
+    if (g_file_test(installed, G_FILE_TEST_IS_REGULAR))
+        return installed;
+    g_free(installed);
+    char *cwd = g_get_current_dir();
+    char *local = g_build_filename(cwd, "assets", "art", name, NULL);
+    g_free(cwd);
+    return local;
+}
+
+static GdkPixbuf *runner_asset_pixbuf(const char *name, gint width, gint height)
+{
+    char *path = runner_asset_path(name);
+    GError *error = NULL;
+    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(
+        path, width, height, TRUE, &error);
+    if (!pixbuf) {
+        g_warning("Runner Monitor artwork %s could not be loaded: %s",
+                  path, error ? error->message : "unknown error");
+        g_clear_error(&error);
+    }
+    g_free(path);
+    return pixbuf;
+}
+
+static GtkWidget *runner_asset_image_new(const char *name, gint width, gint height)
+{
+    GdkPixbuf *pixbuf = runner_asset_pixbuf(name, width, height);
+    if (!pixbuf)
+        return gtk_image_new_from_icon_name("image-missing-symbolic", GTK_ICON_SIZE_BUTTON);
+    GtkWidget *image = gtk_image_new_from_pixbuf(pixbuf);
+    g_object_unref(pixbuf);
+    return image;
+}
+
+static void runner_asset_image_set(GtkWidget *image, const char *name,
+                                   gint width, gint height)
+{
+    if (!image) return;
+    GdkPixbuf *pixbuf = runner_asset_pixbuf(name, width, height);
+    if (!pixbuf) return;
+    gtk_image_set_from_pixbuf(GTK_IMAGE(image), pixbuf);
+    g_object_unref(pixbuf);
+}
+
+static gboolean pango_context_has_family(PangoContext *context, const char *wanted)
+{
+    if (!context || !wanted || !*wanted) return FALSE;
+    PangoFontFamily **families = NULL;
+    int count = 0;
+    pango_context_list_families(context, &families, &count);
+    gboolean found = FALSE;
+    for (int i = 0; i < count; i++) {
+        const char *name = pango_font_family_get_name(families[i]);
+        if (name && g_ascii_strcasecmp(name, wanted) == 0) {
+            found = TRUE;
+            break;
+        }
+    }
+    g_free(families);
+    return found;
+}
+
+static void enforce_required_typography(GtkWidget *widget)
+{
+    const InfiltratrTypography *type = infiltratr_typography();
+    PangoContext *context = widget ? gtk_widget_get_pango_context(widget) : NULL;
+    if (!type || !context ||
+        !pango_context_has_family(context, type->ui_family) ||
+        !pango_context_has_family(context, type->brand_family)) {
+        g_error("Runner Monitor requires the Common-verified MB Corpo UI and brand faces");
+    }
+}
+
 static void apply_theme(RunnerScopeApp *app)
 {
     if (!app) return;
@@ -620,7 +697,7 @@ static void apply_theme(RunnerScopeApp *app)
     g_string_append_printf(
         css,
         "* { font-family:\"%s\"; font-weight:%u; }\n"
-        ".header-brand-title {"
+        ".header-brand-title, .workspace-title, .workspace-metric-value {"
         " font-family:\"%s\", \"%s\"; font-weight:%u; }\n"
         "button, treeview header button { font-weight:%u; }\n",
         type->ui_family,
@@ -642,7 +719,8 @@ static void apply_theme(RunnerScopeApp *app)
         "}\n"
         "label { color:@rm_text; }\n"
         "button, combobox button {"
-        " background-image:none; background-color:@rm_button_background;"
+        " background-color:@rm_button_background;"
+        " background-image:linear-gradient(to bottom, alpha(@rm_neutral, 0.16), alpha(@rm_button_background, 0.94));"
         " color:@rm_button_foreground; border:1px solid @rm_border;"
         " box-shadow:none;"
         "}\n"
@@ -735,14 +813,14 @@ static void apply_theme(RunnerScopeApp *app)
         " background:@rm_card; border-radius:0 %upx %upx 0;"
         "}\n"
         ".workspace-header {"
-        " background-color:@rm_connection;"
-        " background-image:linear-gradient(105deg, alpha(@rm_neutral, 0.16),"
-        " @rm_connection 48%%, alpha(@rm_operation, 0.10));"
-        " border-bottom:1px solid alpha(@rm_neutral, 0.36);"
-        " padding:%upx %upx;"
+        " min-height:108px; background-color:@rm_connection;"
+        " background-image:linear-gradient(105deg, alpha(@rm_neutral, 0.30),"
+        " @rm_connection 44%%, alpha(@rm_operation, 0.20));"
+        " border-bottom:1px solid alpha(@rm_neutral, 0.58);"
+        " padding:%upx %upx; box-shadow:0 5px 18px alpha(#000000, 0.30);"
         "}\n"
         ".workspace-icon-well {"
-        " min-width:48px; min-height:48px;"
+        " min-width:58px; min-height:58px;"
         " background-color:@rm_surface;"
         " background-image:linear-gradient(135deg, alpha(@rm_neutral, 0.30),"
         " alpha(@rm_operation, 0.12));"
@@ -750,10 +828,13 @@ static void apply_theme(RunnerScopeApp *app)
         " box-shadow:0 3px 10px alpha(@rm_neutral, 0.14); padding:7px;"
         "}\n"
         ".workspace-icon { color:@rm_accent_foreground; }\n"
-        ".workspace-title { color:@rm_heading; font-size:20px; font-weight:%u; }\n"
-        ".workspace-subtitle { color:@rm_summary; font-size:11px; }\n"
+        ".workspace-title { color:@rm_heading; font-size:26px; font-weight:%u; }\n"
+        ".workspace-subtitle { color:@rm_summary; font-size:10px; letter-spacing:0.4px; }\n"
+        ".workspace-art-frame { min-width:250px; min-height:84px; background:@rm_input; border:1px solid alpha(@rm_neutral, 0.52); border-radius:14px; padding:3px; box-shadow:0 4px 16px alpha(#000000, 0.28); }\n"
+        ".workspace-toolbar { background:@rm_panel; border-bottom:1px solid @rm_connection_border; padding:6px 10px; }\n"
+        ".nav-art-frame { background-image:linear-gradient(to bottom, transparent, alpha(@rm_neutral, 0.07)); border-top:1px solid alpha(@rm_connection_border, 0.65); padding:8px; }\n"
         ".workspace-metric {"
-        " min-width:76px; background-color:@rm_surface;"
+        " min-width:82px; min-height:58px; background-color:@rm_surface;"
         " background-image:linear-gradient(145deg, alpha(@rm_neutral, 0.08),"
         " alpha(@rm_card, 0.82));"
         " border:1px solid @rm_connection_border; border-top:2px solid @rm_neutral;"
@@ -764,7 +845,7 @@ static void apply_theme(RunnerScopeApp *app)
         " color:@rm_detail_label; font-size:9px; font-weight:%u;"
         "}\n"
         ".workspace-metric-value {"
-        " color:@rm_heading; font-size:14px; font-weight:%u;"
+        " color:@rm_heading; font-size:20px; font-weight:%u;"
         "}\n"
         "notebook.runner-notebook { background:@rm_card; border:0; }\n"
         ".workspace-metric.metric-one { border-top-color:@rm_info; }\n"
@@ -803,10 +884,10 @@ static void apply_theme(RunnerScopeApp *app)
         "}\n"
         "#runner-main-nav-button:checked {"
         " background-color:@rm_selection;"
-        " background-image:linear-gradient(100deg, alpha(@rm_neutral, 0.34),"
+        " background-image:linear-gradient(100deg, alpha(@rm_neutral, 0.62),"
         " @rm_selection 58%, alpha(@rm_operation, 0.16));"
         " color:@rm_selection_text; border-color:alpha(@rm_neutral, 0.76);"
-        " box-shadow:0 3px 12px alpha(@rm_neutral, 0.14);"
+        " box-shadow:0 4px 16px alpha(@rm_neutral, 0.32);"
         "}\n"
         "#runner-main-nav-button .runner-main-nav-label {"
         " color:@rm_summary; font-size:14px; font-weight:700;"
@@ -1253,14 +1334,10 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
     char a[32], b[32], d[32], uptime[64];
     switch (page) {
         case 0:
-            if (app->workspace_icon) {
-                gtk_image_set_from_icon_name(GTK_IMAGE(app->workspace_icon), "computer-symbolic", GTK_ICON_SIZE_BUTTON);
-                gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
-            }
+            runner_asset_image_set(app->workspace_icon, "nav-runners.png", 36, 36);
+            runner_asset_image_set(app->workspace_art, "hero-runners.png", 300, 86);
             label_set_if_changed(app->workspace_title, "Runner fleet");
-            label_set_if_changed(
-                app->workspace_subtitle,
-                "Capacity, state changes, workload ownership and utilisation across every self-hosted runner.");
+            label_set_if_changed(app->workspace_subtitle, "CAPACITY  •  WORKLOAD  •  UTILISATION");
             g_snprintf(a, sizeof(a), "%u", app->runners_total);
             g_snprintf(b, sizeof(b), "%u", app->runners_running);
             g_snprintf(d, sizeof(d), "%u", app->runners_idle);
@@ -1271,14 +1348,10 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             workspace_metric(app, 3U, "OFFLINE", a);
             break;
         case 1:
-            if (app->workspace_icon) {
-                gtk_image_set_from_icon_name(GTK_IMAGE(app->workspace_icon), "media-playback-start-symbolic", GTK_ICON_SIZE_BUTTON);
-                gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
-            }
+            runner_asset_image_set(app->workspace_icon, "nav-active.png", 36, 36);
+            runner_asset_image_set(app->workspace_art, "hero-active.png", 300, 86);
             label_set_if_changed(app->workspace_title, "Active work");
-            label_set_if_changed(
-                app->workspace_subtitle,
-                "Live workflow execution across local self-hosted capacity and GitHub-hosted jobs.");
+            label_set_if_changed(app->workspace_subtitle, "LIVE JOBS  •  QUEUES  •  RUNNERS");
             g_snprintf(a, sizeof(a), "%u", app->local_active);
             g_snprintf(b, sizeof(b), "%u", app->hosted_active);
             g_snprintf(d, sizeof(d), "%u", app->queued);
@@ -1289,14 +1362,10 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             workspace_metric(app, 3U, "ACTIVE", a);
             break;
         case 2: {
-            if (app->workspace_icon) {
-                gtk_image_set_from_icon_name(GTK_IMAGE(app->workspace_icon), "document-open-recent-symbolic", GTK_ICON_SIZE_BUTTON);
-                gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
-            }
+            runner_asset_image_set(app->workspace_icon, "nav-history.png", 36, 36);
+            runner_asset_image_set(app->workspace_art, "hero-history.png", 300, 86);
             label_set_if_changed(app->workspace_title, "Session history");
-            label_set_if_changed(
-                app->workspace_subtitle,
-                "State transitions and work observed by this monitor session.");
+            label_set_if_changed(app->workspace_subtitle, "STATE  •  EVENTS  •  SESSION");
             g_snprintf(a, sizeof(a), "%u", app->history_rows->len);
             g_snprintf(b, sizeof(b), "%u", g_hash_table_size(app->sessions));
             const char *filter = gtk_entry_get_text(GTK_ENTRY(app->filter_entry));
@@ -1311,14 +1380,10 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             break;
         }
         default:
-            if (app->workspace_icon) {
-                gtk_image_set_from_icon_name(GTK_IMAGE(app->workspace_icon), "utilities-system-monitor-symbolic", GTK_ICON_SIZE_BUTTON);
-                gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
-            }
+            runner_asset_image_set(app->workspace_icon, "nav-health.png", 36, 36);
+            runner_asset_image_set(app->workspace_art, "hero-health.png", 300, 86);
             label_set_if_changed(app->workspace_title, "Local Linux health");
-            label_set_if_changed(
-                app->workspace_subtitle,
-                "Installed runner services, process identity, GitHub linkage and latest diagnostic evidence.");
+            label_set_if_changed(app->workspace_subtitle, "SERVICES  •  DIAGNOSTICS  •  LINK");
             g_snprintf(a, sizeof(a), "%u", app->local_rows->len);
             g_snprintf(b, sizeof(b), "%u", count_local_state(app, "RUNNING"));
             g_snprintf(d, sizeof(d), "%u", count_local_github(app));
@@ -1663,11 +1728,11 @@ static gboolean runner_apply_idle(gpointer data)
 
     char *status = app->config.expected_runners != 0U
         ? g_strdup_printf(
-            "%u runners detected; expected %u. %u running, %u idle, %u offline.",
+            "%u detected  •  %u expected  •  %u running  •  %u idle  •  %u offline",
             app->runners_total, app->config.expected_runners,
             app->runners_running, app->runners_idle, app->runners_offline)
         : g_strdup_printf(
-            "%u runners detected. %u running, %u idle, %u offline.",
+            "%u detected  •  %u running  •  %u idle  •  %u offline",
             app->runners_total, app->runners_running,
             app->runners_idle, app->runners_offline);
     label_set_if_changed(app->status_label, status);
@@ -2830,8 +2895,7 @@ static GtkWidget *make_nav_button(RunnerScopeApp *app,
     GtkWidget *button = gtk_toggle_button_new();
     GtkWidget *row = gtk_box_new(
         GTK_ORIENTATION_HORIZONTAL, compact ? 0 : 10);
-    GtkWidget *icon =
-        gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
+    GtkWidget *icon = runner_asset_image_new(icon_name, 32, 32);
     GtkWidget *label = gtk_label_new(title);
 
     gtk_widget_set_name(button, "runner-main-nav-button");
@@ -2842,7 +2906,6 @@ static GtkWidget *make_nav_button(RunnerScopeApp *app,
         RUNNERSCOPE_MAIN_NAV_BUTTON_HEIGHT);
     gtk_widget_set_hexpand(button, TRUE);
     gtk_widget_set_halign(button, GTK_ALIGN_FILL);
-    gtk_image_set_pixel_size(GTK_IMAGE(icon), 24);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(icon), "runner-main-nav-icon");
     gtk_style_context_add_class(
@@ -2988,6 +3051,7 @@ static void build_ui(RunnerScopeApp *app)
     const guint screen_padding = metrics ? metrics->screen_padding : 20U;
 
     app->window = gtk_application_window_new(app->application);
+    enforce_required_typography(app->window);
     gtk_window_set_title(GTK_WINDOW(app->window), "Runner Monitor");
     gtk_window_set_default_size(GTK_WINDOW(app->window), 1280, 800);
     gtk_window_set_icon_name(GTK_WINDOW(app->window), "runnerscope");
@@ -3116,9 +3180,7 @@ static void build_ui(RunnerScopeApp *app)
     GtkWidget *workspace_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(workspace_icon_well), "workspace-icon-well");
-    app->workspace_icon =
-        gtk_image_new_from_icon_name("computer-symbolic", GTK_ICON_SIZE_BUTTON);
-    gtk_image_set_pixel_size(GTK_IMAGE(app->workspace_icon), 30);
+    app->workspace_icon = runner_asset_image_new("nav-runners.png", 36, 36);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->workspace_icon), "workspace-icon");
     gtk_box_pack_start(
@@ -3130,7 +3192,7 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_set_hexpand(workspace_copy, TRUE);
     app->workspace_title = gtk_label_new("Runner fleet");
     app->workspace_subtitle = gtk_label_new(
-        "Capacity, state changes, workload ownership and utilisation across every self-hosted runner.");
+        "CAPACITY  •  WORKLOAD  •  UTILISATION");
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->workspace_title), "workspace-title");
     gtk_style_context_add_class(
@@ -3145,16 +3207,14 @@ static void build_ui(RunnerScopeApp *app)
         GTK_BOX(workspace_copy), app->workspace_subtitle, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(workspace_header), workspace_copy, TRUE, TRUE, 0);
 
-    app->filter_entry = gtk_search_entry_new();
-    gtk_entry_set_placeholder_text(
-        GTK_ENTRY(app->filter_entry), "Filter current view…");
-    gtk_widget_set_size_request(app->filter_entry, 240, -1);
+    GtkWidget *workspace_art_frame = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class(
-        gtk_widget_get_style_context(app->filter_entry), "workspace-search");
-    g_signal_connect(
-        app->filter_entry, "changed", G_CALLBACK(on_filter_changed), app);
+        gtk_widget_get_style_context(workspace_art_frame), "workspace-art-frame");
+    app->workspace_art = runner_asset_image_new("hero-runners.png", 300, 86);
     gtk_box_pack_start(
-        GTK_BOX(workspace_header), app->filter_entry, FALSE, FALSE, 0);
+        GTK_BOX(workspace_art_frame), app->workspace_art, TRUE, TRUE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_header), workspace_art_frame, FALSE, FALSE, 0);
 
     GtkWidget *workspace_metrics = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(workspace_metrics), compact_spacing);
@@ -3172,6 +3232,23 @@ static void build_ui(RunnerScopeApp *app)
     }
     gtk_box_pack_end(
         GTK_BOX(workspace_header), workspace_metrics, FALSE, FALSE, 0);
+
+    GtkWidget *workspace_toolbar =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(workspace_toolbar), "workspace-toolbar");
+    app->filter_entry = gtk_search_entry_new();
+    gtk_entry_set_placeholder_text(
+        GTK_ENTRY(app->filter_entry), "Filter current view…");
+    gtk_widget_set_size_request(app->filter_entry, 300, -1);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->filter_entry), "workspace-search");
+    g_signal_connect(
+        app->filter_entry, "changed", G_CALLBACK(on_filter_changed), app);
+    gtk_box_pack_end(
+        GTK_BOX(workspace_toolbar), app->filter_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(workspace), workspace_toolbar, FALSE, FALSE, 0);
 
     app->notebook = gtk_notebook_new();
     gtk_notebook_set_show_tabs(GTK_NOTEBOOK(app->notebook), FALSE);
@@ -3305,10 +3382,10 @@ static void build_ui(RunnerScopeApp *app)
         const char *title;
         const char *tooltip;
     } nav_items[] = {
-        {"computer-symbolic", "Runners", "Fleet state and utilisation"},
-        {"media-playback-start-symbolic", "Active jobs", "Work executing now"},
-        {"document-open-recent-symbolic", "History", "Session activity"},
-        {"utilities-system-monitor-symbolic", "Local Linux health", "Services and diagnostics"}
+        {"nav-runners.png", "Runners", "Fleet state and utilisation"},
+        {"nav-active.png", "Active jobs", "Work executing now"},
+        {"nav-history.png", "History", "Session activity"},
+        {"nav-health.png", "Local Linux health", "Services and diagnostics"}
     };
     for (guint i = 0U; i < G_N_ELEMENTS(nav_items); i++) {
         if (i == 3U) {
@@ -3325,6 +3402,13 @@ static void build_ui(RunnerScopeApp *app)
             GTK_BOX(nav_rail), nav_button, FALSE, TRUE, 0);
     }
     sync_navigation(app, 0);
+
+    GtkWidget *nav_art_frame = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(nav_art_frame), "nav-art-frame");
+    GtkWidget *nav_art = runner_asset_image_new("nav-infiltrator.png", 160, 200);
+    gtk_box_pack_start(GTK_BOX(nav_art_frame), nav_art, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(nav_rail), nav_art_frame, FALSE, FALSE, 8);
 
     GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, (gint)compact_spacing);
     gtk_style_context_add_class(

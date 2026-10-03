@@ -5,6 +5,7 @@ string(STRIP "${RUNNERSCOPE_VERSION}" RUNNERSCOPE_VERSION)
 project(RunnerMonitor VERSION "${RUNNERSCOPE_VERSION}" LANGUAGES C)
 
 include(CTest)
+include(GNUInstallDirs)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -72,12 +73,51 @@ else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
 
+    include("${RUNNERSCOPE_COMMON_DIR}/cmake/InfiltratrTypographyAssets.cmake")
+    set(RUNNERSCOPE_FONT_ARCHIVE "${CMAKE_BINARY_DIR}/mb-corpo-fonts.tar.xz")
+    if(NOT EXISTS "${RUNNERSCOPE_FONT_ARCHIVE}")
+        file(DOWNLOAD
+            "${INFILTRATR_MB_CORPO_ARCHIVE_URL}"
+            "${RUNNERSCOPE_FONT_ARCHIVE}"
+            EXPECTED_HASH "SHA256=${INFILTRATR_MB_CORPO_ARCHIVE_SHA256}"
+            TLS_VERIFY ON
+            STATUS RUNNERSCOPE_FONT_DOWNLOAD_STATUS)
+        list(GET RUNNERSCOPE_FONT_DOWNLOAD_STATUS 0 RUNNERSCOPE_FONT_DOWNLOAD_CODE)
+        if(NOT RUNNERSCOPE_FONT_DOWNLOAD_CODE EQUAL 0)
+            list(GET RUNNERSCOPE_FONT_DOWNLOAD_STATUS 1 RUNNERSCOPE_FONT_DOWNLOAD_MESSAGE)
+            message(FATAL_ERROR "Unable to obtain mandatory MB Corpo assets: ${RUNNERSCOPE_FONT_DOWNLOAD_MESSAGE}")
+        endif()
+    endif()
+    file(SHA256 "${RUNNERSCOPE_FONT_ARCHIVE}" RUNNERSCOPE_FONT_ARCHIVE_ACTUAL)
+    if(NOT RUNNERSCOPE_FONT_ARCHIVE_ACTUAL STREQUAL INFILTRATR_MB_CORPO_ARCHIVE_SHA256)
+        message(FATAL_ERROR "Mandatory MB Corpo archive failed Common hash verification")
+    endif()
+    set(RUNNERSCOPE_FONT_DIR "${CMAKE_BINARY_DIR}/mb-corpo-fonts")
+    file(REMOVE_RECURSE "${RUNNERSCOPE_FONT_DIR}")
+    file(MAKE_DIRECTORY "${RUNNERSCOPE_FONT_DIR}")
+    file(ARCHIVE_EXTRACT INPUT "${RUNNERSCOPE_FONT_ARCHIVE}" DESTINATION "${RUNNERSCOPE_FONT_DIR}")
+    foreach(RUNNERSCOPE_FONT_ROLE BRAND_REGULAR UI_BOLD UI_REGULAR)
+        set(RUNNERSCOPE_FONT_FILE_VAR "INFILTRATR_MB_CORPO_${RUNNERSCOPE_FONT_ROLE}_FILE")
+        set(RUNNERSCOPE_FONT_SHA_VAR "INFILTRATR_MB_CORPO_${RUNNERSCOPE_FONT_ROLE}_SHA256")
+        set(RUNNERSCOPE_FONT_PATH "${RUNNERSCOPE_FONT_DIR}/${${RUNNERSCOPE_FONT_FILE_VAR}}")
+        if(NOT EXISTS "${RUNNERSCOPE_FONT_PATH}")
+            message(FATAL_ERROR "Mandatory MB Corpo face missing: ${${RUNNERSCOPE_FONT_FILE_VAR}}")
+        endif()
+        file(SHA256 "${RUNNERSCOPE_FONT_PATH}" RUNNERSCOPE_FONT_ACTUAL_SHA)
+        if(NOT RUNNERSCOPE_FONT_ACTUAL_SHA STREQUAL "${${RUNNERSCOPE_FONT_SHA_VAR}}")
+            message(FATAL_ERROR "Mandatory MB Corpo face failed Common hash verification: ${${RUNNERSCOPE_FONT_FILE_VAR}}")
+        endif()
+    endforeach()
+
     add_executable(runnerscope
         src/linux_main.c
     )
     target_link_libraries(runnerscope PRIVATE
         InfiltratrCommon::Common
         PkgConfig::GTK3
+    )
+    target_compile_definitions(runnerscope PRIVATE
+        RUNNERSCOPE_DATA_DIR="${CMAKE_INSTALL_FULL_DATADIR}/runnerscope"
     )
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         target_compile_options(runnerscope PRIVATE
@@ -92,6 +132,13 @@ else()
             DESTINATION share/icons/hicolor/scalable/apps)
     install(FILES packaging/runnerscope.png
             DESTINATION share/icons/hicolor/128x128/apps)
+    install(DIRECTORY assets/art/
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/runnerscope/art")
+    install(FILES
+        "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_BRAND_REGULAR_FILE}"
+        "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_BOLD_FILE}"
+        "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_REGULAR_FILE}"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/fonts/truetype/runnerscope")
 endif()
 
 target_compile_definitions(runnerscope PRIVATE

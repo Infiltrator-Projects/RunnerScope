@@ -55,3 +55,8 @@ Repeated telemetry updates update only visible/time-dependent cells and do not
 rebuild a visible model when its static provider snapshot is unchanged. Theme
 changes reuse one CSS provider and one Common-driven CSS projection; provider
 and service work stays off the GTK main thread.
+
+
+## Graphical presentation contract
+
+Runner Monitor is an Infiltrator OS graphical application, not a text-first GTK data viewer. Linux packages the Common-verified MB Corpo UI, bold and brand faces and refuses to launch the graphical shell if the required UI or brand family is unavailable. Product-local raster artwork supplies navigation wells, page hero imagery and persistent Infiltrator OS identity; Common continues to own semantic palette, structural metrics and typography identity. Tables remain the detailed evidence surface, subordinate to the graphical state overview.
