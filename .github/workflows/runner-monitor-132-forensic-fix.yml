@@ -42,6 +42,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/forensic_fix_132.py
+          sed -i 's/GtkWidget \*settings = make_window_control(/GtkWidget *settings_button = make_window_control(/' src/linux_main.c
+          sed -i 's/g_signal_connect(settings, "clicked", G_CALLBACK(on_settings), app);/g_signal_connect(settings_button, "clicked", G_CALLBACK(on_settings), app);/' src/linux_main.c
+          sed -i 's/gtk_box_pack_start(GTK_BOX(header_end), settings, FALSE, FALSE, 0);/gtk_box_pack_start(GTK_BOX(header_end), settings_button, FALSE, FALSE, 0);/' src/linux_main.c
           test "$(tr -d '[:space:]' < VERSION)" = '1.2.32'
           grep -F 'preferences-system-symbolic", "Settings"' src/linux_main.c >/dev/null
           grep -F 'g_timeout_add_seconds(2U, tick_timer_cb, app)' src/linux_main.c >/dev/null
