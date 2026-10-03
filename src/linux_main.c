@@ -174,13 +174,9 @@ typedef struct {
     GtkWidget *notebook;
     GtkWidget *filter_entry;
     GtkWidget *status_label;
-    GtkWidget *summary_label;
-    GtkWidget *updated_label;
-    GtkWidget *scan_label;
     GtkWidget *open_job_button;
     GtkWidget *open_diag_button;
     GtkWidget *restart_button;
-    GtkWidget *counter_labels[7];
     GtkWidget *workspace_title;
     GtkWidget *workspace_subtitle;
     GtkWidget *workspace_metric_caption[4];
@@ -193,6 +189,9 @@ typedef struct {
     GtkWidget *main_navigation;
     gboolean navigation_syncing;
     gboolean compact_layout;
+    gboolean theme_state_valid;
+    InfiltratrThemeMode theme_state_mode;
+    gboolean theme_state_dark;
     GtkCssProvider *theme_provider;
 
     GtkListStore *runner_store;
@@ -352,16 +351,6 @@ static char *duration_text(double seconds)
     if (!infiltratr_format_duration_compact(true, (uint64_t)seconds,
                                              buffer, sizeof(buffer)))
         return g_strdup("—");
-    return g_strdup(buffer);
-}
-
-static char *clock_text(void)
-{
-    time_t now = time(NULL);
-    struct tm local_tm;
-    char buffer[32] = "—";
-    if (localtime_r(&now, &local_tm))
-        (void)strftime(buffer, sizeof(buffer), "%H:%M:%S", &local_tm);
     return g_strdup(buffer);
 }
 
@@ -576,8 +565,17 @@ static void apply_theme(RunnerScopeApp *app)
 {
     if (!app) return;
 
+    const gboolean system_dark = system_dark_mode();
+    const gboolean night_theme =
+        app->config.theme_mode == INFILTRATR_THEME_NIGHT ||
+        (app->config.theme_mode == INFILTRATR_THEME_SYSTEM && system_dark);
+    if (app->theme_state_valid &&
+        app->theme_state_mode == app->config.theme_mode &&
+        app->theme_state_dark == night_theme)
+        return;
+
     const InfiltratrThemePalette *p =
-        infiltratr_theme_resolve(app->config.theme_mode, system_dark_mode());
+        infiltratr_theme_resolve(app->config.theme_mode, system_dark);
     const InfiltratrTypography *type = infiltratr_typography();
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
     if (!p || !type || !metrics || !type->ui_family || !type->brand_family)
@@ -624,7 +622,7 @@ static void apply_theme(RunnerScopeApp *app)
     g_string_append_printf(
         css,
         "* { font-family:\"%s\"; font-weight:%u; }\n"
-        ".header-brand-title, .hero-title {"
+        ".header-brand-title {"
         " font-family:\"%s\", \"%s\"; font-weight:%u; }\n"
         "button, treeview header button { font-weight:%u; }\n",
         type->ui_family,
@@ -715,46 +713,6 @@ static void apply_theme(RunnerScopeApp *app)
         (unsigned int)metrics->control_spacing,
         (unsigned int)metrics->control_spacing,
         (unsigned int)metrics->small_radius);
-
-    g_string_append_printf(
-        css,
-        ".meta { color:@rm_detail_label; font-size:11px; }\n"
-        ".hero-card {"
-        " background-image:none; background-color:@rm_card;"
-        " border:1px solid @rm_border; border-radius:%upx; padding:%upx;"
-        "}\n"
-        ".hero-icon-well {"
-        " min-width:76px; min-height:76px; background:@rm_surface;"
-        " border:1px solid @rm_connection_border; border-radius:%upx;"
-        " padding:%upx;"
-        "}\n"
-        ".hero-kicker { color:@rm_kicker; font-size:10px; font-weight:%u; }\n"
-        ".hero-title { color:@rm_heading; font-size:20px; }\n"
-        "#summary { color:@rm_summary; font-size:11px; }\n"
-        "#scan { color:@rm_note; font-size:11px; }\n"
-        ".counter {"
-        " background:@rm_surface; border:1px solid @rm_status_border;"
-        " border-radius:%upx; padding:%upx %upx; min-height:44px;"
-        " font-size:15px; font-weight:%u;"
-        "}\n"
-        ".counter:hover {"
-        " background:@rm_surface_hover; border-color:@rm_neutral;"
-        "}\n"
-        ".counter-running { color:@rm_success; border-top:2px solid @rm_success; }\n"
-        ".counter-idle { color:@rm_info; border-top:2px solid @rm_info; }\n"
-        ".counter-offline { color:@rm_fault; border-top:2px solid @rm_fault; }\n"
-        ".counter-local { color:@rm_success; border-top:2px solid @rm_success; }\n"
-        ".counter-hosted { color:@rm_operation; border-top:2px solid @rm_operation; }\n"
-        ".counter-queued { color:@rm_warning; border-top:2px solid @rm_warning; }\n",
-        (unsigned int)metrics->panel_radius,
-        (unsigned int)metrics->content_padding,
-        (unsigned int)metrics->card_radius,
-        (unsigned int)metrics->control_spacing,
-        (unsigned int)type->ui_bold_weight,
-        (unsigned int)metrics->card_radius,
-        (unsigned int)metrics->control_spacing,
-        (unsigned int)metrics->content_padding,
-        (unsigned int)type->ui_bold_weight);
 
     g_string_append_printf(
         css,
@@ -892,6 +850,9 @@ static void apply_theme(RunnerScopeApp *app)
         }
     }
     gtk_css_provider_load_from_data(app->theme_provider, css->str, -1, NULL);
+    app->theme_state_valid = TRUE;
+    app->theme_state_mode = app->config.theme_mode;
+    app->theme_state_dark = night_theme;
     g_string_free(css, TRUE);
 }
 
@@ -1373,51 +1334,6 @@ static void render_page(RunnerScopeApp *app, gint page)
     }
 }
 
-static void update_counter(RunnerScopeApp *app, guint index,
-                           const char *name, guint value)
-{
-    char text[64];
-    (void)g_snprintf(text, sizeof(text), "%s  %u", name, value);
-    label_set_if_changed(app->counter_labels[index], text);
-}
-
-static void update_summary(RunnerScopeApp *app)
-{
-    update_counter(app, 0U, "TOTAL", app->runners_total);
-    update_counter(app, 1U, "RUNNING", app->runners_running);
-    update_counter(app, 2U, "IDLE", app->runners_idle);
-    update_counter(app, 3U, "OFFLINE", app->runners_offline);
-    update_counter(app, 4U, "LOCAL ACTIVE", app->local_active);
-    update_counter(app, 5U, "GITHUB ACTIVE", app->hosted_active);
-    update_counter(app, 6U, "QUEUED", app->queued);
-
-    guint jobs = 0U;
-    double busy = 0.0;
-    const double now = now_monotonic();
-    GHashTableIter iter;
-    gpointer key, value;
-    g_hash_table_iter_init(&iter, app->sessions);
-    while (g_hash_table_iter_next(&iter, &key, &value)) {
-        RunnerSession *session = value;
-        jobs += session->jobs;
-        busy += session->busy_seconds;
-        if (strcmp(session->state, "RUNNING") == 0 && session->busy_started > 0.0)
-            busy += now - session->busy_started;
-    }
-    const double elapsed = MAX(1.0, now - app->session_started);
-    const guint runner_count = MAX(1U, g_hash_table_size(app->sessions));
-    char *up_text = duration_text(elapsed);
-    char *summary = g_strdup_printf(
-        "Observed this session: self-hosted %u jobs  •  GitHub-hosted %u active  •  "
-        "self-hosted share %.0f%%  •  monitor up %s",
-        jobs, app->hosted_active,
-        MIN(100.0, (busy * 100.0) / (elapsed * (double)runner_count)),
-        up_text);
-    label_set_if_changed(app->summary_label, summary);
-    g_free(summary);
-    g_free(up_text);
-}
-
 static gboolean same_text(const char *left, const char *right)
 {
     return g_strcmp0(left, right) == 0;
@@ -1626,13 +1542,6 @@ static gboolean runner_apply_idle(gpointer data)
         render_history(app);
     if (page == 0 || (page == 2 && history_changed))
         update_workspace_context(app, page);
-
-    update_summary(app);
-    char *clock = clock_text();
-    char *updated = g_strdup_printf("Runner data: %s", clock);
-    label_set_if_changed(app->updated_label, updated);
-    g_free(updated);
-    g_free(clock);
 
     char *status = app->config.expected_runners != 0U
         ? g_strdup_printf(
@@ -1875,14 +1784,6 @@ static gboolean activity_apply_idle(gpointer data)
         update_workspace_context(app, page);
     }
 
-    update_summary(app);
-    char *scan = g_strdup_printf(
-        "Runner poll %us  •  Activity scan %us  •  %u repositories scanned",
-        app->config.runner_poll_seconds, app->config.activity_scan_seconds,
-        result->repos_scanned);
-    label_set_if_changed(app->scan_label, scan);
-    g_free(scan);
-
     g_atomic_int_set(&app->activity_refreshing, 0);
     g_free(result);
     return G_SOURCE_REMOVE;
@@ -2102,7 +2003,10 @@ static gboolean runner_timer_cb(gpointer data)
 
 static gboolean activity_timer_cb(gpointer data)
 {
-    request_activity_refresh(data);
+    RunnerScopeApp *app = data;
+    if (!app->notebook ||
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) != 3)
+        request_activity_refresh(app);
     return G_SOURCE_CONTINUE;
 }
 
@@ -2227,7 +2131,6 @@ static gboolean tick_timer_cb(gpointer data)
         update_workspace_context(app, page);
     }
 
-    update_summary(app);
     return G_SOURCE_CONTINUE;
 }
 
@@ -2248,16 +2151,27 @@ static void on_filter_changed(GtkEditable *editable, gpointer user_data)
     RunnerScopeApp *app = user_data;
     if (app->filter_timer != 0U)
         g_source_remove(app->filter_timer);
-    app->filter_timer = g_timeout_add(120U, apply_filter_cb, app);
+    app->filter_timer = g_timeout_add(180U, apply_filter_cb, app);
+}
+
+static void request_refresh_for_page(RunnerScopeApp *app, gint page)
+{
+    if (!app) return;
+    request_runner_refresh(app);
+    if (page == 0 || page == 1)
+        request_activity_refresh(app);
+    if (page == 3)
+        request_local_refresh(app);
 }
 
 static void on_refresh(GtkButton *button, gpointer user_data)
 {
     (void)button;
     RunnerScopeApp *app = user_data;
-    request_runner_refresh(app);
-    request_activity_refresh(app);
-    request_local_refresh(app);
+    const gint page = app && app->notebook
+        ? gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook))
+        : 0;
+    request_refresh_for_page(app, page);
 }
 
 static gboolean validate_org(const char *text)
@@ -2340,13 +2254,13 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         g_strlcpy(app->config.organisation, org, sizeof(app->config.organisation));
         app->config.expected_runners = (guint)g_ascii_strtoull(
             gtk_entry_get_text(GTK_ENTRY(entries[1])), NULL, 10);
-        app->config.runner_poll_seconds = MAX(1U, (guint)g_ascii_strtoull(
+        app->config.runner_poll_seconds = MAX(3U, (guint)g_ascii_strtoull(
             gtk_entry_get_text(GTK_ENTRY(entries[2])), NULL, 10));
         app->config.activity_scan_seconds = MAX(10U, (guint)g_ascii_strtoull(
             gtk_entry_get_text(GTK_ENTRY(entries[3])), NULL, 10));
         app->config.repository_scan_limit = MAX(1U, (guint)g_ascii_strtoull(
             gtk_entry_get_text(GTK_ENTRY(entries[4])), NULL, 10));
-        app->config.local_health_seconds = MAX(5U, (guint)g_ascii_strtoull(
+        app->config.local_health_seconds = MAX(15U, (guint)g_ascii_strtoull(
             gtk_entry_get_text(GTK_ENTRY(entries[5])), NULL, 10));
         app->config.theme_mode = (InfiltratrThemeMode)gtk_combo_box_get_active(
             GTK_COMBO_BOX(theme));
@@ -2743,18 +2657,6 @@ static void on_local_selection(GtkTreeSelection *selection, gpointer user_data)
     g_free(runner); g_free(service); g_free(github); g_free(pid); g_free(diag); g_free(age);
 }
 
-static GtkWidget *make_counter(const char *name, const char *css_class)
-{
-    GtkWidget *label = gtk_label_new(name);
-    GtkStyleContext *context = gtk_widget_get_style_context(label);
-    gtk_style_context_add_class(context, "counter");
-    if (css_class) gtk_style_context_add_class(context, css_class);
-    gtk_widget_set_hexpand(label, TRUE);
-    gtk_widget_set_halign(label, GTK_ALIGN_FILL);
-    gtk_widget_set_valign(label, GTK_ALIGN_FILL);
-    return label;
-}
-
 static void sync_navigation(RunnerScopeApp *app, gint page)
 {
     if (!app) return;
@@ -2781,7 +2683,9 @@ static void on_nav_clicked(GtkButton *button, gpointer user_data)
     sync_navigation(app, page);
     render_page(app, page);
     update_workspace_context(app, page);
-    if (page == 3)
+    if (page == 1)
+        request_activity_refresh(app);
+    else if (page == 3)
         request_local_refresh(app);
     clear_selection_card(app);
 }
@@ -2929,7 +2833,6 @@ static void build_ui(RunnerScopeApp *app)
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
     const guint compact_spacing = metrics ? metrics->compact_spacing : 6U;
     const guint control_spacing = metrics ? metrics->control_spacing : 10U;
-    const guint section_spacing = metrics ? metrics->section_spacing : 18U;
     const guint screen_padding = metrics ? metrics->screen_padding : 20U;
 
     app->window = gtk_application_window_new(app->application);
@@ -3005,99 +2908,10 @@ static void build_ui(RunnerScopeApp *app)
         app->window, "configure-event",
         G_CALLBACK(on_window_configure), app);
 
-    GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, (gint)section_spacing);
+    GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, (gint)control_spacing);
     gtk_widget_set_name(outer, "runner-root");
     gtk_container_set_border_width(GTK_CONTAINER(outer), screen_padding);
     gtk_container_add(GTK_CONTAINER(app->window), outer);
-
-    app->updated_label = gtk_label_new("Runner data: —");
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(app->updated_label), "meta");
-    gtk_widget_set_halign(app->updated_label, GTK_ALIGN_START);
-
-    /* Fleet state is grouped into one primary summary surface. */
-    GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)section_spacing);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(hero), "hero-card");
-    gtk_box_pack_start(GTK_BOX(outer), hero, FALSE, FALSE, 0);
-
-    GtkWidget *hero_left = gtk_box_new(GTK_ORIENTATION_VERTICAL, (gint)compact_spacing);
-    gtk_widget_set_size_request(hero_left, 300, -1);
-    GtkWidget *hero_top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
-    GtkWidget *hero_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(hero_icon_well), "hero-icon-well");
-    GtkWidget *hero_icon =
-        gtk_image_new_from_icon_name("runnerscope", GTK_ICON_SIZE_DIALOG);
-    gtk_image_set_pixel_size(GTK_IMAGE(hero_icon), 64);
-    gtk_box_pack_start(GTK_BOX(hero_icon_well), hero_icon, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(hero_top), hero_icon_well, FALSE, FALSE, 0);
-
-    GtkWidget *hero_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-    GtkWidget *hero_kicker = gtk_label_new("LIVE FLEET");
-    GtkWidget *hero_title = gtk_label_new("GitHub self-hosted runners");
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(hero_kicker), "hero-kicker");
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(hero_title), "hero-title");
-    gtk_widget_set_halign(hero_kicker, GTK_ALIGN_START);
-    gtk_widget_set_halign(hero_title, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(hero_copy), hero_kicker, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hero_copy), hero_title, FALSE, FALSE, 0);
-
-    char *org_text =
-        g_strdup_printf("Organisation  •  %s", app->config.organisation);
-    GtkWidget *org = gtk_label_new(org_text);
-    g_free(org_text);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(org), "meta");
-    gtk_widget_set_halign(org, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(hero_copy), org, FALSE, FALSE, 0);
-    gtk_box_pack_start(
-        GTK_BOX(hero_copy), app->updated_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hero_top), hero_copy, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(hero_left), hero_top, FALSE, FALSE, 0);
-
-    app->summary_label = gtk_label_new("Observed this session: —");
-    gtk_widget_set_name(app->summary_label, "summary");
-    gtk_widget_set_halign(app->summary_label, GTK_ALIGN_START);
-    gtk_label_set_line_wrap(GTK_LABEL(app->summary_label), TRUE);
-    gtk_box_pack_start(
-        GTK_BOX(hero_left), app->summary_label, FALSE, FALSE, 0);
-
-    app->scan_label = gtk_label_new("Preparing activity scan…");
-    gtk_widget_set_name(app->scan_label, "scan");
-    gtk_widget_set_halign(app->scan_label, GTK_ALIGN_START);
-    gtk_label_set_line_wrap(GTK_LABEL(app->scan_label), TRUE);
-    gtk_box_pack_start(
-        GTK_BOX(hero_left), app->scan_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(hero), hero_left, FALSE, FALSE, 0);
-
-    GtkWidget *counter_grid = gtk_grid_new();
-    gtk_widget_set_hexpand(counter_grid, TRUE);
-    gtk_grid_set_row_spacing(GTK_GRID(counter_grid), compact_spacing);
-    gtk_grid_set_column_spacing(GTK_GRID(counter_grid), compact_spacing);
-    gtk_grid_set_column_homogeneous(GTK_GRID(counter_grid), TRUE);
-    gtk_grid_set_row_homogeneous(GTK_GRID(counter_grid), TRUE);
-
-    const char *counter_names[] = {
-        "TOTAL  0", "RUNNING  0", "IDLE  0", "OFFLINE  0",
-        "LOCAL ACTIVE  0", "GITHUB ACTIVE  0", "QUEUED  0"
-    };
-    const char *counter_classes[] = {
-        NULL, "counter-running", "counter-idle", "counter-offline",
-        "counter-local", "counter-hosted", "counter-queued"
-    };
-    for (guint i = 0U; i < 7U; i++) {
-        app->counter_labels[i] =
-            make_counter(counter_names[i], counter_classes[i]);
-        const gint column = i < 4U ? (gint)i : (gint)(i - 4U);
-        const gint row = i < 4U ? 0 : 1;
-        gtk_grid_attach(
-            GTK_GRID(counter_grid), app->counter_labels[i],
-            column, row, 1, 1);
-    }
-    gtk_box_pack_start(GTK_BOX(hero), counter_grid, TRUE, TRUE, 0);
 
     app->runner_store = gtk_list_store_new(RUNNER_N_COLS,
         G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,
@@ -3496,7 +3310,7 @@ static void activate(GtkApplication *application, gpointer user_data)
     build_ui(app);
     request_runner_refresh(app);
     app->initial_activity_timer =
-        g_timeout_add(750U, initial_activity_refresh_cb, app);
+        g_timeout_add(1200U, initial_activity_refresh_cb, app);
     app->runner_timer = g_timeout_add_seconds(
         app->config.runner_poll_seconds, runner_timer_cb, app);
     app->activity_timer = g_timeout_add_seconds(

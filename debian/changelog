@@ -1,3 +1,14 @@
+infiltrator-runner-monitor (1.2.33) unstable; urgency=medium
+
+  * Remove the obsolete duplicate hero/counter summary and align the Linux
+    shell with the current Infiltrator OS workspace hierarchy.
+  * Remove periodic global-summary churn and cache effective theme state.
+  * Make refresh work contextual and suppress Activity scanning on Local Health.
+  * Correct Settings poll minimums and remove stale configuration keys/docs.
+  * Keep the exact latest Infiltratr Common 1.19.38 pin.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 14:35:00 +1000
+
 infiltrator-runner-monitor (1.2.32) unstable; urgency=medium
 
   * Remove remaining obsolete shell CSS and align Settings with the current

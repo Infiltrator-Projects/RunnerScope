@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.2.33 - 2026-10-03
+
+- Remove the duplicate hero/counter summary left from the pre-standard Linux shell; the window now follows the current Infiltrator OS header → navigation → workspace → footer hierarchy without repeated fleet state surfaces.
+- Remove the associated two-second global summary traversal/allocations and cache effective theme state so duplicate GTK theme notifications do not rebuild and reload the full CSS projection.
+- Make manual refresh contextual and stop the expensive activity repository sweep while Local Linux Health is active; opening Active Jobs still refreshes it immediately.
+- Enforce the same 3-second runner and 15-second local-health minimums in Settings that configuration loading already enforced, debounce filtering slightly longer, and give first paint more time before the initial activity sweep.
+- Purge stale repository-cache/history configuration keys and documentation left from earlier implementations.
+- Keep the exact latest Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.
+
 ## 1.2.32 - 2026-10-03
 
 - Remove remaining superseded Linux shell CSS and move Settings into the same header control group used by current Infiltrator OS/System Monitor.
