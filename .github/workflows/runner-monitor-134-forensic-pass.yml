@@ -1,0 +1,274 @@
+name: Runner Monitor 1.2.34 forensic responsiveness pass
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/runner-monitor-134-forensic-pass.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: runner-monitor-134-forensic-pass
+  cancel-in-progress: false
+
+jobs:
+  qualify-and-publish-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact source and Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Verify latest Common
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_common="$(git ls-remote https://github.com/Infiltrator-Projects/Infiltrator-Libraries.git refs/heads/main | awk '{print $1}')"
+          pinned_common="$(git ls-tree HEAD infiltratr-common | awk '{print $3}')"
+          test "$latest_common" = '7070c5812b50821fd7580101cb2289a3184f6b2c'
+          test "$pinned_common" = "$latest_common"
+          test "$(tr -d '[:space:]' < infiltratr-common/VERSION)" = '1.19.38'
+          grep -F 'RUNNERSCOPE_COMMON_EXPECTED_VERSION "1.19.38"' CMakeLists.txt >/dev/null
+          grep -F 'RUNNERSCOPE_COMMON_EXPECTED_COMMIT "7070c5812b50821fd7580101cb2289a3184f6b2c"' CMakeLists.txt >/dev/null
+
+      - name: Apply forensic cleanup and responsiveness fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected 1 match, found {count}")
+              return text.replace(old, new, 1)
+
+          def edit_function(text, name, transform):
+              marker = f"static void {name}("
+              start = text.find(marker)
+              if start < 0:
+                  raise SystemExit(f"{name}: function not found")
+              end = text.find("\nstatic ", start + len(marker))
+              if end < 0:
+                  raise SystemExit(f"{name}: next function not found")
+              block = text[start:end]
+              updated = transform(block)
+              if updated == block:
+                  raise SystemExit(f"{name}: transform made no change")
+              return text[:start] + updated + text[end:]
+
+          path = Path('src/linux_main.c')
+          s = path.read_text(encoding='utf-8')
+
+          # Remove a dead Activity result field left behind when the old scan
+          # summary label was removed in 1.2.33.
+          s = replace_once(
+              s,
+              '''    guint hosted_active;\n    guint queued;\n    guint repos_scanned;\n    char *error;\n''',
+              '''    guint hosted_active;\n    guint queued;\n    char *error;\n''',
+              'dead repos_scanned field')
+          s = replace_once(s, '    result->repos_scanned = scanned;\n', '',
+                           'dead repos_scanned assignment')
+
+          # Stop maintaining a private theme persistence parser when Common
+          # already owns the canonical parser/key contract.
+          s = replace_once(
+              s,
+              '''        char theme[32] = "";\n        if (json_get_string(contents, "theme_mode", theme, sizeof(theme))) {\n            if (g_ascii_strcasecmp(theme, "day") == 0)\n                config->theme_mode = INFILTRATR_THEME_DAY;\n            else if (g_ascii_strcasecmp(theme, "night") == 0)\n                config->theme_mode = INFILTRATR_THEME_NIGHT;\n            else\n                config->theme_mode = INFILTRATR_THEME_SYSTEM;\n        }\n''',
+              '''        char theme[32] = "";\n        if (json_get_string(contents, "theme_mode", theme, sizeof(theme))) {\n            InfiltratrThemeMode parsed_mode = config->theme_mode;\n            if (infiltratr_theme_mode_parse(theme, &parsed_mode))\n                config->theme_mode = parsed_mode;\n        }\n''',
+              'Common theme parser')
+          s = replace_once(
+              s,
+              '    const char *mode = infiltratr_theme_mode_name(config->theme_mode);\n',
+              '    const char *mode = infiltratr_theme_mode_key(config->theme_mode);\n',
+              'Common theme persistence key')
+          s = replace_once(s, '        config->local_health_seconds, mode ? mode : "System");\n',
+                           '        config->local_health_seconds, mode ? mode : "system");\n',
+                           'theme persistence fallback')
+
+          # GtkTreeView automatic sizing remeasures columns when live cells
+          # change. Fixed sizing/height keeps telemetry updates cheap while
+          # retaining user-resizable columns and expand behaviour.
+          s = replace_once(
+              s,
+              '''    GtkTreeViewColumn *view_column =\n        gtk_tree_view_column_new_with_attributes(title, renderer, "text", column, NULL);\n    gtk_tree_view_column_set_resizable(view_column, TRUE);\n    gtk_tree_view_column_set_min_width(view_column, min_width);\n''',
+              '''    GtkTreeViewColumn *view_column =\n        gtk_tree_view_column_new_with_attributes(title, renderer, "text", column, NULL);\n    gtk_tree_view_column_set_sizing(view_column, GTK_TREE_VIEW_COLUMN_FIXED);\n    gtk_tree_view_column_set_fixed_width(view_column, min_width);\n    gtk_tree_view_column_set_resizable(view_column, TRUE);\n    gtk_tree_view_column_set_min_width(view_column, min_width);\n''',
+              'fixed tree column sizing')
+          s = replace_once(
+              s,
+              '''    gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(tree), TRUE);\n    gtk_tree_view_set_enable_search(GTK_TREE_VIEW(tree), TRUE);\n    gtk_tree_view_set_grid_lines(GTK_TREE_VIEW(tree), GTK_TREE_VIEW_GRID_LINES_HORIZONTAL);\n''',
+              '''    gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(tree), TRUE);\n    gtk_tree_view_set_enable_search(GTK_TREE_VIEW(tree), TRUE);\n    gtk_tree_view_set_fixed_height_mode(GTK_TREE_VIEW(tree), TRUE);\n    gtk_tree_view_set_grid_lines(GTK_TREE_VIEW(tree), GTK_TREE_VIEW_GRID_LINES_HORIZONTAL);\n''',
+              'fixed tree row sizing')
+
+          insert_after = '''static GtkWidget *scrolled_tree(GtkListStore *store)\n{\n    GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));\n    gtk_tree_view_set_headers_clickable(GTK_TREE_VIEW(tree), TRUE);\n    gtk_tree_view_set_enable_search(GTK_TREE_VIEW(tree), TRUE);\n    gtk_tree_view_set_fixed_height_mode(GTK_TREE_VIEW(tree), TRUE);\n    gtk_tree_view_set_grid_lines(GTK_TREE_VIEW(tree), GTK_TREE_VIEW_GRID_LINES_HORIZONTAL);\n    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);\n    gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scroll), GTK_SHADOW_NONE);\n    gtk_scrolled_window_set_policy(\n        GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);\n    gtk_container_add(GTK_CONTAINER(scroll), tree);\n    gtk_widget_set_hexpand(scroll, TRUE);\n    gtk_widget_set_vexpand(scroll, TRUE);\n    return scroll;\n}\n'''
+          replacement = insert_after + '''\nstatic void tree_model_rebuild_begin(GtkWidget *tree)\n{\n    if (tree)\n        gtk_tree_view_set_model(GTK_TREE_VIEW(tree), NULL);\n}\n\nstatic void tree_model_rebuild_end(GtkWidget *tree, GtkListStore *store)\n{\n    if (tree && store)\n        gtk_tree_view_set_model(GTK_TREE_VIEW(tree), GTK_TREE_MODEL(store));\n}\n'''
+          s = replace_once(s, insert_after, replacement, 'batched tree rebuild helpers')
+
+          def batch_render(block, store, tree):
+              block = replace_once(
+                  block,
+                  f'    gtk_list_store_clear(app->{store});\n',
+                  f'    tree_model_rebuild_begin(app->{tree});\n    gtk_list_store_clear(app->{store});\n',
+                  f'{store} rebuild begin')
+              block = replace_once(
+                  block,
+                  '    g_free(folded_needle);\n}',
+                  f'    tree_model_rebuild_end(app->{tree}, app->{store});\n    g_free(folded_needle);\n}}',
+                  f'{store} rebuild end')
+              return block
+
+          for fn, store, tree in (
+              ('render_history', 'history_store', 'history_tree'),
+              ('render_runners', 'runner_store', 'runner_tree'),
+              ('render_activity', 'activity_store', 'activity_tree'),
+              ('render_local', 'local_store', 'local_tree'),
+          ):
+              s = edit_function(s, fn, lambda block, store=store, tree=tree:
+                                batch_render(block, store, tree))
+
+          # Activity discovery is the expensive path: one repo list plus up to
+          # repository_scan_limit run queries and per-active-run job queries.
+          # It is useful on Runners only while a self-hosted runner is busy, and
+          # always useful on Active Jobs. History/Local Health do not need it.
+          old = '''static gboolean activity_timer_cb(gpointer data)\n{\n    RunnerScopeApp *app = data;\n    if (!app->notebook ||\n        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) != 3)\n        request_activity_refresh(app);\n    return G_SOURCE_CONTINUE;\n}\n'''
+          new = '''static gboolean activity_timer_cb(gpointer data)\n{\n    RunnerScopeApp *app = data;\n    if (!app->notebook) return G_SOURCE_CONTINUE;\n    const gint page =\n        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));\n    if (page == 1 || (page == 0 && app->runners_running != 0U))\n        request_activity_refresh(app);\n    return G_SOURCE_CONTINUE;\n}\n'''
+          s = replace_once(s, old, new, 'activity visibility gating')
+
+          old = '''static gboolean initial_activity_refresh_cb(gpointer data)\n{\n    RunnerScopeApp *app = data;\n    app->initial_activity_timer = 0U;\n    request_activity_refresh(app);\n    return G_SOURCE_REMOVE;\n}\n'''
+          new = '''static gboolean initial_activity_refresh_cb(gpointer data)\n{\n    RunnerScopeApp *app = data;\n    app->initial_activity_timer = 0U;\n    if (!app->notebook) return G_SOURCE_REMOVE;\n    const gint page =\n        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));\n    if (page == 1 || (page == 0 && app->runners_running != 0U))\n        request_activity_refresh(app);\n    return G_SOURCE_REMOVE;\n}\n'''
+          s = replace_once(s, old, new, 'initial activity gating')
+
+          s = replace_once(
+              s,
+              '''static gboolean activity_apply_idle(gpointer data);\nstatic gboolean local_apply_idle(gpointer data);\nstatic void on_export(GtkButton *button, gpointer user_data);\n''',
+              '''static gboolean activity_apply_idle(gpointer data);\nstatic gboolean local_apply_idle(gpointer data);\nstatic void request_activity_refresh(RunnerScopeApp *app);\nstatic void on_export(GtkButton *button, gpointer user_data);\n''',
+              'activity forward declaration')
+
+          s = replace_once(
+              s,
+              '''    app->runners_total = total;\n    app->runners_running = running;\n    app->runners_idle = idle;\n    app->runners_offline = offline;\n''',
+              '''    const guint previous_running = app->runners_running;\n    app->runners_total = total;\n    app->runners_running = running;\n    app->runners_idle = idle;\n    app->runners_offline = offline;\n''',
+              'runner transition snapshot')
+          s = replace_once(
+              s,
+              '''    g_ptr_array_unref(result->rows);\n    g_atomic_int_set(&app->runner_refreshing, 0);\n    g_free(result);\n    return G_SOURCE_REMOVE;\n}\n\nstatic gpointer runner_worker''',
+              '''    g_ptr_array_unref(result->rows);\n    g_atomic_int_set(&app->runner_refreshing, 0);\n    if (page == 0 && running != 0U &&\n        (previous_running == 0U || app->activity_rows->len == 0U))\n        request_activity_refresh(app);\n    g_free(result);\n    return G_SOURCE_REMOVE;\n}\n\nstatic gpointer runner_worker''',
+              'activity refresh on busy transition')
+
+          s = replace_once(
+              s,
+              '''    request_runner_refresh(app);\n    if (page == 0 || page == 1)\n        request_activity_refresh(app);\n    if (page == 3)\n        request_local_refresh(app);\n''',
+              '''    request_runner_refresh(app);\n    if (page == 1 || (page == 0 && app->runners_running != 0U))\n        request_activity_refresh(app);\n    if (page == 3)\n        request_local_refresh(app);\n''',
+              'contextual manual activity refresh')
+
+          s = replace_once(
+              s,
+              '''    gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);\n    sync_navigation(app, page);\n''',
+              '''    const gint current_page =\n        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));\n    if (current_page == page) return;\n\n    gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);\n    sync_navigation(app, page);\n''',
+              'ignore redundant navigation clicks')
+          s = replace_once(
+              s,
+              '''    if (page == 1)\n        request_activity_refresh(app);\n    else if (page == 3)\n        request_local_refresh(app);\n''',
+              '''    if (page == 1 || (page == 0 && app->runners_running != 0U))\n        request_activity_refresh(app);\n    else if (page == 3)\n        request_local_refresh(app);\n''',
+              'navigation activity gating')
+
+          # Presentation-only clocks do not need a 2 s repaint cadence when
+          # provider state itself is polled every 3 s. Four seconds cuts model
+          # change notifications in half again without changing monitoring.
+          s = replace_once(s, '    app->tick_timer = g_timeout_add_seconds(2U, tick_timer_cb, app);\n',
+                           '    app->tick_timer = g_timeout_add_seconds(4U, tick_timer_cb, app);\n',
+                           'presentation tick cadence')
+          s = replace_once(s, '        g_timeout_add(250U, persist_history_cb, app);\n',
+                           '        g_timeout_add(750U, persist_history_cb, app);\n',
+                           'history write debounce')
+
+          # Match the current System Monitor/Infiltrator OS navigation geometry
+          # rather than retaining the earlier Runner Monitor near-match.
+          s = replace_once(
+              s,
+              '''        "#runner-main-navigation { border-right:1px solid @rm_connection_border; }\\n"\n        "#runner-main-nav-button {"\n        " background-image:none; background-color:transparent;"\n        " color:@rm_summary; border:1px solid transparent;"\n        " box-shadow:none; margin:2px 4px; padding:6px 8px;"\n''',
+              '''        "#runner-main-navigation { border-right:1px solid @rm_border; }\\n"\n        "#runner-main-nav-button {"\n        " background-image:none; background-color:transparent;"\n        " color:@rm_summary; border:1px solid transparent;"\n        " border-radius:12px; box-shadow:none;"\n        " margin:2px 4px; padding:7px 9px;"\n''',
+              'standard nav geometry')
+          s = replace_once(
+              s,
+              '''        "#runner-main-nav-button .runner-main-nav-icon {"\n        " color:@rm_neutral; background-color:@rm_surface;"\n        " border:1px solid @rm_border; border-radius:10px; padding:5px;"\n        "}\\n");\n''',
+              '''        "#runner-main-nav-button .runner-main-nav-icon {"\n        " min-width:38px; min-height:38px;"\n        " color:@rm_neutral; background-color:@rm_surface;"\n        " border:1px solid @rm_border; border-radius:10px; padding:5px;"\n        "}\\n"\n        ".runner-main-nav-separator {"\n        " background-color:alpha(@rm_connection_border, 0.78); min-height:1px;"\n        "}\\n");\n''',
+              'standard nav icon and separator')
+
+          old = '''    for (guint i = 0U; i < G_N_ELEMENTS(nav_items); i++) {\n        GtkWidget *nav_button = make_nav_button(\n            app, (gint)i, nav_items[i].icon,\n            nav_items[i].title, nav_items[i].tooltip);\n        gtk_box_pack_start(\n            GTK_BOX(nav_rail), nav_button, FALSE, TRUE, 0);\n    }\n'''
+          new = '''    for (guint i = 0U; i < G_N_ELEMENTS(nav_items); i++) {\n        if (i == 3U) {\n            GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);\n            gtk_style_context_add_class(\n                gtk_widget_get_style_context(separator),\n                "runner-main-nav-separator");\n            gtk_box_pack_start(GTK_BOX(nav_rail), separator, FALSE, FALSE, 5);\n        }\n        GtkWidget *nav_button = make_nav_button(\n            app, (gint)i, nav_items[i].icon,\n            nav_items[i].title, nav_items[i].tooltip);\n        gtk_box_pack_start(\n            GTK_BOX(nav_rail), nav_button, FALSE, TRUE, 0);\n    }\n'''
+          s = replace_once(s, old, new, 'navigation grouping')
+
+          path.write_text(s, encoding='utf-8')
+
+          Path('VERSION').write_text('1.2.34\n', encoding='utf-8')
+
+          changelog_path = Path('CHANGELOG.md')
+          changelog = changelog_path.read_text(encoding='utf-8')
+          changelog = replace_once(
+              changelog,
+              '## Unreleased\n\nNo unreleased changes.\n\n',
+              '''## Unreleased\n\nNo unreleased changes.\n\n## 1.2.34 - 2026-10-03\n\n- Remove the dead activity-scan result field left after the old scan-summary UI was retired and replace the private theme persistence parser with Common's canonical parser/key API.\n- Put Runner, Active Jobs, History and Local Health tables into GTK fixed-height/fixed-column mode and detach their models while rebuilding, avoiding repeated geometry work and per-row redraws during refresh/filter operations.\n- Restrict the expensive repository/job sweep to Active Jobs or a Runner view with genuinely busy self-hosted runners; trigger it immediately when the fleet transitions into a busy state and skip it on History/Local Health.\n- Ignore clicks on the already-selected navigation page, halve presentation-only duration/utilisation repaint frequency again, and widen the history-write debounce to reduce main-loop churn.\n- Match the current Infiltrator OS/System Monitor navigation geometry exactly: 12 px selected controls, 7/9 px padding, 38 px icon wells and a standard separator before Local Linux Health.\n- Keep the exact latest Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.\n\n''',
+              'CHANGELOG 1.2.34')
+          changelog_path.write_text(changelog, encoding='utf-8')
+
+          debian_path = Path('debian/changelog')
+          debian = debian_path.read_text(encoding='utf-8')
+          if not debian.startswith('infiltrator-runner-monitor (1.2.33)'):
+              raise SystemExit('debian/changelog: unexpected current release')
+          entry = '''infiltrator-runner-monitor (1.2.34) unstable; urgency=medium\n\n  * Remove remaining dead activity/theme compatibility code.\n  * Batch and fixed-size GTK table presentation to reduce refresh churn.\n  * Run expensive activity discovery only where its data is actually needed.\n  * Match current Infiltrator OS navigation geometry and grouping.\n  * Keep the exact latest Infiltratr Common 1.19.38 pin.\n\n -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 15:55:00 +1000\n\n'''
+          debian_path.write_text(entry + debian, encoding='utf-8')
+
+          readme_path = Path('README.md')
+          readme = readme_path.read_text(encoding='utf-8')
+          old = '''Both native shells consume Common directly. On Linux, the shell follows the current Infiltrator OS structure: branded header with Settings and window controls, responsive navigation rail, active workspace header/search/metrics, table surface, contextual selection actions and a compact status/version footer. The retired menubar and duplicate hero/counter summary from earlier iterations are not part of the current shell. Theme selection lives inside Settings, and Follow system tracks live GTK host-theme changes.\n'''
+          new = '''Both native shells consume Common directly. On Linux, the shell follows the current Infiltrator OS structure: branded header with Settings and window controls, responsive navigation rail using the same control/icon geometry and grouping as System Monitor, active workspace header/search/metrics, fixed-layout table surface, contextual selection actions and a compact status/version footer. The retired menubar and duplicate hero/counter summary from earlier iterations are not part of the current shell. Theme selection and persistence use Common's canonical System/Day/Night contract, and Follow system tracks live GTK host-theme changes.\n'''
+          readme = replace_once(readme, old, new, 'README appearance')
+          readme_path.write_text(readme, encoding='utf-8')
+          PY
+
+          test "$(tr -d '[:space:]' < VERSION)" = '1.2.34'
+          ! grep -F 'repos_scanned' src/linux_main.c
+          grep -F 'infiltratr_theme_mode_parse' src/linux_main.c >/dev/null
+          grep -F 'infiltratr_theme_mode_key' src/linux_main.c >/dev/null
+          grep -F 'GTK_TREE_VIEW_COLUMN_FIXED' src/linux_main.c >/dev/null
+          grep -F 'gtk_tree_view_set_fixed_height_mode' src/linux_main.c >/dev/null
+          grep -F 'tree_model_rebuild_begin' src/linux_main.c >/dev/null
+          grep -F 'page == 1 || (page == 0 && app->runners_running != 0U)' src/linux_main.c >/dev/null
+          grep -F 'g_timeout_add_seconds(4U, tick_timer_cb, app)' src/linux_main.c >/dev/null
+          grep -F 'g_timeout_add(750U, persist_history_cb, app)' src/linux_main.c >/dev/null
+          grep -F 'runner-main-nav-separator' src/linux_main.c >/dev/null
+          git diff --check
+
+      - name: Build and qualify refreshed Linux source
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config libgtk-3-dev
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+          ./build/runnerscope --self-test
+          test "$(./build/runnerscope --common-version)" = '1.19.38'
+          file ./build/runnerscope | grep -q ELF
+          ! ldd ./build/runnerscope | grep -Eiq 'python|libtk|tkinter'
+
+      - name: Publish qualified release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git rm .github/workflows/runner-monitor-134-forensic-pass.yml
+          git add src/linux_main.c VERSION CHANGELOG.md debian/changelog README.md
+          git diff --cached --check
+          git commit -m 'Release 1.2.34: remove remaining refresh churn and legacy shell residue'
+          git push origin HEAD:main
