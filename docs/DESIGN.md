@@ -42,3 +42,15 @@ Restarting a runner is an action, not telemetry. It remains separate from passiv
 ## Persistence
 
 Configuration/history writes must use durable publication appropriate to the platform. Corrupt or unreadable state must be surfaced rather than silently replaced.
+
+
+## Infiltrator OS shell
+
+The Linux shell consumes the current Common semantic palette, typography and
+design metrics directly. Screen/content spacing, panel/card/control radii,
+titlebar chrome, navigation selection, buttons, tooltips and detail surfaces
+follow that contract rather than maintaining a second private geometry system.
+
+Repeated telemetry updates update only visible/time-dependent cells. Theme
+changes reuse one CSS provider; provider and service work stays off the GTK
+main thread.

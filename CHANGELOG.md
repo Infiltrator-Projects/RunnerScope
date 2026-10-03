@@ -4,6 +4,16 @@
 
 No unreleased changes.
 
+## 1.2.28 - 2026-10-03
+
+- Align the Linux shell with the current Infiltrator OS titlebar, navigation, semantic palette and Common design metrics.
+- Reuse one GTK CSS provider instead of stacking a new provider after each theme change.
+- Update only the visible live table on one-second ticks and rebuild provider-backed models only when their page is visible.
+- Avoid no-op label invalidation for counters, summary and workspace metrics.
+- Restore the suite-standard 1280x800 desktop geometry and 214 px navigation rail.
+- Remove retired Runner Monitor routing/probe artifacts.
+- Advance the pinned Infiltratr Common dependency from 1.19.35 to current 1.19.38.
+
 ## 1.2.27 - 2026-10-01
 
 - Stop rebuilding the runner and active-job GTK models every second; live time fields now update in place.

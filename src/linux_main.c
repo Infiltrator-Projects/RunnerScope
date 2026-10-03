@@ -182,6 +182,7 @@ typedef struct {
     GtkWidget *selection_title;
     GtkWidget *selection_primary;
     GtkWidget *selection_secondary;
+    GtkCssProvider *theme_provider;
 
     GtkListStore *runner_store;
     GtkListStore *activity_store;
@@ -539,6 +540,15 @@ static void rgb_text(uint32_t rgb, char out[8])
     (void)g_snprintf(out, 8U, "#%06x", rgb & 0x00ffffffU);
 }
 
+static void label_set_if_changed(GtkWidget *widget, const char *text)
+{
+    if (!widget) return;
+    const char *next = text ? text : "";
+    const char *current = gtk_label_get_text(GTK_LABEL(widget));
+    if (g_strcmp0(current, next) != 0)
+        gtk_label_set_text(GTK_LABEL(widget), next);
+}
+
 static void apply_theme(RunnerScopeApp *app)
 {
     if (!app) return;
@@ -553,6 +563,9 @@ static void apply_theme(RunnerScopeApp *app)
     char text[8], title[8], muted[8], subtle[8], accent[8], accent_fg[8];
     char hover[8], select_bg[8], select_fg[8], success[8], warning[8];
     char fault[8], info[8], operation[8], status_border[8];
+    char titlebar[8], connection[8], connection_border[8], heading[8];
+    char summary_color[8], kicker[8], detail_label[8], note[8];
+    char button_bg[8], button_fg[8], card_hover[8], accent_hover[8];
 
     rgb_text(p->background_rgb, bg);
     rgb_text(p->panel_rgb, panel);
@@ -575,6 +588,18 @@ static void apply_theme(RunnerScopeApp *app)
     rgb_text(p->info_rgb, info);
     rgb_text(p->operation_rgb, operation);
     rgb_text(p->status_border_rgb, status_border);
+    rgb_text(p->titlebar_rgb, titlebar);
+    rgb_text(p->connection_rgb, connection);
+    rgb_text(p->connection_border_rgb, connection_border);
+    rgb_text(p->heading_rgb, heading);
+    rgb_text(p->summary_rgb, summary_color);
+    rgb_text(p->kicker_rgb, kicker);
+    rgb_text(p->detail_label_rgb, detail_label);
+    rgb_text(p->note_rgb, note);
+    rgb_text(p->button_background_rgb, button_bg);
+    rgb_text(p->button_foreground_rgb, button_fg);
+    rgb_text(p->card_hover_rgb, card_hover);
+    rgb_text(p->accent_hover_rgb, accent_hover);
 
     GString *css = g_string_new(NULL);
 
@@ -743,15 +768,147 @@ static void apply_theme(RunnerScopeApp *app)
         panel, muted, status_border,
         muted, muted);
 
-    GtkCssProvider *provider = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(provider, css->str, -1, NULL);
+    /* Current Infiltrator OS/Common shell projection. */
+    g_string_append_printf(
+        css,
+        "headerbar.runner-header { background-image:linear-gradient(to right,%s,%s);"
+        " background-color:%s; border-bottom:1px solid %s; min-height:58px;"
+        " padding:%upx %upx; }\n"
+        ".header-brand-icon { background:%s; border-color:%s; border-radius:%upx;"
+        " padding:%upx; }\n"
+        ".header-brand-icon image { color:%s; }\n"
+        ".header-search { background:%s; color:%s; border-color:%s; border-radius:%upx;"
+        " padding:%upx %upx; }\n"
+        ".header-search:focus { border-color:%s; }\n"
+        ".runner-window-controls { margin-left:%upx; }\n"
+        ".runner-window-control { min-width:30px; min-height:30px; padding:4px;"
+        " background:transparent; border:1px solid transparent; border-radius:%upx;"
+        " box-shadow:none; }\n"
+        ".runner-window-control:hover { background:%s; border-color:%s; }\n"
+        ".runner-window-control-close:hover { background:%s; color:%s; }\n",
+        titlebar, connection, titlebar, connection_border,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_spacing,
+        card, connection_border, (unsigned int)metrics->card_radius,
+        (unsigned int)metrics->compact_spacing, accent,
+        input, text, connection_border,
+        (unsigned int)metrics->control_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_spacing,
+        accent,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->small_radius,
+        card_hover, border, fault, accent_fg);
+
+    g_string_append_printf(
+        css,
+        ".page-eyebrow { color:%s; }\n"
+        ".page-title { color:%s; font-size:28px; }\n"
+        ".page-summary { color:%s; }\n"
+        ".meta { color:%s; }\n"
+        ".hero-card { background-image:linear-gradient(135deg,%s,%s); border-color:%s;"
+        " border-radius:%upx; padding:%upx; }\n"
+        ".hero-icon-well { background:%s; border-color:%s; border-radius:%upx;"
+        " padding:%upx; }\n"
+        ".hero-kicker { color:%s; }\n"
+        "#summary { color:%s; }\n"
+        "#scan { color:%s; }\n"
+        ".counter { border-radius:%upx; padding:%upx %upx; min-height:44px; }\n"
+        ".runner-content-shell { border-radius:%upx; }\n"
+        ".runner-sidebar { background-image:linear-gradient(to bottom,%s,%s);"
+        " border-radius:%upx 0 0 %upx; padding:%upx; }\n"
+        ".runner-workspace { border-radius:0 %upx %upx 0; }\n"
+        ".workspace-header { background:%s; border-color:%s; padding:%upx %upx; }\n"
+        ".workspace-title { color:%s; }\n"
+        ".workspace-subtitle { color:%s; }\n"
+        ".workspace-metric { background:%s; border-color:%s; border-radius:%upx;"
+        " padding:%upx %upx; }\n"
+        ".workspace-metric-caption { color:%s; }\n",
+        kicker, heading, summary_color, detail_label,
+        connection, card, connection_border,
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->content_padding,
+        surface, connection_border,
+        (unsigned int)metrics->card_radius,
+        (unsigned int)metrics->control_spacing,
+        accent, summary_color, note,
+        (unsigned int)metrics->card_radius,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->content_padding,
+        (unsigned int)metrics->panel_radius,
+        panel, bg,
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->panel_radius,
+        (unsigned int)metrics->panel_radius,
+        connection, connection_border,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->content_padding,
+        heading, summary_color,
+        surface, connection_border,
+        (unsigned int)metrics->control_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_spacing,
+        detail_label);
+
+    g_string_append_printf(
+        css,
+        ".runner-nav-list row { border-radius:%upx; margin:2px 0; min-height:48px;"
+        " padding:%upx %upx; }\n"
+        ".runner-nav-list row:hover { background:%s; border-color:%s; }\n"
+        ".runner-nav-list row:selected { background-image:linear-gradient(to right,%s,%s);"
+        " background-color:%s; border:1px solid %s; box-shadow:inset 3px 0 %s; }\n"
+        ".runner-tab-icon { background:%s; border-color:%s; border-radius:%upx; }\n"
+        ".nav-primary { color:%s; font-size:15px; font-weight:600; }\n"
+        ".nav-secondary { color:%s; }\n"
+        "treeview.view { background:%s; }\n"
+        "treeview.view header button { background:%s; color:%s; border-color:%s; }\n"
+        ".selection-card { background:%s; border-color:%s; padding:%upx %upx; }\n"
+        ".selection-title { color:%s; }\n"
+        ".selection-secondary { color:%s; }\n"
+        ".footer-card { background:%s; border-color:%s; border-radius:%upx;"
+        " padding:%upx %upx; }\n"
+        "#footer-actions button { background:%s; color:%s; border-color:%s;"
+        " border-radius:%upx; min-height:30px; }\n"
+        "#footer-actions button:hover { background:%s; color:%s; border-color:%s; }\n"
+        "#footer-actions button:disabled { background:%s; color:%s; border-color:%s; opacity:1.0; }\n"
+        "tooltip { background:%s; color:%s; border:1px solid %s; }\n",
+        (unsigned int)metrics->control_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_spacing,
+        card_hover, accent_hover,
+        select_bg, accent_hover, select_bg, accent, accent,
+        surface, connection_border,
+        (unsigned int)metrics->control_radius,
+        title, summary_color,
+        input,
+        panel, title, connection_border,
+        connection, connection_border,
+        (unsigned int)metrics->control_spacing,
+        (unsigned int)metrics->content_padding,
+        detail_label, summary_color,
+        card, connection_border,
+        (unsigned int)metrics->card_radius,
+        (unsigned int)metrics->compact_spacing,
+        (unsigned int)metrics->control_spacing,
+        button_bg, button_fg, connection_border,
+        (unsigned int)metrics->control_radius,
+        accent, accent_fg, accent,
+        input, subtle, border,
+        card, title, border);
+
     GdkScreen *screen = gdk_screen_get_default();
-    if (screen) {
-        gtk_style_context_add_provider_for_screen(
-            screen, GTK_STYLE_PROVIDER(provider),
-            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    if (!app->theme_provider) {
+        app->theme_provider = gtk_css_provider_new();
+        if (screen) {
+            gtk_style_context_add_provider_for_screen(
+                screen, GTK_STYLE_PROVIDER(app->theme_provider),
+                GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50U);
+        }
     }
-    g_object_unref(provider);
+    gtk_css_provider_load_from_data(
+        app->theme_provider, css->str, -1, NULL);
     g_string_free(css, TRUE);
 }
 
@@ -990,10 +1147,10 @@ static void workspace_metric(RunnerScopeApp *app, guint index,
     if (!app || index >= 4U || !app->workspace_metric_caption[index] ||
         !app->workspace_metric_value[index])
         return;
-    gtk_label_set_text(
-        GTK_LABEL(app->workspace_metric_caption[index]), caption ? caption : "—");
-    gtk_label_set_text(
-        GTK_LABEL(app->workspace_metric_value[index]), value ? value : "—");
+    label_set_if_changed(
+        app->workspace_metric_caption[index], caption ? caption : "—");
+    label_set_if_changed(
+        app->workspace_metric_value[index], value ? value : "—");
 }
 
 static guint count_local_state(RunnerScopeApp *app, const char *state)
@@ -1059,9 +1216,9 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
     char a[32], b[32], d[32], uptime[64];
     switch (page) {
         case 0:
-            gtk_label_set_text(GTK_LABEL(app->workspace_title), "Runner fleet");
-            gtk_label_set_text(
-                GTK_LABEL(app->workspace_subtitle),
+            label_set_if_changed(app->workspace_title, "Runner fleet");
+            label_set_if_changed(
+                app->workspace_subtitle,
                 "Capacity, state changes, workload ownership and utilisation across every self-hosted runner.");
             g_snprintf(a, sizeof(a), "%u", app->runners_total);
             g_snprintf(b, sizeof(b), "%u", app->runners_running);
@@ -1073,9 +1230,9 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             workspace_metric(app, 3U, "OFFLINE", a);
             break;
         case 1:
-            gtk_label_set_text(GTK_LABEL(app->workspace_title), "Active work");
-            gtk_label_set_text(
-                GTK_LABEL(app->workspace_subtitle),
+            label_set_if_changed(app->workspace_title, "Active work");
+            label_set_if_changed(
+                app->workspace_subtitle,
                 "Live workflow execution across local self-hosted capacity and GitHub-hosted jobs.");
             g_snprintf(a, sizeof(a), "%u", app->local_active);
             g_snprintf(b, sizeof(b), "%u", app->hosted_active);
@@ -1087,9 +1244,9 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             workspace_metric(app, 3U, "ACTIVE", a);
             break;
         case 2: {
-            gtk_label_set_text(GTK_LABEL(app->workspace_title), "Session history");
-            gtk_label_set_text(
-                GTK_LABEL(app->workspace_subtitle),
+            label_set_if_changed(app->workspace_title, "Session history");
+            label_set_if_changed(
+                app->workspace_subtitle,
                 "State transitions and work observed by this monitor session.");
             g_snprintf(a, sizeof(a), "%u", app->history_rows->len);
             g_snprintf(b, sizeof(b), "%u", g_hash_table_size(app->sessions));
@@ -1105,9 +1262,9 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             break;
         }
         default:
-            gtk_label_set_text(GTK_LABEL(app->workspace_title), "Local Linux health");
-            gtk_label_set_text(
-                GTK_LABEL(app->workspace_subtitle),
+            label_set_if_changed(app->workspace_title, "Local Linux health");
+            label_set_if_changed(
+                app->workspace_subtitle,
                 "Installed runner services, process identity, GitHub linkage and latest diagnostic evidence.");
             g_snprintf(a, sizeof(a), "%u", app->local_rows->len);
             g_snprintf(b, sizeof(b), "%u", count_local_state(app, "RUNNING"));
@@ -1236,9 +1393,9 @@ static void render_page(RunnerScopeApp *app, gint page)
 static void update_counter(RunnerScopeApp *app, guint index,
                            const char *name, guint value)
 {
-    char *text = g_strdup_printf("%s  %u", name, value);
-    gtk_label_set_text(GTK_LABEL(app->counter_labels[index]), text);
-    g_free(text);
+    char text[64];
+    (void)g_snprintf(text, sizeof(text), "%s  %u", name, value);
+    label_set_if_changed(app->counter_labels[index], text);
 }
 
 static void update_summary(RunnerScopeApp *app)
@@ -1272,7 +1429,7 @@ static void update_summary(RunnerScopeApp *app)
         jobs, app->hosted_active,
         MIN(100.0, (busy * 100.0) / (elapsed * (double)runner_count)),
         up_text);
-    gtk_label_set_text(GTK_LABEL(app->summary_label), summary);
+    label_set_if_changed(app->summary_label, summary);
     g_free(summary);
     g_free(up_text);
 
@@ -1373,8 +1530,12 @@ static gboolean runner_apply_idle(gpointer data)
         else app->runners_offline++;
     }
 
-    render_runners(app);
-    render_history(app);
+    const gint page =
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
+    if (page == 0)
+        render_runners(app);
+    else if (page == 2)
+        render_history(app);
     update_summary(app);
     char *clock = clock_text();
     char *updated = g_strdup_printf("Runner data: %s", clock);
@@ -1611,7 +1772,8 @@ static gboolean activity_apply_idle(gpointer data)
     app->local_active = result->local_active;
     app->hosted_active = result->hosted_active;
     app->queued = result->queued;
-    render_activity(app);
+    if (gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) == 1)
+        render_activity(app);
     update_summary(app);
     char *scan = g_strdup_printf(
         "Runner poll %us  •  Activity scan %us  •  %u repositories scanned",
@@ -1810,7 +1972,8 @@ static gboolean local_apply_idle(gpointer data)
         g_free(description_lower);
         g_ptr_array_add(app->local_rows, row);
     }
-    render_local(app);
+    if (gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) == 3)
+        render_local(app);
     g_ptr_array_unref(result->rows);
     g_atomic_int_set(&app->local_refreshing, 0);
     g_free(result);
@@ -1957,8 +2120,12 @@ static gboolean tick_timer_cb(gpointer data)
      * a second.  Update those cells in place instead; this preserves selection,
      * scroll position and responsiveness while keeping the clocks live.
      */
-    refresh_runner_clock_cells(app, monotonic_now, wall_now);
-    refresh_activity_clock_cells(app, wall_now);
+    const gint page =
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
+    if (page == 0)
+        refresh_runner_clock_cells(app, monotonic_now, wall_now);
+    else if (page == 1)
+        refresh_activity_clock_cells(app, wall_now);
     update_summary(app);
     return G_SOURCE_CONTINUE;
 }
@@ -2009,10 +2176,14 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "_Cancel", GTK_RESPONSE_CANCEL, "_Save", GTK_RESPONSE_ACCEPT, NULL);
     GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
+    const guint compact_spacing = metrics ? metrics->compact_spacing : 6U;
+    const guint control_spacing = metrics ? metrics->control_spacing : 10U;
+    const guint content_padding = metrics ? metrics->content_padding : 16U;
     GtkWidget *grid = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
-    gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
-    gtk_container_set_border_width(GTK_CONTAINER(grid), 16);
+    gtk_grid_set_row_spacing(GTK_GRID(grid), compact_spacing);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), control_spacing);
+    gtk_container_set_border_width(GTK_CONTAINER(grid), content_padding);
     gtk_container_add(GTK_CONTAINER(area), grid);
 
     const char *labels[] = {
@@ -2501,11 +2672,54 @@ static GtkWidget *make_nav_row(const char *icon_name,
     return row;
 }
 
+static void minimize_window(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    gtk_window_iconify(GTK_WINDOW(user_data));
+}
+
+static void toggle_maximize_window(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    GtkWindow *window = GTK_WINDOW(user_data);
+    if (gtk_window_is_maximized(window))
+        gtk_window_unmaximize(window);
+    else
+        gtk_window_maximize(window);
+}
+
+static void close_window(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    gtk_window_close(GTK_WINDOW(user_data));
+}
+
+static GtkWidget *make_window_control(const char *icon_name,
+                                      const char *tooltip,
+                                      const char *css_class)
+{
+    GtkWidget *button =
+        gtk_button_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(button), "runner-window-control");
+    if (css_class)
+        gtk_style_context_add_class(
+            gtk_widget_get_style_context(button), css_class);
+    gtk_widget_set_tooltip_text(button, tooltip);
+    return button;
+}
+
 static void build_ui(RunnerScopeApp *app)
 {
+    const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
+    const guint compact_spacing = metrics ? metrics->compact_spacing : 6U;
+    const guint control_spacing = metrics ? metrics->control_spacing : 10U;
+    const guint section_spacing = metrics ? metrics->section_spacing : 18U;
+    const guint screen_padding = metrics ? metrics->screen_padding : 20U;
+
     app->window = gtk_application_window_new(app->application);
     gtk_window_set_title(GTK_WINDOW(app->window), "Runner Monitor");
-    gtk_window_set_default_size(GTK_WINDOW(app->window), 1320, 840);
+    gtk_window_set_default_size(GTK_WINDOW(app->window), 1280, 800);
     gtk_window_set_icon_name(GTK_WINDOW(app->window), "runnerscope");
 
     /*
@@ -2515,11 +2729,11 @@ static void build_ui(RunnerScopeApp *app)
     GtkWidget *header = gtk_header_bar_new();
     gtk_style_context_add_class(
         gtk_widget_get_style_context(header), "runner-header");
-    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header), TRUE);
+    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header), FALSE);
     gtk_header_bar_set_custom_title(
         GTK_HEADER_BAR(header), gtk_label_new(""));
 
-    GtkWidget *brand = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *brand = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(brand), "header-brand");
     GtkWidget *brand_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -2546,7 +2760,7 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(GTK_BOX(brand), brand_copy, FALSE, FALSE, 0);
     gtk_header_bar_pack_start(GTK_HEADER_BAR(header), brand);
 
-    GtkWidget *header_end = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *header_end = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
     GtkWidget *menu_bar = build_menu_bar(app);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(menu_bar), "runner-menubar");
@@ -2562,15 +2776,33 @@ static void build_ui(RunnerScopeApp *app)
         app->filter_entry, "changed", G_CALLBACK(on_filter_changed), app);
     gtk_box_pack_start(
         GTK_BOX(header_end), app->filter_entry, FALSE, FALSE, 0);
+
+    GtkWidget *window_controls =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(window_controls), "runner-window-controls");
+    GtkWidget *minimize = make_window_control(
+        "window-minimize-symbolic", "Minimize", NULL);
+    GtkWidget *maximize = make_window_control(
+        "window-maximize-symbolic", "Maximize / Restore", NULL);
+    GtkWidget *close = make_window_control(
+        "window-close-symbolic", "Close", "runner-window-control-close");
+    g_signal_connect(minimize, "clicked", G_CALLBACK(minimize_window), app->window);
+    g_signal_connect(maximize, "clicked", G_CALLBACK(toggle_maximize_window), app->window);
+    g_signal_connect(close, "clicked", G_CALLBACK(close_window), app->window);
+    gtk_box_pack_start(GTK_BOX(window_controls), minimize, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(window_controls), maximize, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(window_controls), close, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(header_end), window_controls, FALSE, FALSE, 0);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), header_end);
     gtk_window_set_titlebar(GTK_WINDOW(app->window), header);
 
-    GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+    GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, (gint)section_spacing);
     gtk_widget_set_name(outer, "runner-root");
-    gtk_container_set_border_width(GTK_CONTAINER(outer), 16);
+    gtk_container_set_border_width(GTK_CONTAINER(outer), screen_padding);
     gtk_container_add(GTK_CONTAINER(app->window), outer);
 
-    GtkWidget *page_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+    GtkWidget *page_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)section_spacing);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(page_header), "page-header");
     gtk_box_pack_start(GTK_BOX(outer), page_header, FALSE, FALSE, 0);
@@ -2603,18 +2835,15 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_end(
         GTK_BOX(page_header), app->updated_label, FALSE, FALSE, 0);
 
-    /*
-     * The old row of tiny status pills made every datum look equally
-     * unimportant.  This hero surface gives fleet state a single visual anchor.
-     */
-    GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
+    /* Fleet state is grouped into one primary summary surface. */
+    GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)section_spacing);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(hero), "hero-card");
     gtk_box_pack_start(GTK_BOX(outer), hero, FALSE, FALSE, 0);
 
-    GtkWidget *hero_left = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
+    GtkWidget *hero_left = gtk_box_new(GTK_ORIENTATION_VERTICAL, (gint)compact_spacing);
     gtk_widget_set_size_request(hero_left, 300, -1);
-    GtkWidget *hero_top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *hero_top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
     GtkWidget *hero_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(hero_icon_well), "hero-icon-well");
@@ -2664,8 +2893,8 @@ static void build_ui(RunnerScopeApp *app)
 
     GtkWidget *counter_grid = gtk_grid_new();
     gtk_widget_set_hexpand(counter_grid, TRUE);
-    gtk_grid_set_row_spacing(GTK_GRID(counter_grid), 9);
-    gtk_grid_set_column_spacing(GTK_GRID(counter_grid), 9);
+    gtk_grid_set_row_spacing(GTK_GRID(counter_grid), compact_spacing);
+    gtk_grid_set_column_spacing(GTK_GRID(counter_grid), compact_spacing);
     gtk_grid_set_column_homogeneous(GTK_GRID(counter_grid), TRUE);
     gtk_grid_set_row_homogeneous(GTK_GRID(counter_grid), TRUE);
 
@@ -2700,14 +2929,7 @@ static void build_ui(RunnerScopeApp *app)
         G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,
         G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);
 
-    /*
-     * GtkNotebook's vertical custom tabs can lose or clip their child widgets
-     * under some GTK themes/scaling combinations. Keep GtkNotebook as the page
-     * host and use a compact GtkListBox rail for stable, readable navigation.
-     *
-     * Keep exactly one width constraint on the navigation rail.  Combining
-     * CSS and widget minimums can make GTK reserve duplicate horizontal space.
-     */
+    /* GtkNotebook remains the page host; the left rail owns navigation. */
     GtkWidget *content_shell = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_hexpand(content_shell, TRUE);
     gtk_widget_set_vexpand(content_shell, TRUE);
@@ -2716,7 +2938,7 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(GTK_BOX(outer), content_shell, TRUE, TRUE, 0);
 
     GtkWidget *navigation = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_set_size_request(navigation, 196, -1);
+    gtk_widget_set_size_request(navigation, 214, -1);
     gtk_widget_set_hexpand(navigation, FALSE);
     gtk_widget_set_halign(navigation, GTK_ALIGN_START);
     gtk_style_context_add_class(
@@ -2741,7 +2963,7 @@ static void build_ui(RunnerScopeApp *app)
         gtk_widget_get_style_context(workspace), "runner-workspace");
     gtk_box_pack_start(GTK_BOX(content_shell), workspace, TRUE, TRUE, 0);
 
-    GtkWidget *workspace_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
+    GtkWidget *workspace_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(workspace_header), "workspace-header");
     gtk_box_pack_start(GTK_BOX(workspace), workspace_header, FALSE, FALSE, 0);
@@ -2766,7 +2988,7 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(GTK_BOX(workspace_header), workspace_copy, TRUE, TRUE, 0);
 
     GtkWidget *workspace_metrics = gtk_grid_new();
-    gtk_grid_set_column_spacing(GTK_GRID(workspace_metrics), 6);
+    gtk_grid_set_column_spacing(GTK_GRID(workspace_metrics), compact_spacing);
     gtk_grid_set_column_homogeneous(GTK_GRID(workspace_metrics), TRUE);
     for (guint i = 0U; i < 4U; i++) {
         GtkWidget *metric = make_workspace_metric(
@@ -2786,7 +3008,7 @@ static void build_ui(RunnerScopeApp *app)
         gtk_widget_get_style_context(app->notebook), "runner-notebook");
     gtk_box_pack_start(GTK_BOX(workspace), app->notebook, TRUE, TRUE, 0);
 
-    app->selection_card = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    app->selection_card = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
     gtk_widget_set_no_show_all(app->selection_card, TRUE);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->selection_card), "selection-card");
@@ -2915,16 +3137,16 @@ static void build_ui(RunnerScopeApp *app)
     gtk_list_box_select_row(
         GTK_LIST_BOX(nav_list), GTK_LIST_BOX_ROW(nav_runners));
 
-    GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
+    GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_VERTICAL, (gint)compact_spacing);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(footer), "footer-card");
     gtk_box_pack_start(GTK_BOX(outer), footer, FALSE, FALSE, 0);
 
-    GtkWidget *action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
     gtk_widget_set_name(action_row, "footer-actions");
     gtk_box_pack_start(GTK_BOX(footer), action_row, FALSE, FALSE, 0);
 
-    GtkWidget *context_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *context_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
     gtk_box_pack_start(GTK_BOX(action_row), context_actions, FALSE, FALSE, 0);
 
     app->open_job_button = gtk_button_new_with_label("Open selected job");
@@ -2956,7 +3178,7 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(
         GTK_BOX(context_actions), app->restart_button, FALSE, FALSE, 0);
 
-    GtkWidget *general_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *general_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
     gtk_box_pack_end(GTK_BOX(action_row), general_actions, FALSE, FALSE, 0);
 
     GtkWidget *button = gtk_button_new_with_label("Export CSV");
@@ -2971,7 +3193,7 @@ static void build_ui(RunnerScopeApp *app)
     g_signal_connect(button, "clicked", G_CALLBACK(on_refresh), app);
     gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
 
-    GtkWidget *status_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget *status_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
     gtk_box_pack_start(GTK_BOX(footer), status_row, FALSE, FALSE, 0);
     app->status_label = gtk_label_new("Starting…");
     gtk_style_context_add_class(
@@ -3134,6 +3356,14 @@ static void app_destroy(RunnerScopeApp *app)
     if (app->local_thread) {
         g_thread_join(app->local_thread);
         app->local_thread = NULL;
+    }
+    if (app->theme_provider) {
+        GdkScreen *screen = gdk_screen_get_default();
+        if (screen) {
+            gtk_style_context_remove_provider_for_screen(
+                screen, GTK_STYLE_PROVIDER(app->theme_provider));
+        }
+        g_clear_object(&app->theme_provider);
     }
     g_hash_table_unref(app->sessions);
     g_hash_table_unref(app->job_by_runner);
