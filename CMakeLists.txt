@@ -133,7 +133,8 @@ else()
     install(FILES packaging/runnerscope.png
             DESTINATION share/icons/hicolor/128x128/apps)
     install(DIRECTORY assets/art/
-            DESTINATION "${CMAKE_INSTALL_DATADIR}/runnerscope/art")
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/runnerscope/art"
+            FILES_MATCHING PATTERN "*.png")
     install(FILES
         "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_BRAND_REGULAR_FILE}"
         "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_BOLD_FILE}"

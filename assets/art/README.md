@@ -1,0 +1,48 @@
+# Runner Monitor bitmap artwork
+
+Generated with the built-in imagegen tool for the 1.2.37 artwork correction.
+These are product-local shaded hardware illustrations. The shared flat cyan
+application icon in `packaging/` is separate.
+
+Runtime PNGs are 720 × 208 for page banners, 128 × 128 for navigation
+identities and 320 × 400 for the sidebar. High-resolution generation is
+downsampled with Lanczos and centre-cropped to the display aspect ratio.
+
+## Generation prompts
+
+### hero-runners.png
+
+Use case: stylized-concept. Production bitmap artwork for Runner Monitor, an Infiltrator OS native desktop application. Render tangible, recognisable objects with rich pixel texture, soft material shading and dimensional detail. Muted graphite and black with restrained cyan #00ADEF accents, small amber/green details as specified. This must look like carefully painted raster computer artwork, not diagram line art. No wireframes, no blueprint grids, no outline-only glyphs, no dashboard UI, no words, no lettering, no numbers, no border, no watermark. Crisp at small display sizes. A very wide 3.5:1 horizontal banner, 1200 by 344 composition: a close, atmospheric view of several actual server racks and a compact desktop runner workstation in a dark equipment room. Solid brushed metal rack faces, visible fans and cabling, tiny cyan and green status lamps. Broad, recognisable equipment forms fill the image; gentle foreground focus and deep graphite shadows. Hardware photograph-like digital painting. No screen content or charts.
+
+### hero-active.png
+
+Use case: stylized-concept. Production bitmap artwork for Runner Monitor, an Infiltrator OS native desktop application. Render tangible, recognisable objects with rich pixel texture, soft material shading and dimensional detail. Muted graphite and black with restrained cyan #00ADEF accents, small amber/green details as specified. This must look like carefully painted raster computer artwork, not diagram line art. No wireframes, no blueprint grids, no outline-only glyphs, no dashboard UI, no words, no lettering, no numbers, no border, no watermark. Crisp at small display sizes. A very wide 3.5:1 horizontal banner, 1200 by 344 composition: an actual processor and densely detailed motherboard performing work, matte dark circuit board, solid silver heat sink and tiny cyan/green indicator lights, a few warm amber component reflections. Macro hardware perspective, physically dimensional surfaces with depth. No synthetic chart, circuit diagram, abstract wire trails or grids.
+
+### hero-history.png
+
+Use case: stylized-concept. Production bitmap artwork for Runner Monitor, an Infiltrator OS native desktop application. Render tangible, recognisable objects with rich pixel texture, soft material shading and dimensional detail. Muted graphite and black with restrained cyan #00ADEF accents, small amber/green details as specified. This must look like carefully painted raster computer artwork, not diagram line art. No wireframes, no blueprint grids, no outline-only glyphs, no dashboard UI, no words, no lettering, no numbers, no border, no watermark. Crisp at small display sizes. A very wide 3.5:1 horizontal banner, 1200 by 344 composition: a solid brushed metal archive of stacked data cartridges and dark storage drives on a workstation, with a large physical analogue clock at the right. The clock has plain tick marks and hands, no numbers or text. Cool graphite materials, cyan edge lighting and restrained amber light on the clock. Detailed tangible objects, painted raster illustration.
+
+### hero-health.png
+
+Use case: stylized-concept. Production bitmap artwork for Runner Monitor, an Infiltrator OS native desktop application. Render tangible, recognisable objects with rich pixel texture, soft material shading and dimensional detail. Muted graphite and black with restrained cyan #00ADEF accents, small amber/green details as specified. This must look like carefully painted raster computer artwork, not diagram line art. No wireframes, no blueprint grids, no outline-only glyphs, no dashboard UI, no words, no lettering, no numbers, no border, no watermark. Crisp at small display sizes. A very wide 3.5:1 horizontal banner, 1200 by 344 composition: an opened compact computer being checked at an orderly electronics workbench, detailed motherboard and fan, a solid diagnostic probe resting beside it and small green status lamps. Dark graphite desk and hardware, soft cyan highlights, precise painted physical detail. No heart-rate graph, no text, no screen UI.
+
+### nav-runners.png
+
+Use case: stylized-concept. Production bitmap artwork for Runner Monitor, an Infiltrator OS native desktop application. Render tangible, recognisable objects with rich pixel texture, soft material shading and dimensional detail. Muted graphite and black with restrained cyan #00ADEF accents, small amber/green details as specified. This must look like carefully painted raster computer artwork, not diagram line art. No wireframes, no blueprint grids, no outline-only glyphs, no dashboard UI, no words, no lettering, no numbers, no border, no watermark. Crisp at small display sizes. Square 1:1 small navigation bitmap icon. One solid dimensional desktop computer tower and monitor together, large and centred, tightly composed to occupy 82 percent of canvas, dark graphite background. Screen a simple solid soft cyan light with no drawn glyph. Matte dark silver case with cyan edge light. Strong silhouette remains legible at 36 by 36 pixels. No frame around icon.
+
+### nav-active.png
+
+Use case: stylized-concept. Production bitmap artwork for Runner Monitor, an Infiltrator OS native desktop application. Render tangible, recognisable objects with rich pixel texture, soft material shading and dimensional detail. Muted graphite and black with restrained cyan #00ADEF accents, small amber/green details as specified. This must look like carefully painted raster computer artwork, not diagram line art. No wireframes, no blueprint grids, no outline-only glyphs, no dashboard UI, no words, no lettering, no numbers, no border, no watermark. Crisp at small display sizes. Square 1:1 small navigation bitmap icon. One substantial solid processor chip seated in a dark socket, large and centred, tightly composed to occupy 82 percent of canvas. Matte silver top, visible short physical pins, small cyan and green lights. Dark graphite background, strong silhouette remains legible at 36 by 36 pixels. No abstract play triangle, no frame around icon.
+
+### nav-history.png
+
+Use case: stylized-concept. Production bitmap artwork for Runner Monitor, an Infiltrator OS native desktop application. Render tangible, recognisable objects with rich pixel texture, soft material shading and dimensional detail. Muted graphite and black with restrained cyan #00ADEF accents, small amber/green details as specified. This must look like carefully painted raster computer artwork, not diagram line art. No wireframes, no blueprint grids, no outline-only glyphs, no dashboard UI, no words, no lettering, no numbers, no border, no watermark. Crisp at small display sizes. Square 1:1 small navigation bitmap icon. One substantial physical analogue clock with a brushed graphite case, large and centred, tightly composed to occupy 82 percent of canvas. Dark charcoal face, simple amber hands, tiny plain cyan tick marks, no numbers. Soft shaded rim and readable solid silhouette at 36 by 36 pixels. Dark graphite background, no frame around icon.
+
+### nav-health.png
+
+Use case: stylized-concept. Production bitmap artwork for Runner Monitor, an Infiltrator OS native desktop application. Render tangible, recognisable objects with rich pixel texture, soft material shading and dimensional detail. Muted graphite and black with restrained cyan #00ADEF accents, small amber/green details as specified. This must look like carefully painted raster computer artwork, not diagram line art. No wireframes, no blueprint grids, no outline-only glyphs, no dashboard UI, no words, no lettering, no numbers, no border, no watermark. Crisp at small display sizes. Square 1:1 small navigation bitmap icon. One solid detailed computer cooling fan mounted on a small section of motherboard, large and centred, tightly composed to occupy 82 percent of canvas, matte silver and graphite hardware with a small green status lamp and cyan edge highlights. Strong solid silhouette remains legible at 36 by 36 pixels. Dark graphite background. No ECG trace, no outline symbol, no frame around icon.
+
+### nav-infiltrator.png
+
+Use case: stylized-concept. Production bitmap artwork for Runner Monitor, an Infiltrator OS native desktop application. Render tangible, recognisable objects with rich pixel texture, soft material shading and dimensional detail. Muted graphite and black with restrained cyan #00ADEF accents, small amber/green details as specified. This must look like carefully painted raster computer artwork, not diagram line art. No wireframes, no blueprint grids, no outline-only glyphs, no dashboard UI, no words, no lettering, no numbers, no border, no watermark. Crisp at small display sizes. Portrait 4:5 artwork, 800 by 1000 composition. A compact professional server maintenance workstation in a dark machine room: tangible computer tower, keyboard, monitor displaying only a diffuse solid cyan glow, bundled cabling, brushed metal server faces in the background. Intricate painted bitmap materials and natural soft lighting. Graphite and black with restrained cyan and little green status LEDs. Compose a coherent physical scene that remains recognisable displayed at 160 by 200 pixels. No abstract graph or blueprint.
+

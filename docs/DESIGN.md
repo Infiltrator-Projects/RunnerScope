@@ -60,3 +60,10 @@ and service work stays off the GTK main thread.
 ## Graphical presentation contract
 
 Runner Monitor is an Infiltrator OS graphical application, not a text-first GTK data viewer. Linux packages the Common-verified MB Corpo UI, bold and brand faces and refuses to launch the graphical shell if the required UI or brand family is unavailable. Product-local raster artwork supplies navigation wells, page hero imagery and persistent Infiltrator OS identity; Common continues to own semantic palette, structural metrics and typography identity. Tables remain the detailed evidence surface, subordinate to the graphical state overview.
+
+Raster artwork must show recognisable solid objects, material detail and tonal
+depth at its displayed size. Saving procedural grids and outline drawings as
+PNG does not satisfy this visual requirement. The four workspace identities,
+their banners and the sidebar use a coordinated graphite/cyan hardware art
+family. The application/desktop icon retains the shared flat cyan identity.
+Telemetry refreshes reuse the displayed bitmap; a page change replaces it.

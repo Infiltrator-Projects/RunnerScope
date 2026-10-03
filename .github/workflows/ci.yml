@@ -153,8 +153,12 @@ jobs:
           test -f /usr/share/fonts/truetype/runnerscope/mb_corpo_a_cond_regular.ttf
           test -f /usr/share/fonts/truetype/runnerscope/mb_corpo_s_bold.ttf
           test -f /usr/share/fonts/truetype/runnerscope/mb_corpo_s_regular.ttf
-          test -f /usr/share/runnerscope/art/hero-runners.png
-          test -f /usr/share/runnerscope/art/nav-infiltrator.png
+          for asset in nav-runners nav-active nav-history nav-health nav-infiltrator \
+                       hero-runners hero-active hero-history hero-health; do
+            test -s "/usr/share/runnerscope/art/${asset}.png"
+            gdk-pixbuf-thumbnailer -s 64 "/usr/share/runnerscope/art/${asset}.png" \
+              "$RUNNER_TEMP/${asset}.png"
+          done
           fc-match "MB Corpo S Title WEB" | grep -qi 'MB Corpo'
           fc-match "MB Corpo A Title Cond WEB" | grep -qi 'MB Corpo'
           grep -qx 'Exec=/usr/bin/runnerscope' /usr/share/applications/runnerscope.desktop

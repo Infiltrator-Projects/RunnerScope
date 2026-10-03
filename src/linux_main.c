@@ -594,6 +594,8 @@ static GtkWidget *runner_asset_image_new(const char *name, gint width, gint heig
         return gtk_image_new_from_icon_name("image-missing-symbolic", GTK_ICON_SIZE_BUTTON);
     GtkWidget *image = gtk_image_new_from_pixbuf(pixbuf);
     g_object_unref(pixbuf);
+    g_object_set_data_full(G_OBJECT(image), "runner-artwork-key",
+                          g_strdup_printf("%s:%d:%d", name, width, height), g_free);
     return image;
 }
 
@@ -601,10 +603,19 @@ static void runner_asset_image_set(GtkWidget *image, const char *name,
                                    gint width, gint height)
 {
     if (!image) return;
+    char *key = g_strdup_printf("%s:%d:%d", name, width, height);
+    if (g_strcmp0(g_object_get_data(G_OBJECT(image), "runner-artwork-key"), key) == 0) {
+        g_free(key);
+        return;
+    }
     GdkPixbuf *pixbuf = runner_asset_pixbuf(name, width, height);
-    if (!pixbuf) return;
+    if (!pixbuf) {
+        g_free(key);
+        return;
+    }
     gtk_image_set_from_pixbuf(GTK_IMAGE(image), pixbuf);
     g_object_unref(pixbuf);
+    g_object_set_data_full(G_OBJECT(image), "runner-artwork-key", key, g_free);
 }
 
 static gboolean pango_context_has_family(PangoContext *context, const char *wanted)
@@ -1334,7 +1345,7 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
     char a[32], b[32], d[32], uptime[64];
     switch (page) {
         case 0:
-            runner_asset_image_set(app->workspace_icon, "nav-runners.png", 36, 36);
+            runner_asset_image_set(app->workspace_icon, "nav-runners.png", 48, 48);
             runner_asset_image_set(app->workspace_art, "hero-runners.png", 300, 86);
             label_set_if_changed(app->workspace_title, "Runner fleet");
             label_set_if_changed(app->workspace_subtitle, "CAPACITY  •  WORKLOAD  •  UTILISATION");
@@ -1348,7 +1359,7 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             workspace_metric(app, 3U, "OFFLINE", a);
             break;
         case 1:
-            runner_asset_image_set(app->workspace_icon, "nav-active.png", 36, 36);
+            runner_asset_image_set(app->workspace_icon, "nav-active.png", 48, 48);
             runner_asset_image_set(app->workspace_art, "hero-active.png", 300, 86);
             label_set_if_changed(app->workspace_title, "Active work");
             label_set_if_changed(app->workspace_subtitle, "LIVE JOBS  •  QUEUES  •  RUNNERS");
@@ -1362,7 +1373,7 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             workspace_metric(app, 3U, "ACTIVE", a);
             break;
         case 2: {
-            runner_asset_image_set(app->workspace_icon, "nav-history.png", 36, 36);
+            runner_asset_image_set(app->workspace_icon, "nav-history.png", 48, 48);
             runner_asset_image_set(app->workspace_art, "hero-history.png", 300, 86);
             label_set_if_changed(app->workspace_title, "Session history");
             label_set_if_changed(app->workspace_subtitle, "STATE  •  EVENTS  •  SESSION");
@@ -1380,7 +1391,7 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             break;
         }
         default:
-            runner_asset_image_set(app->workspace_icon, "nav-health.png", 36, 36);
+            runner_asset_image_set(app->workspace_icon, "nav-health.png", 48, 48);
             runner_asset_image_set(app->workspace_art, "hero-health.png", 300, 86);
             label_set_if_changed(app->workspace_title, "Local Linux health");
             label_set_if_changed(app->workspace_subtitle, "SERVICES  •  DIAGNOSTICS  •  LINK");
@@ -2895,7 +2906,7 @@ static GtkWidget *make_nav_button(RunnerScopeApp *app,
     GtkWidget *button = gtk_toggle_button_new();
     GtkWidget *row = gtk_box_new(
         GTK_ORIENTATION_HORIZONTAL, compact ? 0 : 10);
-    GtkWidget *icon = runner_asset_image_new(icon_name, 32, 32);
+    GtkWidget *icon = runner_asset_image_new(icon_name, 40, 40);
     GtkWidget *label = gtk_label_new(title);
 
     gtk_widget_set_name(button, "runner-main-nav-button");
@@ -3180,7 +3191,7 @@ static void build_ui(RunnerScopeApp *app)
     GtkWidget *workspace_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(workspace_icon_well), "workspace-icon-well");
-    app->workspace_icon = runner_asset_image_new("nav-runners.png", 36, 36);
+    app->workspace_icon = runner_asset_image_new("nav-runners.png", 48, 48);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->workspace_icon), "workspace-icon");
     gtk_box_pack_start(

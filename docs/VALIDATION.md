@@ -20,6 +20,14 @@ Windows:
 
 Release publication consumes only those qualified native artifacts.
 
+## 1.2.37 bitmap qualification
+
+The clean-package job loads all nine installed PNGs through GdkPixbuf, rather
+than checking only that two files exist. Visual inspection verifies solid,
+shaded hardware artwork at the navigation, banner and sidebar display sizes.
+Native Linux self-tests and the clean Debian install remain release gates;
+the Common 1.19.38 pin and MB Corpo font verification remain enforced.
+
 ## 1.2.30 forensic qualification
 
 The 1.2.30 Linux pass verifies that navigation uses the current Infiltrator OS/System Monitor toggle-button rail rather than the retired GtkListBox workaround, that the superseded list-row CSS/helpers are absent, and that one-second live runner/activity updates use direct row indexes instead of repeated linear searches. Presentation-only tick work is suppressed while the window is iconified, while provider polling continues normally. The exact latest Common 1.19.38 gitlink remains enforced.

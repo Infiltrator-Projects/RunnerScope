@@ -4,6 +4,12 @@
 
 No unreleased changes.
 
+## 1.2.37 - 2026-10-03
+
+- Replace all four navigation identities, page banners and the sidebar's wireframe pictures with detailed raster hardware artwork.
+- Display the bitmap identities at readable sizes and reuse unchanged images during telemetry updates.
+- Retain the verified MB Corpo fonts and exact Common 1.19.38 pin.
+
 ## 1.2.36 - 2026-10-03
 
 - Make the Common-verified MB Corpo UI, bold and brand faces mandatory for the native Linux package rather than permitting silent system-font substitution.
