@@ -1,3 +1,14 @@
+infiltrator-runner-monitor (1.2.31) unstable; urgency=medium
+
+  * Align the shell with current Infiltrator OS responsive navigation and move
+    filtering from the title bar into the active workspace.
+  * Remove redundant page-header and legacy Help-menu chrome.
+  * Reduce periodic GTK work and stagger expensive startup provider scans.
+  * Run runner service restarts outside the GTK main thread.
+  * Keep the exact latest Infiltratr Common 1.19.38 pin.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 11:30:00 +1000
+
 infiltrator-runner-monitor (1.2.30) unstable; urgency=medium
 
   * Replace the temporary GtkListBox navigation with the current Infiltrator OS

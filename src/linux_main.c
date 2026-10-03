@@ -25,6 +25,14 @@
 #error "RUNNERSCOPE_VERSION must be provided by CMake"
 #endif
 #define RUNNERSCOPE_APP_ID "net.ssmith.runnerscope"
+#define RUNNERSCOPE_COMPACT_LAYOUT_THRESHOLD 1100
+#define RUNNERSCOPE_COMPACT_LAYOUT_HYSTERESIS 64
+#define RUNNERSCOPE_MAIN_NAV_WIDTH 195
+#define RUNNERSCOPE_MAIN_NAV_COMPACT_WIDTH 64
+#define RUNNERSCOPE_MAIN_NAV_BUTTON_WIDTH 179
+#define RUNNERSCOPE_MAIN_NAV_BUTTON_COMPACT_WIDTH 48
+#define RUNNERSCOPE_MAIN_NAV_BUTTON_HEIGHT 50
+#define RUNNERSCOPE_SUMMARY_TICK_INTERVAL 2U
 
 typedef struct {
     char *name;
@@ -183,7 +191,9 @@ typedef struct {
     GtkWidget *selection_primary;
     GtkWidget *selection_secondary;
     GtkWidget *nav_buttons[4];
+    GtkWidget *main_navigation;
     gboolean navigation_syncing;
+    gboolean compact_layout;
     GtkCssProvider *theme_provider;
 
     GtkListStore *runner_store;
@@ -215,9 +225,14 @@ typedef struct {
     guint tick_timer;
     guint filter_timer;
     guint history_save_timer;
+    guint initial_activity_timer;
+    guint initial_local_timer;
+    guint tick_count;
     GThread *runner_thread;
     GThread *activity_thread;
     GThread *local_thread;
+    GThread *restart_thread;
+    gint restart_refreshing;
     gint shutting_down;
     guint runners_total;
     guint runners_running;
@@ -249,6 +264,12 @@ typedef struct {
     GPtrArray *rows;
     char *error;
 } LocalRefreshResult;
+
+typedef struct {
+    RunnerScopeApp *app;
+    char *service;
+    char *error;
+} RestartResult;
 
 static gboolean activity_apply_idle(gpointer data);
 static gboolean local_apply_idle(gpointer data);
@@ -606,7 +627,7 @@ static void apply_theme(RunnerScopeApp *app)
     g_string_append_printf(
         css,
         "* { font-family:\"%s\"; font-weight:%u; }\n"
-        ".header-brand-title, .page-title, .hero-title {"
+        ".header-brand-title, .hero-title {"
         " font-family:\"%s\", \"%s\"; font-weight:%u; }\n"
         "button, treeview header button { font-weight:%u; }\n",
         type->ui_family,
@@ -679,17 +700,10 @@ static void apply_theme(RunnerScopeApp *app)
         ".header-brand-icon image { color:@rm_neutral; }\n"
         ".header-brand-title { color:@rm_title; font-size:20px; }\n"
         ".header-brand-subtitle { color:@rm_muted; font-size:11px; }\n"
-        ".header-search {"
-        " min-width:300px; min-height:34px; background:@rm_input; color:@rm_text;"
+        ".workspace-search {"
+        " min-width:220px; min-height:34px; background:@rm_input; color:@rm_text;"
         " border:1px solid @rm_connection_border; border-radius:%upx;"
         " padding:%upx %upx;"
-        "}\n"
-        ".runner-menubar, .runner-menubar menuitem {"
-        " background:transparent; color:@rm_summary;"
-        "}\n"
-        ".runner-menubar menuitem { padding:5px 7px; border-radius:%upx; }\n"
-        ".runner-menubar menuitem:hover {"
-        " background:@rm_surface_hover; color:@rm_title;"
         "}\n"
         ".runner-window-controls { margin-left:%upx; }\n"
         ".runner-window-control {"
@@ -710,16 +724,11 @@ static void apply_theme(RunnerScopeApp *app)
         (unsigned int)metrics->control_radius,
         (unsigned int)metrics->compact_spacing,
         (unsigned int)metrics->control_spacing,
-        (unsigned int)metrics->small_radius,
         (unsigned int)metrics->control_spacing,
         (unsigned int)metrics->small_radius);
 
     g_string_append_printf(
         css,
-        ".page-header { padding:2px 2px 4px 2px; }\n"
-        ".page-eyebrow { color:@rm_kicker; font-size:10px; font-weight:%u; }\n"
-        ".page-title { color:@rm_heading; font-size:28px; }\n"
-        ".page-summary { color:@rm_summary; font-size:12px; }\n"
         ".meta { color:@rm_detail_label; font-size:11px; }\n"
         ".hero-card {"
         " background-image:none; background-color:@rm_card;"
@@ -748,7 +757,6 @@ static void apply_theme(RunnerScopeApp *app)
         ".counter-local { color:@rm_success; border-top:2px solid @rm_success; }\n"
         ".counter-hosted { color:@rm_operation; border-top:2px solid @rm_operation; }\n"
         ".counter-queued { color:@rm_warning; border-top:2px solid @rm_warning; }\n",
-        (unsigned int)type->ui_bold_weight,
         (unsigned int)metrics->panel_radius,
         (unsigned int)metrics->content_padding,
         (unsigned int)metrics->card_radius,
@@ -1396,6 +1404,7 @@ static void update_summary(RunnerScopeApp *app)
 
     guint jobs = 0U;
     double busy = 0.0;
+    const double now = now_monotonic();
     GHashTableIter iter;
     gpointer key, value;
     g_hash_table_iter_init(&iter, app->sessions);
@@ -1404,9 +1413,9 @@ static void update_summary(RunnerScopeApp *app)
         jobs += session->jobs;
         busy += session->busy_seconds;
         if (strcmp(session->state, "RUNNING") == 0 && session->busy_started > 0.0)
-            busy += now_monotonic() - session->busy_started;
+            busy += now - session->busy_started;
     }
-    const double elapsed = MAX(1.0, now_monotonic() - app->session_started);
+    const double elapsed = MAX(1.0, now - app->session_started);
     const guint runner_count = MAX(1U, g_hash_table_size(app->sessions));
     char *up_text = duration_text(elapsed);
     char *summary = g_strdup_printf(
@@ -1418,10 +1427,6 @@ static void update_summary(RunnerScopeApp *app)
     label_set_if_changed(app->summary_label, summary);
     g_free(summary);
     g_free(up_text);
-
-    if (app->notebook)
-        update_workspace_context(
-            app, gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
 }
 
 static gboolean same_text(const char *left, const char *right)
@@ -1630,6 +1635,8 @@ static gboolean runner_apply_idle(gpointer data)
         render_runners(app);
     else if (page == 2 && history_changed)
         render_history(app);
+    if (page == 0 || (page == 2 && history_changed))
+        update_workspace_context(app, page);
 
     update_summary(app);
     char *clock = clock_text();
@@ -1872,9 +1879,12 @@ static gboolean activity_apply_idle(gpointer data)
     app->local_active = result->local_active;
     app->hosted_active = result->hosted_active;
     app->queued = result->queued;
-    if (rows_changed &&
-        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) == 1)
+    const gint page =
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
+    if (rows_changed && page == 1) {
         render_activity(app);
+        update_workspace_context(app, page);
+    }
 
     update_summary(app);
     char *scan = g_strdup_printf(
@@ -2077,9 +2087,12 @@ static gboolean local_apply_idle(gpointer data)
     result->rows = NULL;
     g_ptr_array_unref(old_rows);
 
-    if (rows_changed &&
-        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) == 3)
+    const gint page =
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
+    if (rows_changed && page == 3) {
         render_local(app);
+        update_workspace_context(app, page);
+    }
 
     g_atomic_int_set(&app->local_refreshing, 0);
     g_free(result);
@@ -2109,6 +2122,22 @@ static gboolean local_timer_cb(gpointer data)
 {
     request_local_refresh(data);
     return G_SOURCE_CONTINUE;
+}
+
+static gboolean initial_local_refresh_cb(gpointer data)
+{
+    RunnerScopeApp *app = data;
+    app->initial_local_timer = 0U;
+    request_local_refresh(app);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean initial_activity_refresh_cb(gpointer data)
+{
+    RunnerScopeApp *app = data;
+    app->initial_activity_timer = 0U;
+    request_activity_refresh(app);
+    return G_SOURCE_REMOVE;
 }
 
 static void refresh_runner_clock_cells(RunnerScopeApp *app,
@@ -2202,21 +2231,22 @@ static gboolean tick_timer_cb(gpointer data)
             (gdk_window_get_state(window) & GDK_WINDOW_STATE_ICONIFIED) != 0)
             return G_SOURCE_CONTINUE;
     }
-    const double monotonic_now = now_monotonic();
-    const double wall_now = (double)time(NULL);
 
-    /*
-     * Time-dependent cells used to trigger complete GtkListStore rebuilds once
-     * a second.  Update those cells in place instead; this preserves selection,
-     * scroll position and responsiveness while keeping the clocks live.
-     */
     const gint page =
         gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
-    if (page == 0)
-        refresh_runner_clock_cells(app, monotonic_now, wall_now);
-    else if (page == 1)
-        refresh_activity_clock_cells(app, wall_now);
-    update_summary(app);
+    if (page == 0) {
+        const double monotonic_now = now_monotonic();
+        refresh_runner_clock_cells(
+            app, monotonic_now, (double)time(NULL));
+    } else if (page == 1) {
+        refresh_activity_clock_cells(app, (double)time(NULL));
+    } else if (page == 2) {
+        update_workspace_context(app, page);
+    }
+
+    app->tick_count++;
+    if ((app->tick_count % RUNNERSCOPE_SUMMARY_TICK_INTERVAL) == 0U)
+        update_summary(app);
     return G_SOURCE_CONTINUE;
 }
 
@@ -2386,9 +2416,9 @@ static void on_system_theme_changed(
         apply_theme(app);
 }
 
-static void on_menu_about(GtkMenuItem *item, gpointer user_data)
+static void on_about(GtkButton *button, gpointer user_data)
 {
-    (void)item;
+    (void)button;
     RunnerScopeApp *app = user_data;
     InfiltratrProjectInfo info = project_info();
     char comments[384];
@@ -2413,35 +2443,6 @@ static void on_menu_about(GtkMenuItem *item, gpointer user_data)
         "license-type", GTK_LICENSE_GPL_3_0,
         "logo-icon-name", "runnerscope",
         NULL);
-}
-
-static GtkWidget *menu_item(
-    const char *label, GCallback callback, gpointer user_data)
-{
-    GtkWidget *item = gtk_menu_item_new_with_mnemonic(label);
-    if (callback)
-        g_signal_connect(item, "activate", callback, user_data);
-    return item;
-}
-
-static GtkWidget *build_menu_bar(RunnerScopeApp *app)
-{
-    GtkWidget *bar = gtk_menu_bar_new();
-
-    /*
-     * Export, settings, refresh and window closing already have direct UI
-     * controls.  Keep only Help/About in the title bar instead of duplicating
-     * those actions in conventional application menus.
-     */
-    GtkWidget *help_root = gtk_menu_item_new_with_mnemonic("_Help");
-    GtkWidget *help_menu = gtk_menu_new();
-    gtk_menu_shell_append(
-        GTK_MENU_SHELL(help_menu),
-        menu_item("_About Runner Monitor", G_CALLBACK(on_menu_about), app));
-    gtk_menu_item_set_submenu(GTK_MENU_ITEM(help_root), help_menu);
-    gtk_menu_shell_append(GTK_MENU_SHELL(bar), help_root);
-
-    return bar;
 }
 
 static char *csv_escape(const char *input)
@@ -2540,12 +2541,80 @@ static void on_open_diag(GtkButton *button, gpointer user_data)
     g_free(path);
 }
 
+static gboolean restart_apply_idle(gpointer data)
+{
+    RestartResult *result = data;
+    RunnerScopeApp *app = result->app;
+
+    if (app->restart_thread) {
+        g_thread_unref(app->restart_thread);
+        app->restart_thread = NULL;
+    }
+
+    if (result->error) {
+        char *message = g_strdup_printf(
+            "Runner restart failed: %s", result->error);
+        label_set_if_changed(app->status_label, message);
+        g_free(message);
+    } else {
+        label_set_if_changed(app->status_label, "Runner service restarted.");
+        request_local_refresh(app);
+    }
+
+    g_atomic_int_set(&app->restart_refreshing, 0);
+    if (app->restart_button && app->local_tree) {
+        GtkTreeSelection *selection =
+            gtk_tree_view_get_selection(GTK_TREE_VIEW(app->local_tree));
+        GtkTreeModel *model = NULL;
+        GtkTreeIter iter;
+        gtk_widget_set_sensitive(
+            app->restart_button,
+            gtk_tree_selection_get_selected(selection, &model, &iter));
+    }
+
+    g_free(result->service);
+    g_free(result->error);
+    g_free(result);
+    return G_SOURCE_REMOVE;
+}
+
+static gpointer restart_worker(gpointer data)
+{
+    RestartResult *result = data;
+    char *argv[] = {
+        (char *)"pkexec", (char *)"systemctl", (char *)"restart",
+        result->service, NULL
+    };
+    GError *error = NULL;
+    char *output = run_command(argv, &error);
+    if (!output) {
+        result->error = g_strdup(
+            error && error->message ? error->message : "unknown error");
+        g_clear_error(&error);
+    } else {
+        g_free(output);
+    }
+
+    if (g_atomic_int_get(&result->app->shutting_down)) {
+        g_free(result->service);
+        g_free(result->error);
+        g_free(result);
+        return NULL;
+    }
+
+    g_idle_add(restart_apply_idle, result);
+    return NULL;
+}
+
 static void on_restart(GtkButton *button, gpointer user_data)
 {
     (void)button;
     RunnerScopeApp *app = user_data;
+    if (g_atomic_int_get(&app->restart_refreshing)) return;
+
     char *service = NULL;
-    if (!selected_string(app->local_tree, LOCAL_COL_SERVICE_NAME, &service)) return;
+    if (!selected_string(app->local_tree, LOCAL_COL_SERVICE_NAME, &service))
+        return;
 
     GtkWidget *confirm = gtk_message_dialog_new(
         GTK_WINDOW(app->window), GTK_DIALOG_MODAL, GTK_MESSAGE_WARNING,
@@ -2554,23 +2623,26 @@ static void on_restart(GtkButton *button, gpointer user_data)
         service);
     const gint response = gtk_dialog_run(GTK_DIALOG(confirm));
     gtk_widget_destroy(confirm);
-    if (response != GTK_RESPONSE_YES) { g_free(service); return; }
-
-    char *argv[] = {(char *)"pkexec", (char *)"systemctl",
-                    (char *)"restart", service, NULL};
-    GError *error = NULL;
-    char *output = run_command(argv, &error);
-    if (!output) {
-        char *message = g_strdup_printf("Runner restart failed: %s",
-            error ? error->message : "unknown error");
-        gtk_label_set_text(GTK_LABEL(app->status_label), message);
-        g_free(message); g_clear_error(&error);
-    } else {
-        gtk_label_set_text(GTK_LABEL(app->status_label), "Runner service restarted.");
-        g_free(output);
-        request_local_refresh(app);
+    if (response != GTK_RESPONSE_YES) {
+        g_free(service);
+        return;
     }
-    g_free(service);
+
+    if (!g_atomic_int_compare_and_exchange(
+            &app->restart_refreshing, 0, 1)) {
+        g_free(service);
+        return;
+    }
+
+    RestartResult *result = g_new0(RestartResult, 1U);
+    result->app = app;
+    result->service = service;
+    char *status = g_strdup_printf("Restarting %s…", service);
+    label_set_if_changed(app->status_label, status);
+    g_free(status);
+    gtk_widget_set_sensitive(app->restart_button, FALSE);
+    app->restart_thread =
+        g_thread_new("runnerscope-restart", restart_worker, result);
 }
 
 static void on_runner_selection(GtkTreeSelection *selection, gpointer user_data)
@@ -2663,7 +2735,9 @@ static void on_local_selection(GtkTreeSelection *selection, gpointer user_data)
     GtkTreeIter iter;
     const gboolean selected = gtk_tree_selection_get_selected(selection, &model, &iter);
     gtk_widget_set_sensitive(app->open_diag_button, selected);
-    gtk_widget_set_sensitive(app->restart_button, selected);
+    gtk_widget_set_sensitive(
+        app->restart_button,
+        selected && !g_atomic_int_get(&app->restart_refreshing));
     if (!selected) {
         clear_selection_card(app);
         return;
@@ -2735,14 +2809,20 @@ static GtkWidget *make_nav_button(RunnerScopeApp *app,
                                   const char *title,
                                   const char *tooltip)
 {
+    const gboolean compact = app && app->compact_layout;
     GtkWidget *button = gtk_toggle_button_new();
-    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *row = gtk_box_new(
+        GTK_ORIENTATION_HORIZONTAL, compact ? 0 : 10);
     GtkWidget *icon =
         gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_BUTTON);
     GtkWidget *label = gtk_label_new(title);
 
     gtk_widget_set_name(button, "runner-main-nav-button");
-    gtk_widget_set_size_request(button, -1, 48);
+    gtk_widget_set_size_request(
+        button,
+        compact ? RUNNERSCOPE_MAIN_NAV_BUTTON_COMPACT_WIDTH
+                : RUNNERSCOPE_MAIN_NAV_BUTTON_WIDTH,
+        RUNNERSCOPE_MAIN_NAV_BUTTON_HEIGHT);
     gtk_widget_set_hexpand(button, TRUE);
     gtk_widget_set_halign(button, GTK_ALIGN_FILL);
     gtk_image_set_pixel_size(GTK_IMAGE(icon), 24);
@@ -2752,6 +2832,8 @@ static GtkWidget *make_nav_button(RunnerScopeApp *app,
         gtk_widget_get_style_context(label), "runner-main-nav-label");
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_valign(label, GTK_ALIGN_CENTER);
+    gtk_widget_set_no_show_all(label, TRUE);
+    gtk_widget_set_visible(label, !compact);
     gtk_box_pack_start(GTK_BOX(row), icon, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row), label, TRUE, TRUE, 0);
     gtk_container_add(GTK_CONTAINER(button), row);
@@ -2760,10 +2842,66 @@ static GtkWidget *make_nav_button(RunnerScopeApp *app,
 
     g_object_set_data(
         G_OBJECT(button), "runner-nav-page", GINT_TO_POINTER(page + 1));
+    g_object_set_data(G_OBJECT(button), "runner-nav-label-widget", label);
+    g_object_set_data(G_OBJECT(button), "runner-nav-row-widget", row);
     g_signal_connect(
         button, "clicked", G_CALLBACK(on_nav_clicked), app);
     app->nav_buttons[page] = button;
     return button;
+}
+
+static void apply_navigation_density(RunnerScopeApp *app)
+{
+    if (!app) return;
+    const gboolean compact = app->compact_layout;
+
+    if (app->main_navigation)
+        gtk_widget_set_size_request(
+            app->main_navigation,
+            compact ? RUNNERSCOPE_MAIN_NAV_COMPACT_WIDTH
+                    : RUNNERSCOPE_MAIN_NAV_WIDTH,
+            -1);
+    if (app->filter_entry)
+        gtk_widget_set_size_request(
+            app->filter_entry, compact ? 180 : 240, -1);
+    if (app->workspace_subtitle)
+        gtk_widget_set_visible(app->workspace_subtitle, !compact);
+
+    for (gint page = 0; page < 4; page++) {
+        GtkWidget *button = app->nav_buttons[page];
+        if (!button) continue;
+        gtk_widget_set_size_request(
+            button,
+            compact ? RUNNERSCOPE_MAIN_NAV_BUTTON_COMPACT_WIDTH
+                    : RUNNERSCOPE_MAIN_NAV_BUTTON_WIDTH,
+            RUNNERSCOPE_MAIN_NAV_BUTTON_HEIGHT);
+        GtkWidget *label = g_object_get_data(
+            G_OBJECT(button), "runner-nav-label-widget");
+        GtkWidget *row = g_object_get_data(
+            G_OBJECT(button), "runner-nav-row-widget");
+        if (label) gtk_widget_set_visible(label, !compact);
+        if (row) gtk_box_set_spacing(GTK_BOX(row), compact ? 0 : 10);
+    }
+}
+
+static gboolean on_window_configure(GtkWidget *widget,
+                                    GdkEventConfigure *event,
+                                    gpointer user_data)
+{
+    (void)widget;
+    RunnerScopeApp *app = user_data;
+    if (!app || !event || event->width <= 0) return FALSE;
+
+    const gint compact_limit = app->compact_layout
+        ? RUNNERSCOPE_COMPACT_LAYOUT_THRESHOLD +
+            RUNNERSCOPE_COMPACT_LAYOUT_HYSTERESIS
+        : RUNNERSCOPE_COMPACT_LAYOUT_THRESHOLD;
+    const gboolean compact = event->width < compact_limit;
+    if (compact != app->compact_layout) {
+        app->compact_layout = compact;
+        apply_navigation_density(app);
+    }
+    return FALSE;
 }
 
 static void minimize_window(GtkButton *button, gpointer user_data)
@@ -2854,22 +2992,8 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(GTK_BOX(brand), brand_copy, FALSE, FALSE, 0);
     gtk_header_bar_pack_start(GTK_HEADER_BAR(header), brand);
 
-    GtkWidget *header_end = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
-    GtkWidget *menu_bar = build_menu_bar(app);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(menu_bar), "runner-menubar");
-    gtk_box_pack_start(GTK_BOX(header_end), menu_bar, FALSE, FALSE, 0);
-
-    app->filter_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(
-        GTK_ENTRY(app->filter_entry), "Filter current view…");
-    gtk_widget_set_size_request(app->filter_entry, 320, -1);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(app->filter_entry), "header-search");
-    g_signal_connect(
-        app->filter_entry, "changed", G_CALLBACK(on_filter_changed), app);
-    gtk_box_pack_start(
-        GTK_BOX(header_end), app->filter_entry, FALSE, FALSE, 0);
+    GtkWidget *header_end =
+        gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
 
     GtkWidget *window_controls =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
@@ -2890,44 +3014,19 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(GTK_BOX(header_end), window_controls, FALSE, FALSE, 0);
     gtk_header_bar_pack_end(GTK_HEADER_BAR(header), header_end);
     gtk_window_set_titlebar(GTK_WINDOW(app->window), header);
+    g_signal_connect(
+        app->window, "configure-event",
+        G_CALLBACK(on_window_configure), app);
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, (gint)section_spacing);
     gtk_widget_set_name(outer, "runner-root");
     gtk_container_set_border_width(GTK_CONTAINER(outer), screen_padding);
     gtk_container_add(GTK_CONTAINER(app->window), outer);
 
-    GtkWidget *page_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)section_spacing);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(page_header), "page-header");
-    gtk_box_pack_start(GTK_BOX(outer), page_header, FALSE, FALSE, 0);
-
-    GtkWidget *page_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
-    gtk_widget_set_hexpand(page_copy, TRUE);
-    GtkWidget *eyebrow = gtk_label_new("RUNNER INFRASTRUCTURE");
-    GtkWidget *page_title = gtk_label_new("Runner Monitor");
-    GtkWidget *page_summary = gtk_label_new(
-        "Live GitHub Actions capacity, active work and local runner health.");
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(eyebrow), "page-eyebrow");
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(page_title), "page-title");
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(page_summary), "page-summary");
-    gtk_widget_set_halign(eyebrow, GTK_ALIGN_START);
-    gtk_widget_set_halign(page_title, GTK_ALIGN_START);
-    gtk_widget_set_halign(page_summary, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(page_copy), eyebrow, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(page_copy), page_title, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(page_copy), page_summary, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(page_header), page_copy, TRUE, TRUE, 0);
-
     app->updated_label = gtk_label_new("Runner data: —");
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->updated_label), "meta");
-    gtk_widget_set_halign(app->updated_label, GTK_ALIGN_END);
-    gtk_widget_set_valign(app->updated_label, GTK_ALIGN_END);
-    gtk_box_pack_end(
-        GTK_BOX(page_header), app->updated_label, FALSE, FALSE, 0);
+    gtk_widget_set_halign(app->updated_label, GTK_ALIGN_START);
 
     /* Fleet state is grouped into one primary summary surface. */
     GtkWidget *hero = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)section_spacing);
@@ -2967,6 +3066,8 @@ static void build_ui(RunnerScopeApp *app)
         gtk_widget_get_style_context(org), "meta");
     gtk_widget_set_halign(org, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(hero_copy), org, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(hero_copy), app->updated_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(hero_top), hero_copy, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(hero_left), hero_top, FALSE, FALSE, 0);
 
@@ -3032,8 +3133,10 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(GTK_BOX(outer), content_shell, TRUE, TRUE, 0);
 
     GtkWidget *navigation = gtk_scrolled_window_new(NULL, NULL);
+    app->main_navigation = navigation;
     gtk_widget_set_name(navigation, "runner-main-navigation");
-    gtk_widget_set_size_request(navigation, 204, -1);
+    gtk_widget_set_size_request(
+        navigation, RUNNERSCOPE_MAIN_NAV_WIDTH, -1);
     gtk_widget_set_hexpand(navigation, FALSE);
     gtk_widget_set_vexpand(navigation, TRUE);
     gtk_scrolled_window_set_policy(
@@ -3075,6 +3178,17 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(
         GTK_BOX(workspace_copy), app->workspace_subtitle, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(workspace_header), workspace_copy, TRUE, TRUE, 0);
+
+    app->filter_entry = gtk_search_entry_new();
+    gtk_entry_set_placeholder_text(
+        GTK_ENTRY(app->filter_entry), "Filter current view…");
+    gtk_widget_set_size_request(app->filter_entry, 240, -1);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->filter_entry), "workspace-search");
+    g_signal_connect(
+        app->filter_entry, "changed", G_CALLBACK(on_filter_changed), app);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_header), app->filter_entry, FALSE, FALSE, 0);
 
     GtkWidget *workspace_metrics = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(workspace_metrics), compact_spacing);
@@ -3280,6 +3394,10 @@ static void build_ui(RunnerScopeApp *app)
     g_signal_connect(button, "clicked", G_CALLBACK(on_settings), app);
     gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
 
+    button = gtk_button_new_with_label("About");
+    g_signal_connect(button, "clicked", G_CALLBACK(on_about), app);
+    gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
+
     button = gtk_button_new_with_label("Refresh now");
     g_signal_connect(button, "clicked", G_CALLBACK(on_refresh), app);
     gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
@@ -3393,10 +3511,11 @@ static void activate(GtkApplication *application, gpointer user_data)
     }
 
     build_ui(app);
-    render_history(app);
     request_runner_refresh(app);
-    request_activity_refresh(app);
-    request_local_refresh(app);
+    app->initial_local_timer =
+        g_timeout_add(250U, initial_local_refresh_cb, app);
+    app->initial_activity_timer =
+        g_timeout_add(750U, initial_activity_refresh_cb, app);
     app->runner_timer = g_timeout_add_seconds(
         app->config.runner_poll_seconds, runner_timer_cb, app);
     app->activity_timer = g_timeout_add_seconds(
@@ -3429,6 +3548,10 @@ static void app_destroy(RunnerScopeApp *app)
     if (app->activity_timer) g_source_remove(app->activity_timer);
     if (app->local_timer) g_source_remove(app->local_timer);
     if (app->tick_timer) g_source_remove(app->tick_timer);
+    if (app->initial_activity_timer)
+        g_source_remove(app->initial_activity_timer);
+    if (app->initial_local_timer)
+        g_source_remove(app->initial_local_timer);
     if (app->filter_timer) {
         g_source_remove(app->filter_timer);
         app->filter_timer = 0U;
@@ -3449,6 +3572,10 @@ static void app_destroy(RunnerScopeApp *app)
     if (app->local_thread) {
         g_thread_join(app->local_thread);
         app->local_thread = NULL;
+    }
+    if (app->restart_thread) {
+        g_thread_join(app->restart_thread);
+        app->restart_thread = NULL;
     }
     if (app->theme_provider) {
         GdkScreen *screen = gdk_screen_get_default();

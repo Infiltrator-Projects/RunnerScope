@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.2.31 - 2026-10-03
+
+- Remove the redundant static page-header layer and legacy Help menubar so the Linux shell follows the current Infiltrator OS brand/header/navigation/workspace hierarchy.
+- Move filtering into the active workspace and match System Monitor's responsive 195 px / 64 px navigation rail, 50 px navigation controls and 1100 px compact threshold.
+- Reduce one-second GTK churn by updating only visible time-dependent cells, refreshing global utilisation every two seconds and avoiding repeated static Local Health metric scans.
+- Defer the expensive activity/local startup scans until after first paint and stop eagerly rendering the hidden History model.
+- Run privileged runner restarts off the GTK main thread so authentication and systemd latency no longer freeze the interface.
+- Keep the exact latest Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.
+
 ## 1.2.30 - 2026-10-03
 
 - Replace the temporary GtkListBox navigation workaround with the same compact toggle-button rail used by the current Infiltrator OS/System Monitor shell.
