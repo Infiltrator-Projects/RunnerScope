@@ -54,6 +54,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf build-forensic
           rm -f tools/forensic_refresh_128.py
           git config user.name 'Shannon Smith'
           git config user.email 'infiltratr@yandex.com'
