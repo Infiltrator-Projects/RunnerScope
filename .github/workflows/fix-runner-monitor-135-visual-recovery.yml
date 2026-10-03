@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Fix Runner Monitor 1.2.35 visual recovery workflow
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/fix-runner-monitor-135-visual-recovery.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Escape CSS percent literals used by printf
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=.github/workflows/runner-monitor-135-visual-recovery.yml
+          sed -i \
+            -e 's/@rm_titlebar 42%,/@rm_titlebar 42%%,/' \
+            -e 's/@rm_connection 48%,/@rm_connection 48%%,/' \
+            -e 's/@rm_connection 58%,/@rm_connection 58%%,/' \
+            -e 's/@rm_card 54%,/@rm_card 54%%,/' \
+            "$file"
+          rm -f .github/workflows/fix-runner-monitor-135-visual-recovery.yml
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add -A
+          git commit -m "Fix 1.2.35 visual recovery format literals"
+          git push origin HEAD:main
