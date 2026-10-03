@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.2.36 - 2026-10-03
+
+- Make the Common-verified MB Corpo UI, bold and brand faces mandatory for the native Linux package rather than permitting silent system-font substitution.
+- Add real product-local raster artwork for navigation, runner/activity/history/health hero surfaces and persistent Infiltrator OS identity.
+- Replace long page prose with compact state kickers and move search below the hero so the graphical overview leads the workspace.
+- Strengthen gradients, wells, card depth and state hierarchy without reverting the responsiveness improvements from 1.2.27-1.2.35.
+- Verify installed MB typography and graphical assets during clean-package CI.
+- Keep the exact current Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.
+
 ## 1.2.35 - 2026-10-03
 
 - Restore the graphical Infiltrator OS visual language without reverting the 1.2.27-1.2.34 responsiveness work.

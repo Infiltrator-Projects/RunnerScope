@@ -1,3 +1,18 @@
+infiltrator-runner-monitor (1.2.36) unstable; urgency=medium
+
+  * Make Common-verified MB Corpo UI, bold and brand typography mandatory in
+    the native Linux package instead of silently falling back to system fonts.
+  * Add product-local bitmap artwork for navigation, page identity, runner
+    fleet/activity/history/health hero surfaces and persistent OS identity.
+  * Replace long workspace prose with compact state kickers and move filtering
+    out of the hero so visual hierarchy leads the page.
+  * Strengthen Infiltrator OS gradients, shaped wells, card depth and graphical
+    state treatment while retaining the current responsiveness fixes.
+  * Verify the packaged MB faces and bitmap assets in clean-install CI.
+  * Keep the exact latest Infiltratr Common 1.19.38 pin.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 17:24:00 +1000
+
 infiltrator-runner-monitor (1.2.35) unstable; urgency=medium
 
   * Restore the graphical Infiltrator OS visual hierarchy while preserving the
