@@ -12,8 +12,10 @@ permissions:
 jobs:
   linux-native:
     name: Linux native C/Common
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 30
+    env:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Check out Runner Monitor and pinned Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,9 +64,12 @@ jobs:
           ! find . -maxdepth 1 -type f -name 'runnerscope*.py' -print -quit | grep -q .
 
   windows-native:
-    name: Hosted Windows native C/Common EXE
-    runs-on: windows-latest
+    name: Windows native C/Common EXE
+    runs-on: [self-hosted, Windows, ARM64]
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
     steps:
       - name: Check out Runner Monitor and pinned Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -73,7 +78,7 @@ jobs:
           submodules: recursive
 
       - name: Build native Win32 executable
-        shell: pwsh
+        shell: powershell
         run: |
           cmake -S . -B build -A x64
           cmake --build build --config Release --parallel
@@ -83,7 +88,7 @@ jobs:
           if (!(Test-Path ".\build\Release\Runner-Monitor.exe")) { throw "Native EXE missing" }
 
       - name: Stage Windows executable
-        shell: pwsh
+        shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item ".\build\Release\Runner-Monitor.exe" ".\dist\Runner-Monitor-Windows.exe"
@@ -178,3 +183,4 @@ jobs:
         run: |
           sudo apt-get purge -y infiltrator-runner-monitor
           ! dpkg-query -W infiltrator-runner-monitor >/dev/null 2>&1
+
