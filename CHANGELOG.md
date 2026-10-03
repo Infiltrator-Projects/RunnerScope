@@ -4,6 +4,14 @@
 
 No unreleased changes.
 
+## 1.2.38 - 2026-10-03
+
+- Make bitmap runner cards the default Linux fleet view, with semantic state indicators and bars showing session utilisation.
+- Show current jobs on running cards and full runner metadata on selection; retain the sortable table and complete CSV export.
+- Preserve card widgets and selection across refreshes, and filter using all runner metadata.
+- Remove repeated state counters from the footer and add an installed GTK UI contract test to clean-package CI.
+- Retain the detailed bitmap artwork, mandatory MB Corpo fonts and Common 1.19.38 pin.
+
 ## 1.2.37 - 2026-10-03
 
 - Replace all four navigation identities, page banners and the sidebar's wireframe pictures with detailed raster hardware artwork.

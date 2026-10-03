@@ -181,6 +181,7 @@ typedef struct {
     GtkWidget *workspace_subtitle;
     GtkWidget *workspace_icon;
     GtkWidget *workspace_art;
+    GtkWidget *workspace_art_frame;
     GtkWidget *workspace_metric_caption[4];
     GtkWidget *workspace_metric_value[4];
     GtkWidget *selection_card;
@@ -189,6 +190,7 @@ typedef struct {
     GtkWidget *selection_secondary;
     GtkWidget *nav_buttons[4];
     GtkWidget *main_navigation;
+    GtkWidget *navigation_art_frame;
     gboolean navigation_syncing;
     gboolean compact_layout;
     gboolean theme_state_valid;
@@ -201,6 +203,14 @@ typedef struct {
     GtkListStore *history_store;
     GtkListStore *local_store;
     GtkWidget *runner_tree;
+    GtkWidget *runner_views;
+    GtkWidget *runner_cards;
+    GtkWidget *runner_cards_empty;
+    GtkWidget *runner_view_switch;
+    GHashTable *runner_card_by_name;
+    GdkPixbuf *runner_card_art;
+    char *selected_runner_name;
+    gboolean runner_rendering;
     GtkWidget *activity_tree;
     GtkWidget *history_tree;
     GtkWidget *local_tree;
@@ -841,11 +851,11 @@ static void apply_theme(RunnerScopeApp *app)
         ".workspace-icon { color:@rm_accent_foreground; }\n"
         ".workspace-title { color:@rm_heading; font-size:26px; font-weight:%u; }\n"
         ".workspace-subtitle { color:@rm_summary; font-size:10px; letter-spacing:0.4px; }\n"
-        ".workspace-art-frame { min-width:250px; min-height:84px; background:@rm_input; border:1px solid alpha(@rm_neutral, 0.52); border-radius:14px; padding:3px; box-shadow:0 4px 16px alpha(#000000, 0.28); }\n"
+        ".workspace-art-frame { min-width:200px; min-height:84px; background:@rm_input; border:1px solid alpha(@rm_neutral, 0.52); border-radius:14px; padding:3px; box-shadow:0 4px 16px alpha(#000000, 0.28); }\n"
         ".workspace-toolbar { background:@rm_panel; border-bottom:1px solid @rm_connection_border; padding:6px 10px; }\n"
         ".nav-art-frame { background-image:linear-gradient(to bottom, transparent, alpha(@rm_neutral, 0.07)); border-top:1px solid alpha(@rm_connection_border, 0.65); padding:8px; }\n"
         ".workspace-metric {"
-        " min-width:82px; min-height:58px; background-color:@rm_surface;"
+        " min-width:64px; min-height:58px; background-color:@rm_surface;"
         " background-image:linear-gradient(145deg, alpha(@rm_neutral, 0.08),"
         " alpha(@rm_card, 0.82));"
         " border:1px solid @rm_connection_border; border-top:2px solid @rm_neutral;"
@@ -1004,7 +1014,34 @@ static void apply_theme(RunnerScopeApp *app)
         " color:@rm_accent_foreground; border-color:alpha(@rm_accent_foreground, 0.42);"
         "}\n"
         ".runner-action-primary label, .runner-action-primary image { color:@rm_accent_foreground; }\n"
-        ".runner-action-warning { border-color:alpha(@rm_warning, 0.58); }\n",
+        ".runner-action-warning { border-color:alpha(@rm_warning, 0.58); }\n"
+        ".runner-card-grid { background:@rm_card; padding:10px; }\n"
+        ".runner-card-grid flowboxchild { background:transparent; border:0; padding:0; }\n"
+        ".runner-card { background:@rm_surface;"
+        " background-image:linear-gradient(135deg, alpha(@rm_neutral, 0.10), alpha(@rm_card, 0.75));"
+        " border:1px solid @rm_connection_border; border-radius:12px; padding:8px; }\n"
+        ".runner-card-grid flowboxchild:hover .runner-card { border-color:@rm_neutral; }\n"
+        ".runner-card-grid flowboxchild:selected .runner-card {"
+        " border-color:@rm_neutral; background-color:@rm_selection;"
+        " box-shadow:inset 0 0 0 1px alpha(@rm_neutral, 0.55); }\n"
+        ".runner-card-name { color:@rm_heading; font-size:14px; font-weight:700; }\n"
+        ".runner-card-os, .runner-card-job { color:@rm_summary; font-size:11px; }\n"
+        ".runner-state { font-size:11px; font-weight:700; }\n"
+        ".runner-state.running { color:@rm_success; }\n"
+        ".runner-state.idle { color:@rm_warning; }\n"
+        ".runner-state.offline { color:@rm_fault; }\n"
+        ".runner-utilisation trough, .runner-utilisation trough:backdrop { min-height:5px; min-width:72px;"
+        " background-image:none; background-color:alpha(@rm_border, 0.45); border:0; border-radius:4px; }\n"
+        ".runner-utilisation progress, .runner-utilisation progress:backdrop { min-height:5px;"
+        " background-image:none; background-color:@rm_neutral;"
+        " border:0; border-radius:4px; }\n"
+        ".runner-view-switch button { padding:4px 9px; min-height:26px;"
+        " background-image:none; background-color:@rm_surface;"
+        " border:1px solid @rm_connection_border; }\n"
+        ".runner-view-switch button label { color:@rm_text; text-shadow:none; }\n"
+        ".runner-view-switch button:checked { background-color:@rm_selection;"
+        " border-color:@rm_neutral; }\n"
+        ".runner-view-switch button:checked label { color:@rm_selection_text; }\n",
         (unsigned int)metrics->card_radius,
         (unsigned int)metrics->compact_spacing,
         (unsigned int)metrics->control_spacing,
@@ -1336,6 +1373,145 @@ static void show_selection_card(RunnerScopeApp *app,
     gtk_label_set_text(GTK_LABEL(app->selection_primary), primary ? primary : "—");
     gtk_label_set_text(GTK_LABEL(app->selection_secondary), secondary ? secondary : "—");
     gtk_widget_show_all(app->selection_card);
+    gtk_widget_show(app->selection_card);
+}
+
+static void show_runner_details(RunnerScopeApp *app, const RunnerRow *row)
+{
+    if (!row) return;
+    char *primary = g_strdup_printf(
+        "%s  •  %s for %s  •  %s jobs  •  %s session utilisation",
+        row->os, row->state, row->state_for, row->jobs, row->busy_pct);
+    char *secondary = g_strdup_printf(
+        "Repository: %s  •  Job: %s  •  Runtime: %s\nLabels: %s",
+        row->repo, row->job, row->runtime, row->labels);
+    show_selection_card(app, row->name, primary, secondary);
+    g_free(primary);
+    g_free(secondary);
+}
+
+static void on_runner_card_selection(GtkFlowBox *box, gpointer user_data)
+{
+    RunnerScopeApp *app = user_data;
+    if (app->runner_rendering) return;
+    GList *selected = gtk_flow_box_get_selected_children(box);
+    g_clear_pointer(&app->selected_runner_name, g_free);
+    if (selected) {
+        const char *name = g_object_get_data(G_OBJECT(selected->data), "runner-name");
+        app->selected_runner_name = g_strdup(name);
+        show_runner_details(app, g_hash_table_lookup(app->runner_row_by_name, name));
+    } else {
+        clear_selection_card(app);
+    }
+    g_list_free(selected);
+}
+
+static void on_runner_card_activated(GtkFlowBox *box, GtkFlowBoxChild *child, gpointer user_data)
+{
+    (void)box;
+    RunnerScopeApp *app = user_data;
+    const char *name = g_object_get_data(G_OBJECT(child), "runner-name");
+    g_free(app->selected_runner_name);
+    app->selected_runner_name = g_strdup(name);
+    show_runner_details(app, g_hash_table_lookup(app->runner_row_by_name, name));
+}
+
+static GtkWidget *runner_card_label(const char *text, const char *css_class)
+{
+    GtkWidget *label = gtk_label_new(text);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
+    gtk_style_context_add_class(gtk_widget_get_style_context(label), css_class);
+    return label;
+}
+
+static GtkWidget *make_runner_card(RunnerScopeApp *app, const RunnerRow *row)
+{
+    GtkWidget *child = gtk_flow_box_child_new();
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_set_size_request(card, 205, -1);
+    gtk_style_context_add_class(gtk_widget_get_style_context(card), "runner-card");
+    gtk_container_add(GTK_CONTAINER(child), card);
+    g_object_set_data_full(G_OBJECT(child), "runner-name", g_strdup(row->name), g_free);
+
+    GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 9);
+    GtkWidget *art = gtk_image_new_from_pixbuf(app->runner_card_art);
+    GtkWidget *copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    GtkWidget *name = runner_card_label(row->name, "runner-card-name");
+    gtk_label_set_ellipsize(GTK_LABEL(name), PANGO_ELLIPSIZE_END);
+    gtk_label_set_width_chars(GTK_LABEL(name), 15);
+    GtkWidget *os = runner_card_label(row->os, "runner-card-os");
+    gtk_box_pack_start(GTK_BOX(copy), name, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(copy), os, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(identity), art, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(identity), copy, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(card), identity, FALSE, FALSE, 0);
+
+    GtkWidget *status_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *state = runner_card_label("", "runner-state");
+    GtkWidget *bar = gtk_progress_bar_new();
+    gtk_widget_set_hexpand(bar, TRUE);
+    gtk_widget_set_valign(bar, GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(gtk_widget_get_style_context(bar), "runner-utilisation");
+    gtk_box_pack_start(GTK_BOX(status_row), state, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(status_row), bar, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(card), status_row, FALSE, FALSE, 0);
+
+    GtkWidget *job = runner_card_label("", "runner-card-job");
+    gtk_label_set_ellipsize(GTK_LABEL(job), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_no_show_all(job, TRUE);
+    gtk_box_pack_start(GTK_BOX(card), job, FALSE, FALSE, 0);
+    g_object_set_data(G_OBJECT(child), "runner-os", os);
+    g_object_set_data(G_OBJECT(child), "runner-state", state);
+    g_object_set_data(G_OBJECT(child), "runner-utilisation", bar);
+    g_object_set_data(G_OBJECT(child), "runner-job", job);
+    gtk_flow_box_insert(GTK_FLOW_BOX(app->runner_cards), child, -1);
+    return child;
+}
+
+static void update_runner_card(GtkWidget *child, const RunnerRow *row)
+{
+    GtkWidget *state = g_object_get_data(G_OBJECT(child), "runner-state");
+    GtkWidget *bar = g_object_get_data(G_OBJECT(child), "runner-utilisation");
+    GtkWidget *job = g_object_get_data(G_OBJECT(child), "runner-job");
+    GtkWidget *os = g_object_get_data(G_OBJECT(child), "runner-os");
+    const gboolean running = strcmp(row->state, "RUNNING") == 0;
+    const gboolean offline = strcmp(row->state, "OFFLINE") == 0;
+    label_set_if_changed(os, row->os);
+    label_set_if_changed(state, running ? "● Running" : offline ? "● Offline" : "● Idle");
+    GtkStyleContext *context = gtk_widget_get_style_context(state);
+    const char *state_class = running ? "running" : offline ? "offline" : "idle";
+    if (!gtk_style_context_has_class(context, state_class)) {
+        gtk_style_context_remove_class(context, "running");
+        gtk_style_context_remove_class(context, "idle");
+        gtk_style_context_remove_class(context, "offline");
+        gtk_style_context_add_class(context, state_class);
+    }
+    const double fraction = CLAMP(g_ascii_strtod(row->busy_pct, NULL) / 100.0, 0.0, 1.0);
+    if (gtk_progress_bar_get_fraction(GTK_PROGRESS_BAR(bar)) != fraction)
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(bar), fraction);
+    char *tooltip = g_strdup_printf("%s\nSession utilisation: %s", row->name, row->busy_pct);
+    gtk_widget_set_tooltip_text(child, tooltip);
+    gtk_widget_set_tooltip_text(bar, tooltip);
+    g_free(tooltip);
+    label_set_if_changed(job, row->job);
+    gtk_widget_show_all(child);
+    gtk_widget_set_visible(job, running);
+}
+
+static void on_runner_view_toggled(GtkToggleButton *button, gpointer user_data)
+{
+    RunnerScopeApp *app = user_data;
+    const char *view = g_object_get_data(G_OBJECT(button), "runner-view");
+    if (!gtk_toggle_button_get_active(button)) {
+        if (g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(app->runner_views)), view) == 0)
+            gtk_toggle_button_set_active(button, TRUE);
+        return;
+    }
+    gtk_stack_set_visible_child_name(GTK_STACK(app->runner_views), view);
+    GtkToggleButton *other = g_object_get_data(G_OBJECT(button), "runner-other-view");
+    gtk_toggle_button_set_active(other, FALSE);
+    if (app->selected_runner_name)
+        show_runner_details(app, g_hash_table_lookup(app->runner_row_by_name, app->selected_runner_name));
 }
 
 static void update_workspace_context(RunnerScopeApp *app, gint page)
@@ -1346,9 +1522,9 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
     switch (page) {
         case 0:
             runner_asset_image_set(app->workspace_icon, "nav-runners.png", 48, 48);
-            runner_asset_image_set(app->workspace_art, "hero-runners.png", 300, 86);
+            runner_asset_image_set(app->workspace_art, "hero-runners.png", 240, 86);
             label_set_if_changed(app->workspace_title, "Runner fleet");
-            label_set_if_changed(app->workspace_subtitle, "CAPACITY  •  WORKLOAD  •  UTILISATION");
+            label_set_if_changed(app->workspace_subtitle, "SESSION UTILISATION");
             g_snprintf(a, sizeof(a), "%u", app->runners_total);
             g_snprintf(b, sizeof(b), "%u", app->runners_running);
             g_snprintf(d, sizeof(d), "%u", app->runners_idle);
@@ -1360,7 +1536,7 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             break;
         case 1:
             runner_asset_image_set(app->workspace_icon, "nav-active.png", 48, 48);
-            runner_asset_image_set(app->workspace_art, "hero-active.png", 300, 86);
+            runner_asset_image_set(app->workspace_art, "hero-active.png", 240, 86);
             label_set_if_changed(app->workspace_title, "Active work");
             label_set_if_changed(app->workspace_subtitle, "LIVE JOBS  •  QUEUES  •  RUNNERS");
             g_snprintf(a, sizeof(a), "%u", app->local_active);
@@ -1374,7 +1550,7 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
             break;
         case 2: {
             runner_asset_image_set(app->workspace_icon, "nav-history.png", 48, 48);
-            runner_asset_image_set(app->workspace_art, "hero-history.png", 300, 86);
+            runner_asset_image_set(app->workspace_art, "hero-history.png", 240, 86);
             label_set_if_changed(app->workspace_title, "Session history");
             label_set_if_changed(app->workspace_subtitle, "STATE  •  EVENTS  •  SESSION");
             g_snprintf(a, sizeof(a), "%u", app->history_rows->len);
@@ -1392,7 +1568,7 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
         }
         default:
             runner_asset_image_set(app->workspace_icon, "nav-health.png", 48, 48);
-            runner_asset_image_set(app->workspace_art, "hero-health.png", 300, 86);
+            runner_asset_image_set(app->workspace_art, "hero-health.png", 240, 86);
             label_set_if_changed(app->workspace_title, "Local Linux health");
             label_set_if_changed(app->workspace_subtitle, "SERVICES  •  DIAGNOSTICS  •  LINK");
             g_snprintf(a, sizeof(a), "%u", app->local_rows->len);
@@ -1412,6 +1588,8 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
         gtk_widget_set_visible(app->open_diag_button, page == 3);
     if (app->restart_button)
         gtk_widget_set_visible(app->restart_button, page == 3);
+    if (app->runner_view_switch)
+        gtk_widget_set_visible(app->runner_view_switch, page == 0);
 }
 
 static void render_history(RunnerScopeApp *app)
@@ -1441,6 +1619,21 @@ static void render_history(RunnerScopeApp *app)
 static void render_runners(RunnerScopeApp *app)
 {
     char *folded_needle = filter_needle_casefold(app);
+    label_set_if_changed(app->runner_cards_empty, folded_needle && *folded_needle
+        ? "No runners match this filter." : "No runners detected.");
+    guint visible_cards = 0U;
+    app->runner_rendering = TRUE;
+    GHashTableIter cards;
+    gpointer card_name, card_widget;
+    g_hash_table_iter_init(&cards, app->runner_card_by_name);
+    while (g_hash_table_iter_next(&cards, &card_name, &card_widget)) {
+        if (!g_hash_table_contains(app->runner_row_by_name, card_name)) {
+            gtk_widget_destroy(card_widget);
+            g_hash_table_iter_remove(&cards);
+        } else {
+            gtk_widget_hide(card_widget);
+        }
+    }
     tree_model_rebuild_begin(app->runner_tree);
     gtk_list_store_clear(app->runner_store);
     for (guint i = 0U; i < app->runner_rows->len; i++) {
@@ -1450,6 +1643,13 @@ static void render_runners(RunnerScopeApp *app)
         const gboolean visible = text_matches_folded(folded_needle, search);
         g_free(search);
         if (!visible) continue;
+        visible_cards++;
+        GtkWidget *card = g_hash_table_lookup(app->runner_card_by_name, row->name);
+        if (!card) {
+            card = make_runner_card(app, row);
+            g_hash_table_insert(app->runner_card_by_name, g_strdup(row->name), card);
+        }
+        update_runner_card(card, row);
         GtkTreeIter iter;
         gtk_list_store_append(app->runner_store, &iter);
         gtk_list_store_set(app->runner_store, &iter,
@@ -1460,6 +1660,31 @@ static void render_runners(RunnerScopeApp *app)
             RUNNER_COL_BUSY, row->busy_pct, RUNNER_COL_LABELS, row->labels, -1);
     }
     tree_model_rebuild_end(app->runner_tree, app->runner_store);
+    gtk_widget_set_visible(app->runner_cards_empty, visible_cards == 0U);
+    GtkWidget *selected = app->selected_runner_name
+        ? g_hash_table_lookup(app->runner_card_by_name, app->selected_runner_name) : NULL;
+    if (selected && gtk_widget_get_visible(selected)) {
+        gtk_flow_box_select_child(GTK_FLOW_BOX(app->runner_cards), GTK_FLOW_BOX_CHILD(selected));
+        GtkTreeIter iter;
+        gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(app->runner_store), &iter);
+        while (valid) {
+            char *name = NULL;
+            gtk_tree_model_get(GTK_TREE_MODEL(app->runner_store), &iter, RUNNER_COL_NAME, &name, -1);
+            const gboolean match = g_strcmp0(name, app->selected_runner_name) == 0;
+            g_free(name);
+            if (match) {
+                gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(app->runner_tree)), &iter);
+                break;
+            }
+            valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(app->runner_store), &iter);
+        }
+        show_runner_details(app, g_hash_table_lookup(app->runner_row_by_name, app->selected_runner_name));
+    } else {
+        g_clear_pointer(&app->selected_runner_name, g_free);
+        gtk_flow_box_unselect_all(GTK_FLOW_BOX(app->runner_cards));
+        clear_selection_card(app);
+    }
+    app->runner_rendering = FALSE;
     g_free(folded_needle);
 }
 
@@ -1738,14 +1963,9 @@ static gboolean runner_apply_idle(gpointer data)
         update_workspace_context(app, page);
 
     char *status = app->config.expected_runners != 0U
-        ? g_strdup_printf(
-            "%u detected  •  %u expected  •  %u running  •  %u idle  •  %u offline",
-            app->runners_total, app->config.expected_runners,
-            app->runners_running, app->runners_idle, app->runners_offline)
-        : g_strdup_printf(
-            "%u detected  •  %u running  •  %u idle  •  %u offline",
-            app->runners_total, app->runners_running,
-            app->runners_idle, app->runners_offline);
+        ? g_strdup_printf("%u / %u expected runners detected",
+            app->runners_total, app->config.expected_runners)
+        : g_strdup_printf("%u runners detected", app->runners_total);
     label_set_if_changed(app->status_label, status);
     g_free(status);
 
@@ -2275,6 +2495,11 @@ static void refresh_runner_clock_cells(RunnerScopeApp *app,
                 RUNNER_COL_RUNTIME, row->runtime,
                 RUNNER_COL_STATE_FOR, row->state_for,
                 RUNNER_COL_BUSY, row->busy_pct, -1);
+            GtkWidget *card = g_hash_table_lookup(app->runner_card_by_name, name);
+            if (card && gtk_widget_get_visible(card)) update_runner_card(card, row);
+            if (g_strcmp0(name, app->selected_runner_name) == 0 &&
+                gtk_widget_get_visible(app->selection_card))
+                show_runner_details(app, row);
         }
         g_free(name);
         valid = gtk_tree_model_iter_next(
@@ -2745,27 +2970,16 @@ static void on_restart(GtkButton *button, gpointer user_data)
 static void on_runner_selection(GtkTreeSelection *selection, gpointer user_data)
 {
     RunnerScopeApp *app = user_data;
+    if (app->runner_rendering) return;
     GtkTreeModel *model = NULL;
     GtkTreeIter iter;
+    g_clear_pointer(&app->selected_runner_name, g_free);
     if (!gtk_tree_selection_get_selected(selection, &model, &iter)) {
         clear_selection_card(app);
         return;
     }
-    char *name = NULL, *state = NULL, *repo = NULL, *job = NULL, *state_for = NULL;
-    gtk_tree_model_get(model, &iter,
-        RUNNER_COL_NAME, &name,
-        RUNNER_COL_STATE, &state,
-        RUNNER_COL_REPO, &repo,
-        RUNNER_COL_JOB, &job,
-        RUNNER_COL_STATE_FOR, &state_for, -1);
-    char *primary = g_strdup_printf(
-        "%s  •  %s for %s", state ? state : "—", name ? name : "—",
-        state_for ? state_for : "—");
-    char *secondary = g_strdup_printf(
-        "%s  •  %s", repo ? repo : "No repository", job ? job : "No active job");
-    show_selection_card(app, "Selected runner", primary, secondary);
-    g_free(primary); g_free(secondary);
-    g_free(name); g_free(state); g_free(repo); g_free(job); g_free(state_for);
+    gtk_tree_model_get(model, &iter, RUNNER_COL_NAME, &app->selected_runner_name, -1);
+    show_runner_details(app, g_hash_table_lookup(app->runner_row_by_name, app->selected_runner_name));
 }
 
 static void on_activity_selection(GtkTreeSelection *selection, gpointer user_data)
@@ -2957,6 +3171,10 @@ static void apply_navigation_density(RunnerScopeApp *app)
             app->filter_entry, compact ? 180 : 240, -1);
     if (app->workspace_subtitle)
         gtk_widget_set_visible(app->workspace_subtitle, !compact);
+    if (app->workspace_art_frame)
+        gtk_widget_set_visible(app->workspace_art_frame, !compact);
+    if (app->navigation_art_frame)
+        gtk_widget_set_visible(app->navigation_art_frame, !compact);
 
     for (gint page = 0; page < 4; page++) {
         GtkWidget *button = app->nav_buttons[page];
@@ -3202,6 +3420,7 @@ static void build_ui(RunnerScopeApp *app)
     GtkWidget *workspace_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_hexpand(workspace_copy, TRUE);
     app->workspace_title = gtk_label_new("Runner fleet");
+    gtk_label_set_ellipsize(GTK_LABEL(app->workspace_title), PANGO_ELLIPSIZE_END);
     app->workspace_subtitle = gtk_label_new(
         "CAPACITY  •  WORKLOAD  •  UTILISATION");
     gtk_style_context_add_class(
@@ -3219,9 +3438,11 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(GTK_BOX(workspace_header), workspace_copy, TRUE, TRUE, 0);
 
     GtkWidget *workspace_art_frame = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    app->workspace_art_frame = workspace_art_frame;
+    gtk_widget_set_no_show_all(workspace_art_frame, TRUE);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(workspace_art_frame), "workspace-art-frame");
-    app->workspace_art = runner_asset_image_new("hero-runners.png", 300, 86);
+    app->workspace_art = runner_asset_image_new("hero-runners.png", 240, 86);
     gtk_box_pack_start(
         GTK_BOX(workspace_art_frame), app->workspace_art, TRUE, TRUE, 0);
     gtk_box_pack_start(
@@ -3248,6 +3469,26 @@ static void build_ui(RunnerScopeApp *app)
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(workspace_toolbar), "workspace-toolbar");
+    app->runner_view_switch = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_no_show_all(app->runner_view_switch, TRUE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(app->runner_view_switch), "linked");
+    gtk_style_context_add_class(gtk_widget_get_style_context(app->runner_view_switch), "runner-view-switch");
+    GtkWidget *cards_button = gtk_toggle_button_new_with_label("Cards");
+    GtkWidget *table_button = gtk_toggle_button_new_with_label("Table");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cards_button), TRUE);
+    g_object_set_data(G_OBJECT(cards_button), "runner-other-view", table_button);
+    g_object_set_data(G_OBJECT(table_button), "runner-other-view", cards_button);
+    g_object_set_data(G_OBJECT(cards_button), "runner-view", "cards");
+    g_object_set_data(G_OBJECT(table_button), "runner-view", "table");
+    g_signal_connect(cards_button, "toggled", G_CALLBACK(on_runner_view_toggled), app);
+    g_signal_connect(table_button, "toggled", G_CALLBACK(on_runner_view_toggled), app);
+    gtk_widget_set_tooltip_text(cards_button, "Visual runner overview");
+    gtk_widget_set_tooltip_text(table_button, "All runner fields in a sortable table");
+    gtk_box_pack_start(GTK_BOX(app->runner_view_switch), cards_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(app->runner_view_switch), table_button, FALSE, FALSE, 0);
+    gtk_widget_show_all(cards_button);
+    gtk_widget_show_all(table_button);
+    gtk_box_pack_start(GTK_BOX(workspace_toolbar), app->runner_view_switch, FALSE, FALSE, 0);
     app->filter_entry = gtk_search_entry_new();
     gtk_entry_set_placeholder_text(
         GTK_ENTRY(app->filter_entry), "Filter current view…");
@@ -3302,13 +3543,18 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_set_halign(app->selection_primary, GTK_ALIGN_START);
     gtk_widget_set_halign(app->selection_secondary, GTK_ALIGN_START);
     gtk_label_set_ellipsize(
-        GTK_LABEL(app->selection_secondary), PANGO_ELLIPSIZE_END);
+        GTK_LABEL(app->selection_primary), PANGO_ELLIPSIZE_END);
+    gtk_label_set_line_wrap(GTK_LABEL(app->selection_secondary), TRUE);
+    gtk_label_set_line_wrap_mode(GTK_LABEL(app->selection_secondary), PANGO_WRAP_WORD_CHAR);
+    gtk_label_set_max_width_chars(GTK_LABEL(app->selection_secondary), 110);
     gtk_box_pack_start(
         GTK_BOX(selection_copy), app->selection_title, FALSE, FALSE, 0);
     gtk_box_pack_start(
         GTK_BOX(selection_copy), app->selection_primary, FALSE, FALSE, 0);
     gtk_box_pack_start(
         GTK_BOX(selection_copy), app->selection_secondary, FALSE, FALSE, 0);
+    gtk_widget_show_all(selection_icon_well);
+    gtk_widget_show_all(selection_copy);
     gtk_box_pack_start(
         GTK_BOX(app->selection_card), selection_copy, TRUE, TRUE, 0);
     gtk_box_pack_end(
@@ -3331,8 +3577,36 @@ static void build_ui(RunnerScopeApp *app)
         gtk_tree_view_get_selection(GTK_TREE_VIEW(app->runner_tree));
     g_signal_connect(
         selection, "changed", G_CALLBACK(on_runner_selection), app);
-    gtk_notebook_append_page(
-        GTK_NOTEBOOK(app->notebook), scroll, NULL);
+    app->runner_views = gtk_stack_new();
+    gtk_stack_set_hhomogeneous(GTK_STACK(app->runner_views), FALSE);
+    gtk_stack_set_vhomogeneous(GTK_STACK(app->runner_views), FALSE);
+    gtk_stack_add_named(GTK_STACK(app->runner_views), scroll, "table");
+    GtkWidget *cards_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(cards_scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    app->runner_cards = gtk_flow_box_new();
+    gtk_widget_set_valign(app->runner_cards, GTK_ALIGN_START);
+    gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(app->runner_cards), GTK_SELECTION_SINGLE);
+    gtk_flow_box_set_homogeneous(GTK_FLOW_BOX(app->runner_cards), TRUE);
+    gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(app->runner_cards), 1);
+    gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(app->runner_cards), 5);
+    gtk_flow_box_set_row_spacing(GTK_FLOW_BOX(app->runner_cards), 10);
+    gtk_flow_box_set_column_spacing(GTK_FLOW_BOX(app->runner_cards), 10);
+    gtk_flow_box_set_activate_on_single_click(GTK_FLOW_BOX(app->runner_cards), TRUE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(app->runner_cards), "runner-card-grid");
+    app->runner_cards_empty = gtk_label_new("Loading runners…");
+    gtk_widget_set_no_show_all(app->runner_cards_empty, TRUE);
+    gtk_widget_set_margin_top(app->runner_cards_empty, 24);
+    gtk_widget_show(app->runner_cards_empty);
+    app->runner_card_art = runner_asset_pixbuf("nav-runners.png", 40, 40);
+    g_signal_connect(app->runner_cards, "selected-children-changed", G_CALLBACK(on_runner_card_selection), app);
+    g_signal_connect(app->runner_cards, "child-activated", G_CALLBACK(on_runner_card_activated), app);
+    GtkWidget *cards_content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(cards_content), app->runner_cards_empty, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(cards_content), app->runner_cards, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(cards_scroll), cards_content);
+    gtk_stack_add_named(GTK_STACK(app->runner_views), cards_scroll, "cards");
+    gtk_stack_set_visible_child_name(GTK_STACK(app->runner_views), "cards");
+    gtk_notebook_append_page(GTK_NOTEBOOK(app->notebook), app->runner_views, NULL);
 
     scroll = scrolled_tree(app->activity_store);
     gtk_style_context_add_class(
@@ -3415,9 +3689,12 @@ static void build_ui(RunnerScopeApp *app)
     sync_navigation(app, 0);
 
     GtkWidget *nav_art_frame = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    app->navigation_art_frame = nav_art_frame;
+    gtk_widget_set_no_show_all(nav_art_frame, TRUE);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(nav_art_frame), "nav-art-frame");
     GtkWidget *nav_art = runner_asset_image_new("nav-infiltrator.png", 160, 200);
+    gtk_widget_show(nav_art);
     gtk_box_pack_start(GTK_BOX(nav_art_frame), nav_art, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(nav_rail), nav_art_frame, FALSE, FALSE, 8);
 
@@ -3526,6 +3803,11 @@ static void build_ui(RunnerScopeApp *app)
             G_CALLBACK(on_system_theme_changed), app);
     }
     gtk_widget_show_all(app->window);
+    gtk_stack_set_visible_child_name(GTK_STACK(app->runner_views), "cards");
+    gtk_widget_show_all(app->workspace_art);
+    gtk_widget_set_visible(app->workspace_art_frame, !app->compact_layout);
+    gtk_widget_set_visible(app->navigation_art_frame, !app->compact_layout);
+    clear_selection_card(app);
 }
 
 static InfiltratrProjectInfo project_info(void)
@@ -3605,6 +3887,7 @@ static void app_init(RunnerScopeApp *app)
     app->sessions = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, session_free);
     app->job_by_runner = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, job_summary_free);
     app->runner_row_by_name = g_hash_table_new(g_str_hash, g_str_equal);
+    app->runner_card_by_name = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     app->activity_row_by_url = g_hash_table_new(g_str_hash, g_str_equal);
     app->runner_rows = g_ptr_array_new_with_free_func(runner_row_free);
     app->activity_rows = g_ptr_array_new_with_free_func(activity_row_free);
@@ -3659,11 +3942,94 @@ static void app_destroy(RunnerScopeApp *app)
     g_hash_table_unref(app->sessions);
     g_hash_table_unref(app->job_by_runner);
     g_hash_table_unref(app->runner_row_by_name);
+    g_hash_table_unref(app->runner_card_by_name);
+    g_clear_object(&app->runner_card_art);
+    g_free(app->selected_runner_name);
     g_hash_table_unref(app->activity_row_by_url);
     g_ptr_array_unref(app->runner_rows);
     g_ptr_array_unref(app->activity_rows);
     g_ptr_array_unref(app->history_rows);
     g_ptr_array_unref(app->local_rows);
+}
+
+/* Exercise the installed graphical shell without provider or service calls. */
+static int ui_self_test(int *argc, char ***argv)
+{
+    if (!gtk_init_check(argc, argv)) return 1;
+    RunnerScopeApp app;
+    app_init(&app);
+    app.application = gtk_application_new("net.ssmith.runnerscope.ui-test", G_APPLICATION_NON_UNIQUE);
+    if (!g_application_register(G_APPLICATION(app.application), NULL, NULL)) return 2;
+    build_ui(&app);
+    const char *states[] = {"IDLE", "RUNNING", "OFFLINE"};
+    for (guint i = 0U; i < 3U; i++) {
+        RunnerRow *row = g_new0(RunnerRow, 1U);
+        row->name = g_strdup_printf("Fixture-%u", i);
+        row->os = g_strdup(i == 2U ? "Windows" : "Linux");
+        row->state = g_strdup(states[i]);
+        row->repo = g_strdup("Example/Project");
+        row->job = g_strdup("Build");
+        row->runtime = g_strdup("2m");
+        row->state_for = g_strdup("3m");
+        row->jobs = g_strdup("1");
+        row->busy_pct = g_strdup("25.0%");
+        row->labels = g_strdup("self-hosted,fixture-label");
+        g_ptr_array_add(app.runner_rows, row);
+    }
+    rebuild_runner_row_index(&app);
+    render_runners(&app);
+    g_assert_cmpstr(gtk_stack_get_visible_child_name(GTK_STACK(app.runner_views)), ==, "cards");
+    g_assert_false(gtk_widget_get_visible(app.selection_card));
+    g_assert_cmpuint(g_hash_table_size(app.runner_card_by_name), ==, 3U);
+    g_assert_cmpint(gtk_tree_model_iter_n_children(GTK_TREE_MODEL(app.runner_store), NULL), ==, 3);
+    GtkWidget *idle = g_hash_table_lookup(app.runner_card_by_name, "Fixture-0");
+    GtkWidget *busy = g_hash_table_lookup(app.runner_card_by_name, "Fixture-1");
+    GtkWidget *offline = g_hash_table_lookup(app.runner_card_by_name, "Fixture-2");
+    g_assert_false(gtk_widget_get_visible(g_object_get_data(G_OBJECT(idle), "runner-job")));
+    g_assert_true(gtk_widget_get_visible(g_object_get_data(G_OBJECT(busy), "runner-job")));
+    g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(
+        g_object_get_data(G_OBJECT(offline), "runner-state")), "offline"));
+    GtkWidget *bar = g_object_get_data(G_OBJECT(busy), "runner-utilisation");
+    g_assert_cmpfloat(gtk_progress_bar_get_fraction(GTK_PROGRESS_BAR(bar)), ==, 0.25);
+    gtk_flow_box_select_child(GTK_FLOW_BOX(app.runner_cards), GTK_FLOW_BOX_CHILD(busy));
+    g_assert_true(gtk_widget_get_visible(app.selection_card));
+    g_assert_true(gtk_widget_get_visible(app.selection_primary));
+    g_assert_true(gtk_widget_get_visible(app.selection_secondary));
+    g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(app.selection_secondary)), "fixture-label"));
+    render_runners(&app);
+    g_assert_true(busy == g_hash_table_lookup(app.runner_card_by_name, "Fixture-1"));
+    g_assert_cmpstr(app.selected_runner_name, ==, "Fixture-1");
+    g_assert_true(gtk_widget_get_visible(app.selection_card));
+    gtk_entry_set_text(GTK_ENTRY(app.filter_entry), "fixture-label");
+    render_runners(&app);
+    g_assert_true(gtk_widget_get_visible(idle));
+    gtk_entry_set_text(GTK_ENTRY(app.filter_entry), "Windows");
+    render_runners(&app);
+    g_assert_false(gtk_widget_get_visible(idle));
+    g_assert_true(gtk_widget_get_visible(offline));
+    g_assert_false(gtk_widget_get_visible(app.selection_card));
+    gtk_entry_set_text(GTK_ENTRY(app.filter_entry), "no-match");
+    render_runners(&app);
+    g_assert_true(gtk_widget_get_visible(app.runner_cards_empty));
+    gtk_entry_set_text(GTK_ENTRY(app.filter_entry), "");
+    render_runners(&app);
+    g_assert_false(gtk_widget_get_visible(app.runner_cards_empty));
+    gtk_stack_set_visible_child_name(GTK_STACK(app.runner_views), "table");
+    GtkTreeIter first;
+    g_assert_true(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(app.runner_store), &first));
+    gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(app.runner_tree)), &first);
+    g_assert_cmpstr(app.selected_runner_name, ==, "Fixture-0");
+    g_ptr_array_remove_index(app.runner_rows, 0U);
+    rebuild_runner_row_index(&app);
+    render_runners(&app);
+    g_assert_false(g_hash_table_contains(app.runner_card_by_name, "Fixture-0"));
+    g_assert_false(gtk_widget_get_visible(app.selection_card));
+    g_assert_cmpint(gtk_tree_model_iter_n_children(GTK_TREE_MODEL(app.runner_store), NULL), ==, 2);
+    gtk_widget_destroy(app.window);
+    g_object_unref(app.application);
+    app_destroy(&app);
+    puts("Runner cards UI contract passed: state, utilisation, details, filtering, reuse, selection and table.");
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -3682,6 +4048,10 @@ int main(int argc, char **argv)
     }
     if (argc == 2 && strcmp(argv[1], "--self-test") == 0)
         return self_test();
+    if (argc == 2 && strcmp(argv[1], "--ui-self-test") == 0) {
+        argc = 1;
+        return ui_self_test(&argc, &argv);
+    }
 
     RunnerScopeApp app;
     app_init(&app);

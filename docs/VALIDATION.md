@@ -20,6 +20,17 @@ Windows:
 
 Release publication consumes only those qualified native artifacts.
 
+## 1.2.38 fleet presentation qualification
+
+Clean-package CI runs the installed binary's `--ui-self-test` under Xvfb with
+isolated configuration and state paths. The test makes no provider or service
+calls. It verifies the default card view, idle/running/offline treatment,
+utilisation fractions, current-job visibility, full selection details,
+metadata filtering, empty results, card reuse and selection retention across
+refreshes, removal of a selected runner, and the retained table model.
+Visual review covers fifteen idle runners, a mixed fleet, selection details,
+filtering, the table switch, day/night themes and a narrower window.
+
 ## 1.2.37 bitmap qualification
 
 The clean-package job loads all nine installed PNGs through GdkPixbuf, rather

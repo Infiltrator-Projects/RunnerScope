@@ -67,3 +67,12 @@ PNG does not satisfy this visual requirement. The four workspace identities,
 their banners and the sidebar use a coordinated graphite/cyan hardware art
 family. The application/desktop icon retains the shared flat cyan identity.
 Telemetry refreshes reuse the displayed bitmap; a page change replaces it.
+
+The Linux fleet opens as a responsive grid of bitmap runner cards. Each card
+shows identity, OS, a labelled semantic state indicator and a bar measuring
+busy time as a fraction of the observed session. The bar is not CPU usage.
+Only running cards display current-job text. Selecting a runner reveals all
+technical metadata, including labels; a Table switch retains sorting and CSV
+export retains all fields. Search covers the same complete metadata in both
+views. Snapshot refreshes reuse card widgets and preserve a still-visible
+selection; removed or filtered-out selections are cleared.

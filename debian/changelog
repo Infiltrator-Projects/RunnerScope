@@ -1,3 +1,16 @@
+infiltrator-runner-monitor (1.2.38) unstable; urgency=medium
+
+  * Default the Linux fleet workspace to bitmap runner cards with semantic
+    status indicators and accurate session-utilisation bars.
+  * Move full metadata to selection details while retaining the sortable table,
+    complete CSV export and filtering over all runner metadata.
+  * Reuse card widgets and preserve selection on snapshot refreshes.
+  * Reduce duplicate footer text and qualify the installed GTK fleet views,
+    details, filtering and selection in clean-package CI.
+  * Retain the bitmap artwork, mandatory MB Corpo faces and Common 1.19.38.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 19:35:00 +1000
+
 infiltrator-runner-monitor (1.2.37) unstable; urgency=medium
 
   * Replace the wireframe navigation, header and sidebar pictures with detailed

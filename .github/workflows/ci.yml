@@ -110,7 +110,7 @@ jobs:
       - name: Install clean package build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y             build-essential ca-certificates cmake debhelper devscripts fontconfig git pkg-config             libgtk-3-dev gh
+          sudo apt-get install -y             build-essential ca-certificates cmake debhelper devscripts fontconfig git pkg-config             libgtk-3-dev gh xvfb xauth
 
       - name: Verify exact Common pin
         shell: bash
@@ -146,6 +146,9 @@ jobs:
         run: |
           set -euo pipefail
           runnerscope --self-test
+          XDG_CONFIG_HOME="$RUNNER_TEMP/runner-ui-config" \
+          XDG_STATE_HOME="$RUNNER_TEMP/runner-ui-state" \
+          xvfb-run -a runnerscope --ui-self-test
           file /usr/bin/runnerscope | grep -q ELF
           test -f /usr/share/applications/runnerscope.desktop
           test -f /usr/share/icons/hicolor/scalable/apps/runnerscope.svg
