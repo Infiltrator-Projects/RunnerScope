@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.2.32 - 2026-10-03
+
+- Remove remaining superseded Linux shell CSS and move Settings into the same header control group used by current Infiltrator OS/System Monitor.
+- Cut presentation churn in half by updating live duration/utilisation cells every two seconds instead of every second.
+- Stop the Activity scan from forcing a redundant extra runner API poll after every repository sweep.
+- Make Local Linux Health on-demand: refresh immediately when opened and poll it only while that workspace is visible, eliminating background systemctl and diagnostic-directory scans.
+- Raise the minimum runner poll to 3 seconds and Local Health poll to 15 seconds to reduce process and filesystem churn without losing useful live visibility.
+- Keep the exact latest Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.
+
 ## 1.2.31 - 2026-10-03
 
 - Remove the redundant static page-header layer and legacy Help menubar so the Linux shell follows the current Infiltrator OS brand/header/navigation/workspace hierarchy.

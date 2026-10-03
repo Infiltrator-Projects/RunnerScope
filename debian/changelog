@@ -1,3 +1,14 @@
+infiltrator-runner-monitor (1.2.32) unstable; urgency=medium
+
+  * Remove remaining obsolete shell CSS and align Settings with the current
+    Infiltrator OS titlebar control pattern.
+  * Reduce live GTK cell updates and runner polling churn.
+  * Poll Local Linux Health only while its workspace is visible.
+  * Remove the redundant runner refresh after each activity repository scan.
+  * Keep the exact latest Infiltratr Common 1.19.38 pin.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 03 Oct 2026 13:20:00 +1000
+
 infiltrator-runner-monitor (1.2.31) unstable; urgency=medium
 
   * Align the shell with current Infiltrator OS responsive navigation and move

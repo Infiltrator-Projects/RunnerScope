@@ -32,7 +32,6 @@
 #define RUNNERSCOPE_MAIN_NAV_BUTTON_WIDTH 179
 #define RUNNERSCOPE_MAIN_NAV_BUTTON_COMPACT_WIDTH 48
 #define RUNNERSCOPE_MAIN_NAV_BUTTON_HEIGHT 50
-#define RUNNERSCOPE_SUMMARY_TICK_INTERVAL 2U
 
 typedef struct {
     char *name;
@@ -226,8 +225,6 @@ typedef struct {
     guint filter_timer;
     guint history_save_timer;
     guint initial_activity_timer;
-    guint initial_local_timer;
-    guint tick_count;
     GThread *runner_thread;
     GThread *activity_thread;
     GThread *local_thread;
@@ -440,10 +437,10 @@ static gboolean json_get_uint(const char *text, const char *key, guint *out)
 static void config_defaults(RunnerConfig *config)
 {
     memset(config, 0, sizeof(*config));
-    config->runner_poll_seconds = 2U;
+    config->runner_poll_seconds = 3U;
     config->activity_scan_seconds = 45U;
     config->repository_scan_limit = 25U;
-    config->local_health_seconds = 10U;
+    config->local_health_seconds = 15U;
     config->theme_mode = INFILTRATR_THEME_SYSTEM;
 }
 
@@ -478,10 +475,10 @@ static void load_config(RunnerConfig *config)
     if (env_org && *env_org)
         g_strlcpy(config->organisation, env_org, sizeof(config->organisation));
 
-    if (config->runner_poll_seconds < 1U) config->runner_poll_seconds = 1U;
+    if (config->runner_poll_seconds < 3U) config->runner_poll_seconds = 3U;
     if (config->activity_scan_seconds < 10U) config->activity_scan_seconds = 10U;
     if (config->repository_scan_limit < 1U) config->repository_scan_limit = 1U;
-    if (config->local_health_seconds < 5U) config->local_health_seconds = 5U;
+    if (config->local_health_seconds < 15U) config->local_health_seconds = 15U;
 }
 
 static gboolean save_config(const RunnerConfig *config, GError **error)
@@ -646,14 +643,6 @@ static void apply_theme(RunnerScopeApp *app)
         " background-image:none; background-color:@rm_background;"
         "}\n"
         "label { color:@rm_text; }\n"
-        "menu {"
-        " background-color:@rm_panel; color:@rm_text;"
-        " border:1px solid @rm_border;"
-        "}\n"
-        "menu menuitem { color:@rm_summary; }\n"
-        "menu menuitem:hover {"
-        " background-color:@rm_surface_hover; color:@rm_title;"
-        "}\n"
         "button, combobox button {"
         " background-image:none; background-color:@rm_button_background;"
         " color:@rm_button_foreground; border:1px solid @rm_border;"
@@ -1896,7 +1885,6 @@ static gboolean activity_apply_idle(gpointer data)
 
     g_atomic_int_set(&app->activity_refreshing, 0);
     g_free(result);
-    request_runner_refresh(app);
     return G_SOURCE_REMOVE;
 }
 
@@ -2120,16 +2108,11 @@ static gboolean activity_timer_cb(gpointer data)
 
 static gboolean local_timer_cb(gpointer data)
 {
-    request_local_refresh(data);
-    return G_SOURCE_CONTINUE;
-}
-
-static gboolean initial_local_refresh_cb(gpointer data)
-{
     RunnerScopeApp *app = data;
-    app->initial_local_timer = 0U;
-    request_local_refresh(app);
-    return G_SOURCE_REMOVE;
+    if (app->notebook &&
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)) == 3)
+        request_local_refresh(app);
+    return G_SOURCE_CONTINUE;
 }
 
 static gboolean initial_activity_refresh_cb(gpointer data)
@@ -2244,9 +2227,7 @@ static gboolean tick_timer_cb(gpointer data)
         update_workspace_context(app, page);
     }
 
-    app->tick_count++;
-    if ((app->tick_count % RUNNERSCOPE_SUMMARY_TICK_INTERVAL) == 0U)
-        update_summary(app);
+    update_summary(app);
     return G_SOURCE_CONTINUE;
 }
 
@@ -2800,6 +2781,8 @@ static void on_nav_clicked(GtkButton *button, gpointer user_data)
     sync_navigation(app, page);
     render_page(app, page);
     update_workspace_context(app, page);
+    if (page == 3)
+        request_local_refresh(app);
     clear_selection_card(app);
 }
 
@@ -2955,8 +2938,8 @@ static void build_ui(RunnerScopeApp *app)
     gtk_window_set_icon_name(GTK_WINDOW(app->window), "runnerscope");
 
     /*
-     * Match the current Infiltrator OS shell: product identity and search live
-     * in the title area, while the data surface is left to the application.
+     * Match the current Infiltrator OS shell: product identity, settings and
+     * window controls stay in the header; filtering belongs to the workspace.
      */
     GtkWidget *header = gtk_header_bar_new();
     gtk_style_context_add_class(
@@ -2994,6 +2977,10 @@ static void build_ui(RunnerScopeApp *app)
 
     GtkWidget *header_end =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
+    GtkWidget *settings_button = make_window_control(
+        "preferences-system-symbolic", "Settings", NULL);
+    g_signal_connect(settings_button, "clicked", G_CALLBACK(on_settings), app);
+    gtk_box_pack_start(GTK_BOX(header_end), settings_button, FALSE, FALSE, 0);
 
     GtkWidget *window_controls =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)compact_spacing);
@@ -3390,10 +3377,6 @@ static void build_ui(RunnerScopeApp *app)
     g_signal_connect(button, "clicked", G_CALLBACK(on_export), app);
     gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
 
-    button = gtk_button_new_with_label("Settings");
-    g_signal_connect(button, "clicked", G_CALLBACK(on_settings), app);
-    gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
-
     button = gtk_button_new_with_label("About");
     g_signal_connect(button, "clicked", G_CALLBACK(on_about), app);
     gtk_box_pack_start(GTK_BOX(general_actions), button, FALSE, FALSE, 0);
@@ -3512,8 +3495,6 @@ static void activate(GtkApplication *application, gpointer user_data)
 
     build_ui(app);
     request_runner_refresh(app);
-    app->initial_local_timer =
-        g_timeout_add(250U, initial_local_refresh_cb, app);
     app->initial_activity_timer =
         g_timeout_add(750U, initial_activity_refresh_cb, app);
     app->runner_timer = g_timeout_add_seconds(
@@ -3522,7 +3503,7 @@ static void activate(GtkApplication *application, gpointer user_data)
         app->config.activity_scan_seconds, activity_timer_cb, app);
     app->local_timer = g_timeout_add_seconds(
         app->config.local_health_seconds, local_timer_cb, app);
-    app->tick_timer = g_timeout_add_seconds(1U, tick_timer_cb, app);
+    app->tick_timer = g_timeout_add_seconds(2U, tick_timer_cb, app);
 }
 
 static void app_init(RunnerScopeApp *app)
@@ -3550,8 +3531,6 @@ static void app_destroy(RunnerScopeApp *app)
     if (app->tick_timer) g_source_remove(app->tick_timer);
     if (app->initial_activity_timer)
         g_source_remove(app->initial_activity_timer);
-    if (app->initial_local_timer)
-        g_source_remove(app->initial_local_timer);
     if (app->filter_timer) {
         g_source_remove(app->filter_timer);
         app->filter_timer = 0U;

@@ -235,12 +235,12 @@ static bool save_organisation(void)
         "{\r\n"
         "  \"organisation\": \"%s\",\r\n"
         "  \"expected_runners\": 0,\r\n"
-        "  \"runner_poll_seconds\": 2,\r\n"
+        "  \"runner_poll_seconds\": 3,\r\n"
         "  \"activity_scan_seconds\": 45,\r\n"
         "  \"repository_scan_limit\": 25,\r\n"
         "  \"repository_cache_seconds\": 300,\r\n"
         "  \"history_entries\": 300,\r\n"
-        "  \"local_health_seconds\": 10,\r\n"
+        "  \"local_health_seconds\": 15,\r\n"
         "  \"theme_mode\": \"system\"\r\n"
         "}\r\n", escaped);
     free(escaped);
