@@ -29,6 +29,14 @@ Runner-specific semantics remain in Runner Monitor.
 
 Linux uses GTK 3 for the native desktop shell. Windows uses Win32 controls and system APIs. Toolkit differences must not redefine the meaning of runner states.
 
+The 1.2.x line still expresses much of the application layout independently in the GTK and Win32 frontends. That duplication allowed presentation and feature drift even while Common, artwork and semantics remained shared.
+
+The 1.3.x architecture removes duplicated application structure by introducing one toolkit-neutral declarative UI contract and two native renderers. The shared contract owns page hierarchy, component identity, layout intent, actions, state bindings and parity metadata. GTK and Win32 own only native widget/control creation, drawing, event-loop integration and other platform mechanics.
+
+The governing rule is: **application structure lives once; platform mechanics live twice.**
+
+This is intentionally a small product abstraction, not a replacement widget toolkit. Platform-specific extensions are permitted only when explicit, isolated and tested. The migration plan is documented in [UI_CONTRACT_MIGRATION.md](UI_CONTRACT_MIGRATION.md).
+
 Both native shells surface the application version and linked Common version directly.
 
 ## State model
