@@ -66,7 +66,7 @@ jobs:
   windows-native:
     name: Windows native C/Common EXE
     runs-on: [self-hosted, Windows, ARM64]
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         shell: powershell
@@ -94,27 +94,52 @@ jobs:
           Get-ExecutionPolicy -List
           cmake --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Check out Runner Monitor and pinned Common
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Build native Win32 executable
+      - name: Build and run native ARM64 qualification binary
         shell: powershell
         run: |
-          cmake -S . -B build -A x64
-          cmake --build build --config Release --parallel
-          ctest --test-dir build -C Release --output-on-failure
-          & ".\build\Release\Runner-Monitor.exe" --self-test
+          # The self-hosted Windows pool is ARM64. Run the behavioural/resource
+          # self-test as a native ARM64 process so Windows does not block an x64
+          # executable under this runner service account.
+          cmake -S . -B build-arm64 -A ARM64
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (!(Test-Path ".\build\Release\Runner-Monitor.exe")) { throw "Native EXE missing" }
+          cmake --build build-arm64 --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build-arm64 -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ".\build-arm64\Release\Runner-Monitor.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build x64 release executable
+        shell: powershell
+        run: |
+          # The distributed Windows artifact remains x64. Cross-build it on the
+          # ARM64 runner, then verify its PE machine type rather than attempting
+          # to execute an x64 process in the restricted runner service context.
+          cmake -S . -B build-x64 -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-x64 --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = ".\build-x64\Release\Runner-Monitor.exe"
+          if (!(Test-Path $exe)) { throw "Native x64 EXE missing" }
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3c)
+          $machine = [System.BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          if ($machine -ne 0x8664) {
+            throw ("Expected AMD64 PE machine 0x8664, got 0x{0:X4}" -f $machine)
+          }
 
       - name: Stage Windows executable
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item ".\build\Release\Runner-Monitor.exe" ".\dist\Runner-Monitor-Windows.exe"
+          Copy-Item ".\build-x64\Release\Runner-Monitor.exe" ".\dist\Runner-Monitor-Windows.exe"
 
       - name: Upload qualified Windows executable
         uses: actions/upload-artifact@v4
