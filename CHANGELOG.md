@@ -4,6 +4,22 @@
 
 No unreleased changes.
 
+## 1.3.0 - 2026-10-06
+
+- Introduce the first toolkit-neutral Runner Monitor UI contract shared by the native GTK and Win32 products.
+- Give the four pages and major shell surfaces stable component IDs so cross-platform parity can be tested independently of either toolkit.
+- Make both native shells consume shared product identity, page/navigation metadata, hero artwork, metric captions and contextual action policy.
+- Add a toolkit-free UI-contract CTest and validate the same contract from both native application self-tests.
+- Run the full Linux, Windows build/runtime and clean Debian qualification suite on pull requests as well as `main`, so future drift is caught before merge.
+- Keep GTK and Win32 native and preserve existing configuration/history data and Common 1.19.38 integration.
+
+## 1.2.39 - 2026-10-06
+
+- Replace the legacy Windows table-only frontend with the native Infiltrator OS shell used by the current product generation.
+- Embed the same navigation/hero artwork and Common-verified MB Corpo fonts directly in the Windows executable.
+- Add the Windows runner-card fleet view, Cards/Table switching, filtering, selection details, settings, CSV export, metrics and session utilisation.
+- Add a clean hosted Windows x64 runtime/self-test qualification alongside the self-hosted x64 release build.
+
 ## 1.2.38 - 2026-10-03
 
 - Make bitmap runner cards the default Linux fleet view, with semantic state indicators and bars showing session utilisation.
@@ -153,7 +169,7 @@ No unreleased changes.
 ## 1.2.10 - 2026-09-24
 
 - Align the native Linux outer shell with the suite-wide 20 px screen-padding rhythm.
-- Preserve runner monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
+- Preserve monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
 
 ## 1.2.9 - 2026-09-24
 

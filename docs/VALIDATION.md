@@ -39,6 +39,14 @@ Native renderer qualification remains separate. Linux must prove the GTK rendere
 
 Once a migration slice is complete, CI must reject new application-level direct GTK/Win32 layout composition outside the renderer/platform boundary for that slice. This prevents the old duplicated-layout architecture from quietly returning.
 
+## 1.3.0 first shared-contract tranche
+
+Version 1.3.0 establishes the first executable cross-platform seam. The toolkit-neutral C contract owns the stable four-page identities, major shell/component IDs, shared product identity, navigation/page metadata, hero assets, metric captions, contextual action policy and the Runners view-switch rule. Both GTK and Win32 consume that same contract instead of carrying independent copies of those product decisions.
+
+The contract is built as a platform-neutral library and has its own CTest. Both native application self-tests validate it as well. Pull requests now run the complete Linux native, self-hosted Windows x64 build, hosted Windows x64 runtime and clean Debian package/install qualification suite before merge, so subsequent migration slices are checked on both platforms before reaching `main`.
+
+This is the first slice, not a claim that the whole UI has already moved behind renderers. Runner cards/details, deeper layout composition and the remaining Active Jobs, History, Local Health and contextual-action parity continue under the 1.3.x migration plan.
+
 ## 1.2.39 parity baseline
 
 Version 1.2.39 is the pre-migration baseline: Windows was brought back into the current Infiltrator OS visual family, shares the product bitmap/typography assets, and is now build- and runtime-qualified on Windows. It is not yet proof that every Linux workspace/backend feature is present on Windows; that remaining functional parity is part of the 1.3.x migration work.
