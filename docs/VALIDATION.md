@@ -15,10 +15,33 @@ Linux:
 
 Windows:
 - configures and builds the native Win32 C application against the pinned Common gitlink;
-- runs its C/Common self-test;
+- the self-hosted ARM64 pool cross-builds the release x64 executable and verifies its PE machine type;
+- a clean hosted Windows x64 runner independently builds and executes CTest plus `Runner-Monitor.exe --self-test`;
 - stages and uploads the native EXE.
 
-Release publication consumes only those qualified native artifacts.
+Release publication consumes only qualified native artifacts.
+
+## 1.3.x shared UI contract qualification
+
+The 1.3.x migration adds a toolkit-neutral application UI tree as the source of truth. Its tests must run without GTK or Win32 and fail if required product structure disappears or changes accidentally.
+
+The shared-contract test must cover at least:
+
+- stable page and navigation IDs;
+- required component hierarchy;
+- shared actions and visibility/enabled rules;
+- fleet cards, details, Cards/Table and search/filter surfaces;
+- Active Jobs, History and Local Health surfaces as they migrate;
+- renderer capability coverage for every shared component type;
+- explicit marking of any genuine platform-only extension.
+
+Native renderer qualification remains separate. Linux must prove the GTK renderer can realise the contract; Windows must prove the Win32 renderer can realise the same contract. A shared-contract pass alone is not sufficient if a native renderer cannot instantiate the required surface.
+
+Once a migration slice is complete, CI must reject new application-level direct GTK/Win32 layout composition outside the renderer/platform boundary for that slice. This prevents the old duplicated-layout architecture from quietly returning.
+
+## 1.2.39 parity baseline
+
+Version 1.2.39 is the pre-migration baseline: Windows was brought back into the current Infiltrator OS visual family, shares the product bitmap/typography assets, and is now build- and runtime-qualified on Windows. It is not yet proof that every Linux workspace/backend feature is present on Windows; that remaining functional parity is part of the 1.3.x migration work.
 
 ## 1.2.38 fleet presentation qualification
 
@@ -41,7 +64,7 @@ the Common 1.19.38 pin and MB Corpo font verification remain enforced.
 
 ## 1.2.30 forensic qualification
 
-The 1.2.30 Linux pass verifies that navigation uses the current Infiltrator OS/System Monitor toggle-button rail rather than the retired GtkListBox workaround, that the superseded list-row CSS/helpers are absent, and that one-second live runner/activity updates use direct row indexes instead of repeated linear searches. Presentation-only tick work is suppressed while the window is iconified, while provider polling continues normally. The exact latest Common 1.19.38 gitlink remains enforced.
+The 1.2.30 Linux pass verifies that navigation uses the current Infiltrator OS/System Monitor toggle-button rail rather than the retired GtkListBox workaround, that the superseded list-row CSS/helpers are absent, and that one-second live runner/activity updates use direct row indexes instead of repeated linear searches through backing arrays. Presentation-only tick work is suppressed while the window is iconified, while provider polling continues normally. The exact latest Common 1.19.38 gitlink remains enforced.
 
 ## 1.2.29 forensic qualification
 
@@ -49,4 +72,4 @@ The 1.2.29 Linux pass additionally verifies that the shipping tree has one Commo
 
 ## Parity rule
 
-A platform feature is not considered complete merely because the native binary compiles. Behavioural parity must be demonstrated for runner state, job correlation, history, service controls and persistence before claiming full cross-platform parity.
+A platform feature is not considered complete merely because the native binary compiles. Behavioural parity must be demonstrated for runner state, job correlation, history, service controls and persistence. During 1.3.x, shared product structure must additionally be represented once in the UI contract and proven renderable by both native backends before claiming cross-platform UI parity.
