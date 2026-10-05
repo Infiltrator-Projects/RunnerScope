@@ -1,0 +1,34 @@
+name: Apply shared UI contract migration
+
+on:
+  push:
+    branches:
+      - migration/ui-contract-1.3
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Seed shared UI contract migration'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: migration/ui-contract-1.3
+          fetch-depth: 0
+
+      - name: Apply deterministic source migration
+        run: python3 tools/apply_ui_contract_migration.py
+
+      - name: Commit migrated native frontends
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Migrate native shells to shared UI contract'
+          git push origin HEAD:migration/ui-contract-1.3
