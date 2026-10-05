@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#ifndef RUNNERSCOPE_WINDOWS_RESOURCES_H
+#define RUNNERSCOPE_WINDOWS_RESOURCES_H
+
+#define IDR_NAV_RUNNERS      2001
+#define IDR_NAV_ACTIVE       2002
+#define IDR_NAV_HISTORY      2003
+#define IDR_NAV_HEALTH       2004
+#define IDR_NAV_INFILTRATOR  2005
+#define IDR_HERO_RUNNERS     2011
+#define IDR_HERO_ACTIVE      2012
+#define IDR_HERO_HISTORY     2013
+#define IDR_HERO_HEALTH      2014
+#define IDR_FONT_BRAND       2101
+#define IDR_FONT_UI_BOLD     2102
+#define IDR_FONT_UI_REGULAR  2103
+
+#endif
