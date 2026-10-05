@@ -1,3 +1,19 @@
+infiltrator-runner-monitor (1.2.39) unstable; urgency=medium
+
+  * Replace the legacy Windows table-only shell with the native Infiltrator OS
+    presentation used by the Linux Runner Monitor.
+  * Embed the same bitmap navigation/hero artwork and Common-verified MB Corpo
+    typography directly in the Windows executable.
+  * Make Windows runner cards the default fleet view while retaining the full
+    sortable table, filtering, selection details, settings and CSV export.
+  * Add native Windows header/navigation/workspace/footer chrome, live fleet
+    metrics, session utilisation, state duration and responsive card scrolling.
+  * Qualify the x64 release on the self-hosted Windows pool and execute the
+    Windows runtime/resource self-test on a clean hosted x64 machine.
+  * Retain exact Infiltratr Common 1.19.38.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 06 Oct 2026 09:40:00 +1100
+
 infiltrator-runner-monitor (1.2.38) unstable; urgency=medium
 
   * Default the Linux fleet workspace to bitmap runner cards with semantic
@@ -307,7 +323,7 @@ infiltrator-runner-monitor (1.2.8) unstable; urgency=medium
 infiltrator-runner-monitor (1.2.7) unstable; urgency=medium
 
   * Tighten native Linux notebook tabs to the 5 px / 10 px publisher tab rhythm.
-  * Preserve monitoring behaviour, data models, dependencies and Common APIs unchanged.
+  * Preserve runner monitoring behaviour, data models, dependencies and Common APIs unchanged.
 
  -- Shannon Smith <noreply@github.com>  Thu, 24 Sep 2026 20:47:00 +1000
 
