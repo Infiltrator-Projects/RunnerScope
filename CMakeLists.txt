@@ -49,6 +49,20 @@ set(INFILTRATR_COMMON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(INFILTRATR_COMMON_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 add_subdirectory(infiltratr-common EXCLUDE_FROM_ALL)
 
+add_library(runnerscope_ui_contract STATIC
+    src/ui/ui_contract.c
+)
+target_include_directories(runnerscope_ui_contract PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+if(MSVC)
+    target_compile_options(runnerscope_ui_contract PRIVATE /W4 /utf-8)
+elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(runnerscope_ui_contract PRIVATE
+        -Wall -Wextra -Wpedantic -Wshadow -Wformat=2
+    )
+endif()
+
 # Runner Monitor is one visual product on both native platforms.  The same
 # Common-verified MB faces are therefore mandatory on Windows and Linux.
 include("${RUNNERSCOPE_COMMON_DIR}/cmake/InfiltratrTypographyAssets.cmake")
@@ -117,6 +131,7 @@ if(WIN32)
     )
     set_target_properties(runnerscope PROPERTIES OUTPUT_NAME "Runner-Monitor")
     target_link_libraries(runnerscope PRIVATE
+        runnerscope_ui_contract
         InfiltratrCommon::Common
         user32
         gdi32
@@ -148,6 +163,7 @@ else()
         src/linux_main.c
     )
     target_link_libraries(runnerscope PRIVATE
+        runnerscope_ui_contract
         InfiltratrCommon::Common
         PkgConfig::GTK3
     )
@@ -182,3 +198,9 @@ target_compile_definitions(runnerscope PRIVATE
 )
 
 add_test(NAME runnerscope-native-self-test COMMAND runnerscope --self-test)
+
+add_executable(runnerscope-ui-contract-test
+    tests/ui_contract_test.c
+)
+target_link_libraries(runnerscope-ui-contract-test PRIVATE runnerscope_ui_contract)
+add_test(NAME runnerscope-ui-contract-test COMMAND runnerscope-ui-contract-test)

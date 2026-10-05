@@ -10,6 +10,8 @@
 #include <infiltratr/format.h>
 #include <infiltratr/posix.h>
 
+#include "ui/ui_contract.h"
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -1518,41 +1520,37 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
 {
     if (!app || !app->workspace_title || !app->workspace_subtitle) return;
 
+    const RunnerUiPageSpec *ui_page = runner_ui_page((RunnerUiPageId)page);
+    runner_asset_image_set(app->workspace_icon, ui_page->nav_asset, 48, 48);
+    runner_asset_image_set(app->workspace_art, ui_page->hero_asset, 240, 86);
+    label_set_if_changed(
+        app->workspace_title,
+        runner_ui_page_title(ui_page, RUNNER_UI_PLATFORM_LINUX));
+    label_set_if_changed(app->workspace_subtitle, ui_page->subtitle);
+
     char a[32], b[32], d[32], uptime[64];
     switch (page) {
         case 0:
-            runner_asset_image_set(app->workspace_icon, "nav-runners.png", 48, 48);
-            runner_asset_image_set(app->workspace_art, "hero-runners.png", 240, 86);
-            label_set_if_changed(app->workspace_title, "Runner fleet");
-            label_set_if_changed(app->workspace_subtitle, "SESSION UTILISATION");
             g_snprintf(a, sizeof(a), "%u", app->runners_total);
             g_snprintf(b, sizeof(b), "%u", app->runners_running);
             g_snprintf(d, sizeof(d), "%u", app->runners_idle);
-            workspace_metric(app, 0U, "TOTAL", a);
-            workspace_metric(app, 1U, "RUNNING", b);
-            workspace_metric(app, 2U, "IDLE", d);
+            workspace_metric(app, 0U, ui_page->metric_labels[0], a);
+            workspace_metric(app, 1U, ui_page->metric_labels[1], b);
+            workspace_metric(app, 2U, ui_page->metric_labels[2], d);
             g_snprintf(a, sizeof(a), "%u", app->runners_offline);
-            workspace_metric(app, 3U, "OFFLINE", a);
+            workspace_metric(app, 3U, ui_page->metric_labels[3], a);
             break;
         case 1:
-            runner_asset_image_set(app->workspace_icon, "nav-active.png", 48, 48);
-            runner_asset_image_set(app->workspace_art, "hero-active.png", 240, 86);
-            label_set_if_changed(app->workspace_title, "Active work");
-            label_set_if_changed(app->workspace_subtitle, "LIVE JOBS  •  QUEUES  •  RUNNERS");
             g_snprintf(a, sizeof(a), "%u", app->local_active);
             g_snprintf(b, sizeof(b), "%u", app->hosted_active);
             g_snprintf(d, sizeof(d), "%u", app->queued);
-            workspace_metric(app, 0U, "LOCAL", a);
-            workspace_metric(app, 1U, "GITHUB", b);
-            workspace_metric(app, 2U, "QUEUED", d);
+            workspace_metric(app, 0U, ui_page->metric_labels[0], a);
+            workspace_metric(app, 1U, ui_page->metric_labels[1], b);
+            workspace_metric(app, 2U, ui_page->metric_labels[2], d);
             g_snprintf(a, sizeof(a), "%u", app->local_active + app->hosted_active);
-            workspace_metric(app, 3U, "ACTIVE", a);
+            workspace_metric(app, 3U, ui_page->metric_labels[3], a);
             break;
         case 2: {
-            runner_asset_image_set(app->workspace_icon, "nav-history.png", 48, 48);
-            runner_asset_image_set(app->workspace_art, "hero-history.png", 240, 86);
-            label_set_if_changed(app->workspace_title, "Session history");
-            label_set_if_changed(app->workspace_subtitle, "STATE  •  EVENTS  •  SESSION");
             g_snprintf(a, sizeof(a), "%u", app->history_rows->len);
             g_snprintf(b, sizeof(b), "%u", g_hash_table_size(app->sessions));
             const char *filter = gtk_entry_get_text(GTK_ENTRY(app->filter_entry));
@@ -1560,36 +1558,38 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
                 duration_text(now_monotonic() - app->session_started);
             g_strlcpy(uptime, uptime_text ? uptime_text : "—", sizeof(uptime));
             g_free(uptime_text);
-            workspace_metric(app, 0U, "EVENTS", a);
-            workspace_metric(app, 1U, "RUNNERS", b);
-            workspace_metric(app, 2U, "UPTIME", uptime);
-            workspace_metric(app, 3U, "FILTER", filter && *filter ? "ACTIVE" : "ALL");
+            workspace_metric(app, 0U, ui_page->metric_labels[0], a);
+            workspace_metric(app, 1U, ui_page->metric_labels[1], b);
+            workspace_metric(app, 2U, ui_page->metric_labels[2], uptime);
+            workspace_metric(app, 3U, ui_page->metric_labels[3], filter && *filter ? "ACTIVE" : "ALL");
             break;
         }
         default:
-            runner_asset_image_set(app->workspace_icon, "nav-health.png", 48, 48);
-            runner_asset_image_set(app->workspace_art, "hero-health.png", 240, 86);
-            label_set_if_changed(app->workspace_title, "Local Linux health");
-            label_set_if_changed(app->workspace_subtitle, "SERVICES  •  DIAGNOSTICS  •  LINK");
             g_snprintf(a, sizeof(a), "%u", app->local_rows->len);
             g_snprintf(b, sizeof(b), "%u", count_local_state(app, "RUNNING"));
             g_snprintf(d, sizeof(d), "%u", count_local_github(app));
-            workspace_metric(app, 0U, "SERVICES", a);
-            workspace_metric(app, 1U, "RUNNING", b);
-            workspace_metric(app, 2U, "GITHUB", d);
+            workspace_metric(app, 0U, ui_page->metric_labels[0], a);
+            workspace_metric(app, 1U, ui_page->metric_labels[1], b);
+            workspace_metric(app, 2U, ui_page->metric_labels[2], d);
             g_snprintf(a, sizeof(a), "%u", count_local_diagnostics(app));
-            workspace_metric(app, 3U, "DIAGNOSTICS", a);
+            workspace_metric(app, 3U, ui_page->metric_labels[3], a);
             break;
     }
 
     if (app->open_job_button)
-        gtk_widget_set_visible(app->open_job_button, page == 1);
+        gtk_widget_set_visible(
+            app->open_job_button,
+            (ui_page->actions & RUNNER_UI_ACTION_OPEN_JOB) != 0U);
     if (app->open_diag_button)
-        gtk_widget_set_visible(app->open_diag_button, page == 3);
+        gtk_widget_set_visible(
+            app->open_diag_button,
+            (ui_page->actions & RUNNER_UI_ACTION_OPEN_DIAGNOSTIC) != 0U);
     if (app->restart_button)
-        gtk_widget_set_visible(app->restart_button, page == 3);
+        gtk_widget_set_visible(
+            app->restart_button,
+            (ui_page->actions & RUNNER_UI_ACTION_RESTART_RUNNER) != 0U);
     if (app->runner_view_switch)
-        gtk_widget_set_visible(app->runner_view_switch, page == 0);
+        gtk_widget_set_visible(app->runner_view_switch, ui_page->show_view_switch);
 }
 
 static void render_history(RunnerScopeApp *app)
@@ -3278,10 +3278,12 @@ static void build_ui(RunnerScopeApp *app)
     const guint compact_spacing = metrics ? metrics->compact_spacing : 6U;
     const guint control_spacing = metrics ? metrics->control_spacing : 10U;
     const guint screen_padding = metrics ? metrics->screen_padding : 20U;
+    const RunnerUiPageSpec *initial_page =
+        runner_ui_page(RUNNER_UI_PAGE_RUNNERS);
 
     app->window = gtk_application_window_new(app->application);
     enforce_required_typography(app->window);
-    gtk_window_set_title(GTK_WINDOW(app->window), "Runner Monitor");
+    gtk_window_set_title(GTK_WINDOW(app->window), runner_ui_product_title());
     gtk_window_set_default_size(GTK_WINDOW(app->window), 1280, 800);
     gtk_window_set_icon_name(GTK_WINDOW(app->window), "runnerscope");
 
@@ -3310,8 +3312,8 @@ static void build_ui(RunnerScopeApp *app)
     gtk_box_pack_start(GTK_BOX(brand), brand_icon_well, FALSE, FALSE, 0);
 
     GtkWidget *brand_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    GtkWidget *brand_title = gtk_label_new("Runner Monitor");
-    GtkWidget *brand_subtitle = gtk_label_new("Infiltrator OS");
+    GtkWidget *brand_title = gtk_label_new(runner_ui_product_title());
+    GtkWidget *brand_subtitle = gtk_label_new(runner_ui_product_family());
     gtk_style_context_add_class(
         gtk_widget_get_style_context(brand_title), "header-brand-title");
     gtk_style_context_add_class(
@@ -3409,7 +3411,7 @@ static void build_ui(RunnerScopeApp *app)
     GtkWidget *workspace_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(workspace_icon_well), "workspace-icon-well");
-    app->workspace_icon = runner_asset_image_new("nav-runners.png", 48, 48);
+    app->workspace_icon = runner_asset_image_new(initial_page->nav_asset, 48, 48);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->workspace_icon), "workspace-icon");
     gtk_box_pack_start(
@@ -3419,10 +3421,10 @@ static void build_ui(RunnerScopeApp *app)
 
     GtkWidget *workspace_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_hexpand(workspace_copy, TRUE);
-    app->workspace_title = gtk_label_new("Runner fleet");
+    app->workspace_title = gtk_label_new(
+        runner_ui_page_title(initial_page, RUNNER_UI_PLATFORM_LINUX));
     gtk_label_set_ellipsize(GTK_LABEL(app->workspace_title), PANGO_ELLIPSIZE_END);
-    app->workspace_subtitle = gtk_label_new(
-        "CAPACITY  •  WORKLOAD  •  UTILISATION");
+    app->workspace_subtitle = gtk_label_new(initial_page->subtitle);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->workspace_title), "workspace-title");
     gtk_style_context_add_class(
@@ -3442,7 +3444,7 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_set_no_show_all(workspace_art_frame, TRUE);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(workspace_art_frame), "workspace-art-frame");
-    app->workspace_art = runner_asset_image_new("hero-runners.png", 240, 86);
+    app->workspace_art = runner_asset_image_new(initial_page->hero_asset, 240, 86);
     gtk_box_pack_start(
         GTK_BOX(workspace_art_frame), app->workspace_art, TRUE, TRUE, 0);
     gtk_box_pack_start(
@@ -3662,18 +3664,10 @@ static void build_ui(RunnerScopeApp *app)
     g_signal_connect(
         selection, "changed", G_CALLBACK(on_local_selection), app);
 
-    const struct {
-        const char *icon;
-        const char *title;
-        const char *tooltip;
-    } nav_items[] = {
-        {"nav-runners.png", "Runners", "Fleet state and utilisation"},
-        {"nav-active.png", "Active jobs", "Work executing now"},
-        {"nav-history.png", "History", "Session activity"},
-        {"nav-health.png", "Local Linux health", "Services and diagnostics"}
-    };
-    for (guint i = 0U; i < G_N_ELEMENTS(nav_items); i++) {
-        if (i == 3U) {
+    for (gint i = 0; i < RUNNER_UI_PAGE_COUNT; i++) {
+        const RunnerUiPageSpec *ui_page =
+            runner_ui_page((RunnerUiPageId)i);
+        if (ui_page->separator_before) {
             GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
             gtk_style_context_add_class(
                 gtk_widget_get_style_context(separator),
@@ -3681,12 +3675,13 @@ static void build_ui(RunnerScopeApp *app)
             gtk_box_pack_start(GTK_BOX(nav_rail), separator, FALSE, FALSE, 5);
         }
         GtkWidget *nav_button = make_nav_button(
-            app, (gint)i, nav_items[i].icon,
-            nav_items[i].title, nav_items[i].tooltip);
+            app, i, ui_page->nav_asset,
+            runner_ui_page_nav_label(ui_page, RUNNER_UI_PLATFORM_LINUX),
+            ui_page->tooltip);
         gtk_box_pack_start(
             GTK_BOX(nav_rail), nav_button, FALSE, TRUE, 0);
     }
-    sync_navigation(app, 0);
+    sync_navigation(app, RUNNER_UI_PAGE_RUNNERS);
 
     GtkWidget *nav_art_frame = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     app->navigation_art_frame = nav_art_frame;
@@ -3813,7 +3808,7 @@ static void build_ui(RunnerScopeApp *app)
 static InfiltratrProjectInfo project_info(void)
 {
     InfiltratrProjectInfo info = INFILTRATR_PROJECT_INFO_INIT;
-    info.program_name = "Runner Monitor";
+    info.program_name = runner_ui_product_title();
     info.executable_name = "runnerscope";
     info.application_id = RUNNERSCOPE_APP_ID;
     info.version = RUNNERSCOPE_VERSION;
@@ -3830,17 +3825,22 @@ static InfiltratrProjectInfo project_info(void)
 
 static int self_test(void)
 {
-    if (!INFILTRATR_COMMON_VERSION[0]) return 1;
+    char ui_error[256];
+    if (!runner_ui_contract_validate(ui_error, sizeof(ui_error))) {
+        fprintf(stderr, "Shared UI contract failed: %s\n", ui_error);
+        return 1;
+    }
+    if (!INFILTRATR_COMMON_VERSION[0]) return 2;
     const InfiltratrThemePalette *day =
         infiltratr_theme_resolve(INFILTRATR_THEME_DAY, false);
     const InfiltratrThemePalette *night =
         infiltratr_theme_resolve(INFILTRATR_THEME_NIGHT, true);
     if (!day || !night || day->background_rgb == night->background_rgb)
-        return 2;
+        return 3;
     char duration[64];
     if (!infiltratr_format_duration_compact(true, 3661U, duration, sizeof(duration)))
-        return 3;
-    if (strstr(duration, "1h") == NULL) return 4;
+        return 4;
+    if (strstr(duration, "1h") == NULL) return 5;
     printf("Runner Monitor %s native C/Common self-test passed (Common %s)\n",
            RUNNERSCOPE_VERSION, INFILTRATR_COMMON_VERSION);
     return 0;

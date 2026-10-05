@@ -21,6 +21,7 @@
 #include <infiltratr/escape.h>
 
 #include "windows_resources.h"
+#include "ui/ui_contract.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -1010,21 +1011,22 @@ static void update_layout(HWND window)
 
 static const wchar_t *page_title(int page)
 {
-    static const wchar_t *titles[] = {
-        L"Runner fleet", L"Active jobs", L"History", L"Local Windows health"
-    };
-    return titles[page >= 0 && page < 4 ? page : 0];
+    static wchar_t value[128];
+    const RunnerUiPageSpec *ui_page =
+        runner_ui_page((RunnerUiPageId)page);
+    utf8_to_wide(
+        runner_ui_page_title(ui_page, RUNNER_UI_PLATFORM_WINDOWS),
+        value, sizeof(value) / sizeof(value[0]));
+    return value;
 }
 
 static const wchar_t *page_subtitle(int page)
 {
-    static const wchar_t *subtitles[] = {
-        L"CAPACITY  •  WORKLOAD  •  UTILISATION",
-        L"WORKFLOW  •  JOB  •  RUNNER",
-        L"SESSION  •  EVENTS  •  DETAIL",
-        L"SERVICES  •  DIAGNOSTICS  •  STATE"
-    };
-    return subtitles[page >= 0 && page < 4 ? page : 0];
+    static wchar_t value[160];
+    const RunnerUiPageSpec *ui_page =
+        runner_ui_page((RunnerUiPageId)page);
+    utf8_to_wide(ui_page->subtitle, value, sizeof(value) / sizeof(value[0]));
+    return value;
 }
 
 static void draw_header(HDC dc)
@@ -1043,11 +1045,15 @@ static void draw_header(HDC dc)
     RECT icon = {sx(20), sx(12), sx(54), sx(48)};
     draw_image(dc, &g_nav_images[0], &icon);
 
+    wchar_t product_title[96];
+    wchar_t product_family[96];
+    utf8_to_wide(runner_ui_product_title(), product_title, 96U);
+    utf8_to_wide(runner_ui_product_family(), product_family, 96U);
     RECT title = {sx(70), sx(8), sx(370), sx(34)};
-    draw_text(dc, L"Runner Monitor", title, g_font_brand,
+    draw_text(dc, product_title, title, g_font_brand,
               rgb(g_palette.title_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     RECT subtitle = {sx(70), sx(32), sx(370), sx(52)};
-    draw_text(dc, L"Infiltrator OS", subtitle, g_font_small,
+    draw_text(dc, product_family, subtitle, g_font_small,
               rgb(g_palette.muted_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
     fill_round_rect(dc, g_settings_rect,
@@ -1070,10 +1076,13 @@ static void draw_navigation(HDC dc, RECT content)
     RECT nav = {content.left, content.top, g_workspace_rect.left, content.bottom};
     fill_round_rect(dc, nav, rgb(g_palette.panel_rgb),
                     rgb(g_palette.connection_border_rgb), sx(12));
-    const wchar_t *labels[4] = {
-        L"Runners", L"Active jobs", L"History", L"Local Windows health"
-    };
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < RUNNER_UI_PAGE_COUNT; ++i) {
+        const RunnerUiPageSpec *ui_page =
+            runner_ui_page((RunnerUiPageId)i);
+        wchar_t nav_label[128];
+        utf8_to_wide(
+            runner_ui_page_nav_label(ui_page, RUNNER_UI_PLATFORM_WINDOWS),
+            nav_label, sizeof(nav_label) / sizeof(nav_label[0]));
         RECT item = g_nav_rects[i];
         if (i == g_page) {
             fill_round_rect(dc, item, rgb(g_palette.selection_background_rgb),
@@ -1084,7 +1093,7 @@ static void draw_navigation(HDC dc, RECT content)
         draw_image(dc, &g_nav_images[i], &image_rect);
         RECT text_rect = {item.left + sx(54), item.top,
                           item.right - sx(6), item.bottom};
-        draw_text(dc, labels[i], text_rect, g_font_bold,
+        draw_text(dc, nav_label, text_rect, g_font_bold,
                   i == g_page ? rgb(g_palette.selection_foreground_rgb)
                               : rgb(g_palette.text_rgb),
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -1429,7 +1438,7 @@ static void paint_ui(HDC dc)
 
 static void set_page(int page)
 {
-    if (page < 0 || page > 3 || page == g_page) return;
+    if (page < 0 || page >= RUNNER_UI_PAGE_COUNT || page == g_page) return;
     g_page = page;
     g_selected_row = -1;
     g_card_scroll_y = 0;
@@ -1749,7 +1758,7 @@ static void handle_click(POINT point)
         ShowWindow(g_main, IsZoomed(g_main) ? SW_RESTORE : SW_MAXIMIZE); return;
     }
     if (pt_in_rect(&g_close_rect, point)) { PostMessageW(g_main, WM_CLOSE, 0, 0); return; }
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < RUNNER_UI_PAGE_COUNT; ++i) {
         if (pt_in_rect(&g_nav_rects[i], point)) { set_page(i); return; }
     }
     if (g_page == 0 && pt_in_rect(&g_cards_toggle_rect, point)) { set_table_view(false); return; }
@@ -1956,6 +1965,8 @@ static bool resource_exists(int resource_id)
 
 static int self_test(void)
 {
+    char ui_error[256];
+    if (!runner_ui_contract_validate(ui_error, sizeof(ui_error))) return 1;
     const InfiltratrThemePalette *day =
         infiltratr_theme_resolve(INFILTRATR_THEME_DAY, false);
     const InfiltratrThemePalette *night =
