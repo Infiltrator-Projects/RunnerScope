@@ -101,27 +101,12 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Build and run native ARM64 qualification binary
+      - name: Build x64 release executable on self-hosted pool
         shell: powershell
         run: |
-          # The self-hosted Windows pool is ARM64. Run the behavioural/resource
-          # self-test as a native ARM64 process so Windows does not block an x64
-          # executable under this runner service account.
-          cmake -S . -B build-arm64 -A ARM64
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build build-arm64 --config Release --parallel
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ctest --test-dir build-arm64 -C Release --output-on-failure
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & ".\build-arm64\Release\Runner-Monitor.exe" --self-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Build x64 release executable
-        shell: powershell
-        run: |
-          # The distributed Windows artifact remains x64. Cross-build it on the
-          # ARM64 runner, then verify its PE machine type rather than attempting
-          # to execute an x64 process in the restricted runner service context.
+          # This ARM64 runner is permitted to compile but its service account is
+          # blocked by Windows from launching freshly built executables. Runtime
+          # qualification therefore runs separately on a clean hosted x64 VM.
           cmake -S . -B build-x64 -A x64
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build build-x64 --config Release --parallel
@@ -147,6 +132,32 @@ jobs:
           name: runner-monitor-windows
           path: dist/Runner-Monitor-Windows.exe
           if-no-files-found: error
+
+  windows-hosted-runtime:
+    name: Hosted Windows x64 runtime qualification
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Check out exact source and pinned Common
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Build and execute Windows x64 self-test
+        shell: powershell
+        run: |
+          cmake -S . -B build -A x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ".\build\Release\Runner-Monitor.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   clean-package-install:
     name: Hosted clean native Debian build / install
