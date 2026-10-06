@@ -39,6 +39,16 @@ Native renderer qualification remains separate. Linux must prove the GTK rendere
 
 Once a migration slice is complete, CI must reject new application-level direct GTK/Win32 layout composition outside the renderer/platform boundary for that slice. This prevents the old duplicated-layout architecture from quietly returning.
 
+## 1.3.5 shared runner-card/detail slice
+
+Version 1.3.5 moves the Runners card presentation and selected-runner detail composition through the toolkit-neutral renderer seam. `runner_ui_render_runner_cards()` now emits the visible runner sequence, normalized state/tone, selection, utilization, job-visibility policy and empty/loading state once. `runner_ui_prepare_runner_selection()` owns the complete selected-runner text shape used by both platforms.
+
+GTK retains its native FlowBox/card widgets and Win32 retains native GDI drawing. Their adapters now consume the same shared card/detail specification rather than separately deciding state wording, selection detail structure or empty-state copy. Stable `page.runners.cards` and `page.runners.cards.runner` component IDs make the migrated surface explicit in the UI contract.
+
+The toolkit-free renderer test verifies Idle/Running/Offline projection, friendly state labels, selected state, job visibility, utilization clamping, selected-runner primary/secondary detail formatting, filtered-empty/loading messages and invalid/incomplete renderer rejection. Normal Linux native, self-hosted Windows build, hosted Windows runtime and clean Debian package/install/smoke qualification remain required gates.
+
+Windows still does not have the Linux repository/job correlation provider, so those selected-runner fields deliberately remain unavailable instead of being fabricated. Cards/Table switching and search/filter control composition remain the next separate unification slice.
+
 ## 1.3.4 shared workspace-summary slice
 
 Version 1.3.4 moves the workspace hero and four-metric summary through the toolkit-neutral renderer seam. `runner_ui_render_workspace_summary()` now emits the selected page identity, platform-specific title, subtitle, navigation/hero artwork roles and the ordered four metric caption/value pairs once. GTK and Win32 translate that same summary into native widgets or native GDI drawing.
