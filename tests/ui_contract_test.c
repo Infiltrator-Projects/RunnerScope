@@ -373,6 +373,173 @@ static int verify_workspace_summary_renderer(void)
     return 0;
 }
 
+typedef struct {
+    size_t begin_count;
+    size_t expected_items;
+    size_t card_count;
+    size_t empty_count;
+    size_t selection_count;
+    size_t end_count;
+    RunnerUiRunnerTone tones[4];
+    bool selected[4];
+    bool show_job[4];
+    double fractions[4];
+    char state_labels[4][64];
+    char empty_message[128];
+    char selection_eyebrow[64];
+    char selection_title[128];
+    char selection_primary[512];
+    char selection_secondary[1024];
+} RunnerCardsRecorder;
+
+static bool record_begin_runner_cards(void *context, size_t item_count)
+{
+    RunnerCardsRecorder *recorder = context;
+    if (!recorder) return false;
+    recorder->begin_count++;
+    recorder->expected_items = item_count;
+    return true;
+}
+
+static bool record_runner_card(
+    void *context, size_t index, const RunnerUiRunnerCardSpec *card)
+{
+    RunnerCardsRecorder *recorder = context;
+    if (!recorder || !card || index >= 4U || recorder->card_count != index)
+        return false;
+    recorder->tones[index] = card->tone;
+    recorder->selected[index] = card->selected;
+    recorder->show_job[index] = card->show_job;
+    recorder->fractions[index] = card->busy_fraction;
+    (void)snprintf(recorder->state_labels[index],
+                   sizeof(recorder->state_labels[index]),
+                   "%s", card->state_label);
+    recorder->card_count++;
+    return true;
+}
+
+static bool record_runner_cards_empty(void *context, const char *message)
+{
+    RunnerCardsRecorder *recorder = context;
+    if (!recorder || !message) return false;
+    recorder->empty_count++;
+    (void)snprintf(recorder->empty_message,
+                   sizeof(recorder->empty_message), "%s", message);
+    return true;
+}
+
+static bool record_runner_selection(
+    void *context, const RunnerUiRunnerSelectionSpec *selection)
+{
+    RunnerCardsRecorder *recorder = context;
+    if (!recorder || !selection) return false;
+    recorder->selection_count++;
+    (void)snprintf(recorder->selection_eyebrow,
+                   sizeof(recorder->selection_eyebrow),
+                   "%s", selection->eyebrow);
+    (void)snprintf(recorder->selection_title,
+                   sizeof(recorder->selection_title),
+                   "%s", selection->title);
+    (void)snprintf(recorder->selection_primary,
+                   sizeof(recorder->selection_primary),
+                   "%s", selection->primary);
+    (void)snprintf(recorder->selection_secondary,
+                   sizeof(recorder->selection_secondary),
+                   "%s", selection->secondary);
+    return true;
+}
+
+static bool record_end_runner_cards(void *context)
+{
+    RunnerCardsRecorder *recorder = context;
+    if (!recorder) return false;
+    recorder->end_count++;
+    return true;
+}
+
+static int verify_runner_cards_renderer(void)
+{
+    const RunnerUiRunnerItem items[] = {
+        {
+            .name = "alpha", .os = "Linux", .state = "IDLE",
+            .repo = "—", .job = "—", .runtime = "—",
+            .state_for = "8m", .jobs = "0", .busy_pct = "10.0%",
+            .labels = "self-hosted,linux", .busy_fraction = 0.10
+        },
+        {
+            .name = "bravo", .os = "Windows", .state = "RUNNING",
+            .repo = "Example/Project", .job = "Build", .runtime = "2m",
+            .state_for = "3m", .jobs = "2", .busy_pct = "25.0%",
+            .labels = "self-hosted,windows", .busy_fraction = 0.25
+        },
+        {
+            .name = "charlie", .os = "Linux", .state = "OFFLINE",
+            .repo = "—", .job = "—", .runtime = "—",
+            .state_for = "1h", .jobs = "1", .busy_pct = "150.0%",
+            .labels = "self-hosted", .busy_fraction = 1.50
+        }
+    };
+    RunnerCardsRecorder recorder = {0};
+    RunnerUiRenderer renderer = {0};
+    renderer.context = &recorder;
+    renderer.begin_runner_cards = record_begin_runner_cards;
+    renderer.runner_card = record_runner_card;
+    renderer.runner_cards_empty = record_runner_cards_empty;
+    renderer.runner_selection = record_runner_selection;
+    renderer.end_runner_cards = record_end_runner_cards;
+    RunnerUiRunnerCardsState state = {
+        items, 3U, 1, false, false
+    };
+    if (!runner_ui_render_runner_cards(&renderer, &state)) return 1;
+    if (recorder.begin_count != 1U || recorder.expected_items != 3U ||
+        recorder.card_count != 3U || recorder.empty_count != 0U ||
+        recorder.selection_count != 1U || recorder.end_count != 1U)
+        return 2;
+    if (recorder.tones[0] != RUNNER_UI_RUNNER_IDLE ||
+        recorder.tones[1] != RUNNER_UI_RUNNER_RUNNING ||
+        recorder.tones[2] != RUNNER_UI_RUNNER_OFFLINE)
+        return 3;
+    if (strcmp(recorder.state_labels[0], "● Idle") != 0 ||
+        strcmp(recorder.state_labels[1], "● Running") != 0 ||
+        strcmp(recorder.state_labels[2], "● Offline") != 0)
+        return 4;
+    if (recorder.show_job[0] || !recorder.show_job[1] ||
+        recorder.show_job[2] || !recorder.selected[1])
+        return 5;
+    if (recorder.fractions[1] != 0.25 || recorder.fractions[2] != 1.0)
+        return 6;
+    if (strcmp(recorder.selection_eyebrow, "Selected runner") != 0 ||
+        strcmp(recorder.selection_title, "bravo") != 0 ||
+        strstr(recorder.selection_primary, "RUNNING for 3m") == NULL ||
+        strstr(recorder.selection_primary, "2 jobs") == NULL ||
+        strstr(recorder.selection_primary, "25.0% session utilisation") == NULL ||
+        strstr(recorder.selection_secondary, "Repository: Example/Project") == NULL ||
+        strstr(recorder.selection_secondary, "Job: Build") == NULL ||
+        strstr(recorder.selection_secondary, "Labels: self-hosted,windows") == NULL)
+        return 7;
+
+    RunnerCardsRecorder filtered = {0};
+    renderer.context = &filtered;
+    RunnerUiRunnerCardsState empty = {NULL, 0U, -1, false, true};
+    if (!runner_ui_render_runner_cards(&renderer, &empty)) return 8;
+    if (filtered.card_count != 0U || filtered.empty_count != 1U ||
+        strcmp(filtered.empty_message, "No runners match this filter.") != 0)
+        return 9;
+
+    RunnerCardsRecorder loading = {0};
+    renderer.context = &loading;
+    empty.refreshing = true;
+    if (!runner_ui_render_runner_cards(&renderer, &empty)) return 10;
+    if (strcmp(loading.empty_message, "Loading runners…") != 0) return 11;
+
+    state.selected_index = 3;
+    if (runner_ui_render_runner_cards(&renderer, &state)) return 12;
+    RunnerUiRenderer incomplete = {0};
+    state.selected_index = -1;
+    if (runner_ui_render_runner_cards(&incomplete, &state)) return 13;
+    return 0;
+}
+
 static int verify_page_transition_policy(void)
 {
     RunnerUiPageTransition transition;
@@ -468,7 +635,8 @@ int main(void)
         "shell", "shell.header", "shell.navigation", "shell.workspace",
         "shell.workspace.hero", "shell.workspace.metrics",
         "shell.workspace.toolbar", "shell.workspace.toolbar.search",
-        "shell.workspace.page-host", "page.runners", "page.active-jobs",
+        "shell.workspace.page-host", "page.runners", "page.runners.cards",
+        "page.runners.cards.runner", "page.active-jobs",
         "page.history", "page.local-health", "shell.workspace.selection",
         "shell.footer", "shell.footer.context-actions",
         "shell.footer.general-actions", "shell.footer.status"
@@ -492,7 +660,8 @@ int main(void)
     if (verify_chrome_renderer() != 0) return 16;
     if (verify_page_transition_policy() != 0) return 17;
     if (verify_workspace_summary_renderer() != 0) return 18;
+    if (verify_runner_cards_renderer() != 0) return 19;
 
-    puts("Runner Monitor shared UI contract, navigation, page transitions, workspace summary and shell chrome renderers passed.");
+    puts("Runner Monitor shared UI contract, navigation, page transitions, workspace summary, runner cards/details and shell chrome renderers passed.");
     return 0;
 }

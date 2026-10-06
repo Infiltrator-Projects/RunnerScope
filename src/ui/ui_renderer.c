@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ui_renderer.h"
 
+#include <stdio.h>
+#include <string.h>
+
 typedef struct {
     RunnerUiChromeActionId id;
     const char *label;
@@ -101,6 +104,118 @@ bool runner_ui_render_workspace_summary(
             return false;
 
     return renderer->end_workspace_summary(renderer->context);
+}
+
+
+static const char *runner_ui_text(const char *value)
+{
+    return value && value[0] ? value : "—";
+}
+
+static bool runner_ui_meaningful(const char *value)
+{
+    return value && value[0] && strcmp(value, "—") != 0;
+}
+
+bool runner_ui_prepare_runner_card(const RunnerUiRunnerItem *item,
+                                   bool selected,
+                                   RunnerUiRunnerCardSpec *card)
+{
+    if (!item || !card) return false;
+    memset(card, 0, sizeof(*card));
+    card->item = item;
+    card->selected = selected;
+    card->busy_fraction = item->busy_fraction;
+    if (card->busy_fraction < 0.0) card->busy_fraction = 0.0;
+    if (card->busy_fraction > 1.0) card->busy_fraction = 1.0;
+
+    if (item->state && strcmp(item->state, "RUNNING") == 0) {
+        card->tone = RUNNER_UI_RUNNER_RUNNING;
+        card->state_label = "● Running";
+    } else if (item->state && strcmp(item->state, "IDLE") == 0) {
+        card->tone = RUNNER_UI_RUNNER_IDLE;
+        card->state_label = "● Idle";
+    } else if (item->state && strcmp(item->state, "OFFLINE") == 0) {
+        card->tone = RUNNER_UI_RUNNER_OFFLINE;
+        card->state_label = "● Offline";
+    } else {
+        card->tone = RUNNER_UI_RUNNER_UNKNOWN;
+        card->state_label = "● Unknown";
+    }
+    card->show_job = card->tone == RUNNER_UI_RUNNER_RUNNING &&
+                     runner_ui_meaningful(item->job);
+    return true;
+}
+
+bool runner_ui_prepare_runner_selection(
+    const RunnerUiRunnerItem *item,
+    RunnerUiRunnerSelectionSpec *selection)
+{
+    if (!item || !selection) return false;
+    memset(selection, 0, sizeof(*selection));
+    selection->eyebrow = "Selected runner";
+    selection->title = runner_ui_text(item->name);
+    (void)snprintf(
+        selection->primary, sizeof(selection->primary),
+        "%s  •  %s for %s  •  %s jobs  •  %s session utilisation",
+        runner_ui_text(item->os), runner_ui_text(item->state),
+        runner_ui_text(item->state_for), runner_ui_text(item->jobs),
+        runner_ui_text(item->busy_pct));
+    (void)snprintf(
+        selection->secondary, sizeof(selection->secondary),
+        "Repository: %s  •  Job: %s  •  Runtime: %s\nLabels: %s",
+        runner_ui_text(item->repo), runner_ui_text(item->job),
+        runner_ui_text(item->runtime), runner_ui_text(item->labels));
+    selection->primary[sizeof(selection->primary) - 1U] = '\0';
+    selection->secondary[sizeof(selection->secondary) - 1U] = '\0';
+    return true;
+}
+
+bool runner_ui_render_runner_cards(const RunnerUiRenderer *renderer,
+                                   const RunnerUiRunnerCardsState *state)
+{
+    if (!renderer || !renderer->begin_runner_cards || !renderer->runner_card ||
+        !renderer->runner_cards_empty || !renderer->runner_selection ||
+        !renderer->end_runner_cards || !state)
+        return false;
+    if (state->item_count != 0U && !state->items) return false;
+    if (state->selected_index < -1 ||
+        (state->selected_index >= 0 &&
+         (size_t)state->selected_index >= state->item_count))
+        return false;
+    if (!renderer->begin_runner_cards(renderer->context, state->item_count))
+        return false;
+
+    if (state->item_count == 0U) {
+        const char *message = state->refreshing
+            ? "Loading runners…"
+            : state->filter_active
+                ? "No runners match this filter."
+                : "No runners detected.";
+        if (!renderer->runner_cards_empty(renderer->context, message))
+            return false;
+        return renderer->end_runner_cards(renderer->context);
+    }
+
+    for (size_t i = 0U; i < state->item_count; ++i) {
+        RunnerUiRunnerCardSpec card;
+        if (!runner_ui_prepare_runner_card(
+                &state->items[i], (ptrdiff_t)i == state->selected_index, &card))
+            return false;
+        if (!renderer->runner_card(renderer->context, i, &card))
+            return false;
+    }
+
+    if (state->selected_index >= 0) {
+        RunnerUiRunnerSelectionSpec selection;
+        if (!runner_ui_prepare_runner_selection(
+                &state->items[state->selected_index], &selection))
+            return false;
+        if (!renderer->runner_selection(renderer->context, &selection))
+            return false;
+    }
+
+    return renderer->end_runner_cards(renderer->context);
 }
 
 bool runner_ui_render_footer(const RunnerUiRenderer *renderer,

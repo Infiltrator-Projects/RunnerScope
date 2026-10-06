@@ -989,7 +989,7 @@ static void update_layout(HWND window)
     int search_x = workspace_right - search_width;
     MoveWindow(g_search, search_x, toolbar_top + sx(9), search_width, sx(34), TRUE);
 
-    int selection_height = g_selected_row >= 0 && g_page == 0 ? sx(76) : 0;
+    int selection_height = g_selected_row >= 0 && g_page == 0 ? sx(112) : 0;
     SetRect(&g_selection_rect, workspace_left,
             g_workspace_rect.bottom - selection_height - sx(8),
             workspace_right, g_workspace_rect.bottom - sx(8));
@@ -1343,37 +1343,82 @@ static void draw_workspace_header(HDC dc)
         &renderer, RUNNER_UI_PLATFORM_WINDOWS, &summary);
 }
 
-static COLORREF state_color(const char *state)
+typedef struct {
+    char state_for[64];
+    char jobs[32];
+    char busy_pct[32];
+} WinRunnerUiStorage;
+
+static void prepare_win_runner_item(const RunnerRow *row,
+                                    WinRunnerUiStorage *storage,
+                                    RunnerUiRunnerItem *item)
 {
-    if (state && strcmp(state, "RUNNING") == 0) return rgb(g_palette.success_rgb);
-    if (state && strcmp(state, "IDLE") == 0) return rgb(g_palette.info_rgb);
+    ZeroMemory(storage, sizeof(*storage));
+    ZeroMemory(item, sizeof(*item));
+    strcpy_s(storage->state_for, sizeof(storage->state_for), "—");
+    strcpy_s(storage->jobs, sizeof(storage->jobs), "0");
+    strcpy_s(storage->busy_pct, sizeof(storage->busy_pct), "0.0%");
+    double fraction = 0.0;
+    RunnerSession *session = session_for(row->name, false);
+    if (session) {
+        wchar_t state_for_w[64] = L"—";
+        format_duration(GetTickCount64() - session->state_since_ms,
+                        state_for_w, 64U);
+        (void)wide_to_utf8(state_for_w, storage->state_for,
+                           sizeof(storage->state_for));
+        (void)snprintf(storage->jobs, sizeof(storage->jobs),
+                       "%u", session->jobs);
+        fraction = session_busy_fraction(session);
+        (void)snprintf(storage->busy_pct, sizeof(storage->busy_pct),
+                       "%.1f%%", fraction * 100.0);
+    }
+    item->name = row->name;
+    item->os = row->os;
+    item->state = row->state;
+    item->repo = "—";
+    item->job = "—";
+    item->runtime = strcmp(row->state, "RUNNING") == 0
+        ? storage->state_for : "—";
+    item->state_for = storage->state_for;
+    item->jobs = storage->jobs;
+    item->busy_pct = storage->busy_pct;
+    item->labels = row->labels[0] ? row->labels : "—";
+    item->busy_fraction = fraction;
+}
+
+static COLORREF runner_tone_color(RunnerUiRunnerTone tone)
+{
+    if (tone == RUNNER_UI_RUNNER_RUNNING) return rgb(g_palette.success_rgb);
+    if (tone == RUNNER_UI_RUNNER_IDLE) return rgb(g_palette.info_rgb);
     return rgb(g_palette.fault_rgb);
 }
 
-static void draw_runner_card(HDC dc, const RunnerRow *row, size_t source_index,
+static void draw_runner_card(HDC dc, const RunnerUiRunnerCardSpec *spec,
                              RECT card)
 {
-    bool selected = g_selected_row == (int)source_index;
-    COLORREF border = selected ? rgb(g_palette.neutral_accent_rgb)
-                               : rgb(g_palette.border_rgb);
+    const RunnerUiRunnerItem *item = spec->item;
+    COLORREF border = spec->selected ? rgb(g_palette.neutral_accent_rgb)
+                                     : rgb(g_palette.border_rgb);
     fill_round_rect(dc, card,
-                    selected ? mix_color(g_palette.card_rgb,
-                                         g_palette.neutral_accent_rgb, 10U)
-                             : rgb(g_palette.card_rgb),
+                    spec->selected
+                        ? mix_color(g_palette.card_rgb,
+                                    g_palette.neutral_accent_rgb, 10U)
+                        : rgb(g_palette.card_rgb),
                     border, sx(12));
     RECT stripe = {card.left + sx(1), card.top + sx(1),
                    card.left + sx(6), card.bottom - sx(1)};
-    fill_rect_color(dc, stripe, state_color(row->state));
+    fill_rect_color(dc, stripe, runner_tone_color(spec->tone));
 
     RECT icon = {card.left + sx(16), card.top + sx(16),
                  card.left + sx(56), card.top + sx(56)};
     draw_image(dc, &g_nav_images[0], &icon);
 
-    wchar_t name[192], os[64], state[32], labels[512];
-    utf8_to_wide(row->name, name, 192U);
-    utf8_to_wide(row->os, os, 64U);
-    utf8_to_wide(row->state, state, 32U);
-    utf8_to_wide(row->labels, labels, 512U);
+    wchar_t name[192], os[64], state[64], labels[512], job[256];
+    utf8_to_wide(item->name, name, 192U);
+    utf8_to_wide(item->os, os, 64U);
+    utf8_to_wide(spec->state_label, state, 64U);
+    utf8_to_wide(item->labels, labels, 512U);
+    utf8_to_wide(item->job, job, 256U);
 
     RECT name_rect = {card.left + sx(66), card.top + sx(13),
                       card.right - sx(12), card.top + sx(38)};
@@ -1385,43 +1430,48 @@ static void draw_runner_card(HDC dc, const RunnerRow *row, size_t source_index,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
     RECT state_rect = {card.left + sx(16), card.top + sx(67),
-                       card.left + sx(105), card.top + sx(93)};
-    uint32_t accent = strcmp(row->state, "RUNNING") == 0 ? g_palette.success_rgb :
-                      strcmp(row->state, "IDLE") == 0 ? g_palette.info_rgb :
-                      g_palette.fault_rgb;
+                       card.left + sx(116), card.top + sx(93)};
+    uint32_t accent = spec->tone == RUNNER_UI_RUNNER_RUNNING
+        ? g_palette.success_rgb
+        : spec->tone == RUNNER_UI_RUNNER_IDLE
+            ? g_palette.info_rgb : g_palette.fault_rgb;
     fill_round_rect(dc, state_rect,
                     mix_color(g_palette.surface_rgb, accent, 18U),
-                    state_color(row->state), sx(8));
+                    runner_tone_color(spec->tone), sx(8));
     draw_text(dc, state, state_rect, g_font_bold, rgb(g_palette.text_rgb),
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-    RunnerSession *session = session_for(row->name, false);
-    wchar_t state_for[64] = L"—";
-    wchar_t jobs[48] = L"Jobs 0";
-    wchar_t busy[64] = L"Busy 0.0%";
-    double fraction = 0.0;
-    if (session) {
-        format_duration(GetTickCount64() - session->state_since_ms, state_for, 64U);
-        _snwprintf_s(jobs, 48U, _TRUNCATE, L"Jobs %u", session->jobs);
-        fraction = session_busy_fraction(session);
-        _snwprintf_s(busy, 64U, _TRUNCATE, L"Busy %.1f%%", fraction * 100.0);
-    }
-    RECT state_for_rect = {card.left + sx(116), card.top + sx(67),
+    wchar_t state_for[64], jobs[64], busy[64];
+    utf8_to_wide(item->state_for, state_for, 64U);
+    wchar_t jobs_value[32], busy_value[32];
+    utf8_to_wide(item->jobs, jobs_value, 32U);
+    utf8_to_wide(item->busy_pct, busy_value, 32U);
+    _snwprintf_s(jobs, 64U, _TRUNCATE, L"Jobs %ls", jobs_value);
+    _snwprintf_s(busy, 64U, _TRUNCATE, L"Busy %ls", busy_value);
+    RECT state_for_rect = {card.left + sx(126), card.top + sx(67),
                            card.right - sx(14), card.top + sx(91)};
     draw_text(dc, state_for, state_for_rect, g_font_small,
               rgb(g_palette.muted_rgb), DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
+    wchar_t detail[800];
+    if (spec->show_job)
+        _snwprintf_s(detail, 800U, _TRUNCATE,
+                     L"Job: %ls  •  %ls", job, labels);
+    else
+        wcsncpy_s(detail, 800U, labels[0] ? labels : L"No labels", _TRUNCATE);
     RECT labels_rect = {card.left + sx(16), card.top + sx(99),
                         card.right - sx(16), card.top + sx(121)};
-    draw_text(dc, labels[0] ? labels : L"No labels", labels_rect, g_font_small,
+    draw_text(dc, detail, labels_rect, g_font_small,
               rgb(g_palette.detail_label_rgb),
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
     RECT bar = {card.left + sx(16), card.bottom - sx(31),
                 card.right - sx(16), card.bottom - sx(22)};
-    fill_round_rect(dc, bar, rgb(g_palette.input_rgb), rgb(g_palette.border_rgb), sx(5));
+    fill_round_rect(dc, bar, rgb(g_palette.input_rgb),
+                    rgb(g_palette.border_rgb), sx(5));
     RECT progress = bar;
-    progress.right = progress.left + (int)((double)(bar.right - bar.left) * fraction);
+    progress.right = progress.left +
+        (int)((double)(bar.right - bar.left) * spec->busy_fraction);
     if (progress.right > progress.left)
         fill_round_rect(dc, progress, rgb(g_palette.operation_rgb),
                         rgb(g_palette.operation_rgb), sx(5));
@@ -1472,72 +1522,154 @@ static int max_card_scroll(void)
     return content_height > viewport ? content_height - viewport : 0;
 }
 
+typedef struct {
+    HDC dc;
+    bool draw_cards;
+} WinRunnerCardsRendererContext;
+
+static bool win_renderer_begin_runner_cards(void *context, size_t item_count)
+{
+    (void)item_count;
+    WinRunnerCardsRendererContext *renderer = context;
+    return renderer && renderer->dc;
+}
+
+static bool win_renderer_runner_card(
+    void *context, size_t index, const RunnerUiRunnerCardSpec *spec)
+{
+    WinRunnerCardsRendererContext *renderer = context;
+    if (!renderer || !renderer->dc || !spec) return false;
+    if (!renderer->draw_cards) return true;
+    RECT card = card_rect_for_visible_index(index);
+    if (card.bottom < g_cards_area_rect.top || card.top > g_cards_area_rect.bottom)
+        return true;
+    int saved = SaveDC(renderer->dc);
+    IntersectClipRect(renderer->dc, g_cards_area_rect.left, g_cards_area_rect.top,
+                      g_cards_area_rect.right, g_cards_area_rect.bottom);
+    draw_runner_card(renderer->dc, spec, card);
+    RestoreDC(renderer->dc, saved);
+    return true;
+}
+
+static bool win_renderer_runner_cards_empty(void *context, const char *message)
+{
+    WinRunnerCardsRendererContext *renderer = context;
+    if (!renderer || !renderer->dc || !message) return false;
+    if (!renderer->draw_cards) return true;
+    fill_round_rect(renderer->dc, g_cards_area_rect, rgb(g_palette.surface_rgb),
+                    rgb(g_palette.border_rgb), sx(10));
+    wchar_t text_value[256];
+    utf8_to_wide(message, text_value, 256U);
+    RECT text = g_cards_area_rect;
+    draw_text(renderer->dc, text_value, text, g_font_bold,
+              rgb(g_palette.muted_rgb),
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    return true;
+}
+
+static bool win_renderer_runner_selection(
+    void *context, const RunnerUiRunnerSelectionSpec *selection)
+{
+    WinRunnerCardsRendererContext *renderer = context;
+    if (!renderer || !renderer->dc || !selection) return false;
+    fill_round_rect(renderer->dc, g_selection_rect,
+                    mix_color(g_palette.surface_rgb,
+                              g_palette.neutral_accent_rgb, 8U),
+                    rgb(g_palette.neutral_accent_rgb), sx(10));
+    wchar_t eyebrow[64], title_text[192], primary[768], secondary[1400];
+    utf8_to_wide(selection->eyebrow, eyebrow, 64U);
+    utf8_to_wide(selection->title, title_text, 192U);
+    utf8_to_wide(selection->primary, primary, 768U);
+    utf8_to_wide(selection->secondary, secondary, 1400U);
+    RECT eyebrow_rect = {
+        g_selection_rect.left + sx(16), g_selection_rect.top + sx(6),
+        g_selection_rect.right - sx(16), g_selection_rect.top + sx(24)
+    };
+    draw_text(renderer->dc, eyebrow, eyebrow_rect, g_font_small,
+              rgb(g_palette.kicker_rgb),
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    RECT title_rect = {
+        eyebrow_rect.left, g_selection_rect.top + sx(22),
+        eyebrow_rect.right, g_selection_rect.top + sx(46)
+    };
+    draw_text(renderer->dc, title_text, title_rect, g_font_bold,
+              rgb(g_palette.title_rgb),
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    RECT primary_rect = {
+        eyebrow_rect.left, g_selection_rect.top + sx(45),
+        eyebrow_rect.right, g_selection_rect.top + sx(68)
+    };
+    draw_text(renderer->dc, primary, primary_rect, g_font_small,
+              rgb(g_palette.text_rgb),
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    RECT secondary_rect = {
+        eyebrow_rect.left, g_selection_rect.top + sx(68),
+        eyebrow_rect.right, g_selection_rect.bottom - sx(6)
+    };
+    draw_text(renderer->dc, secondary, secondary_rect, g_font_small,
+              rgb(g_palette.muted_rgb), DT_LEFT | DT_WORDBREAK);
+    return true;
+}
+
+static bool win_renderer_end_runner_cards(void *context)
+{
+    return context != NULL;
+}
+
 static void draw_cards(HDC dc)
 {
-    int saved = SaveDC(dc);
-    IntersectClipRect(dc, g_cards_area_rect.left, g_cards_area_rect.top,
-                     g_cards_area_rect.right, g_cards_area_rect.bottom);
-    if (g_page != 0) {
+    if (g_page != RUNNER_UI_PAGE_RUNNERS) {
         fill_round_rect(dc, g_cards_area_rect, rgb(g_palette.surface_rgb),
                         rgb(g_palette.border_rgb), sx(10));
         RECT text = g_cards_area_rect;
         text.left += sx(30);
         text.right -= sx(30);
         const wchar_t *message =
-            g_page == 1 ? L"Active Jobs uses the same Windows parity workspace." :
-            g_page == 2 ? L"History uses the same Windows parity workspace." :
-                          L"Local Windows health uses the same Windows parity workspace.";
+            g_page == RUNNER_UI_PAGE_ACTIVE_JOBS
+                ? L"Active Jobs uses the same Windows parity workspace."
+                : g_page == RUNNER_UI_PAGE_HISTORY
+                    ? L"History uses the same Windows parity workspace."
+                    : L"Local Windows health uses the same Windows parity workspace.";
         draw_text(dc, message, text, g_font_bold, rgb(g_palette.muted_rgb),
                   DT_CENTER | DT_VCENTER | DT_WORDBREAK);
-        RestoreDC(dc, saved);
         return;
     }
 
-    size_t visible = visible_runner_count();
-    if (visible == 0U) {
-        fill_round_rect(dc, g_cards_area_rect, rgb(g_palette.surface_rgb),
-                        rgb(g_palette.border_rgb), sx(10));
-        RECT text = g_cards_area_rect;
-        draw_text(dc, g_refreshing ? L"Loading runners…" : L"No runners match the current view.",
-                  text, g_font_bold, rgb(g_palette.muted_rgb),
-                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        RestoreDC(dc, saved);
+    const size_t visible = visible_runner_count();
+    RunnerUiRunnerItem *items = visible
+        ? (RunnerUiRunnerItem *)calloc(visible, sizeof(*items)) : NULL;
+    WinRunnerUiStorage *storage = visible
+        ? (WinRunnerUiStorage *)calloc(visible, sizeof(*storage)) : NULL;
+    if (visible && (!items || !storage)) {
+        free(items);
+        free(storage);
         return;
     }
+
+    ptrdiff_t selected_index = -1;
     for (size_t i = 0U; i < visible; ++i) {
         size_t source_index = 0U;
         RunnerRow *row = visible_runner_at(i, &source_index);
-        RECT card = card_rect_for_visible_index(i);
-        if (card.bottom < g_cards_area_rect.top || card.top > g_cards_area_rect.bottom)
-            continue;
-        draw_runner_card(dc, row, source_index, card);
+        if (!row) continue;
+        prepare_win_runner_item(row, &storage[i], &items[i]);
+        if ((int)source_index == g_selected_row)
+            selected_index = (ptrdiff_t)i;
     }
-    RestoreDC(dc, saved);
-}
 
-static void draw_selection(HDC dc)
-{
-    if (g_selected_row < 0 || g_selected_row >= (int)g_row_count || g_page != 0)
-        return;
-    RunnerRow *row = &g_rows[g_selected_row];
-    fill_round_rect(dc, g_selection_rect,
-                    mix_color(g_palette.surface_rgb, g_palette.neutral_accent_rgb, 8U),
-                    rgb(g_palette.neutral_accent_rgb), sx(10));
-    wchar_t name[192], labels[512];
-    utf8_to_wide(row->name, name, 192U);
-    utf8_to_wide(row->labels, labels, 512U);
-    RECT title = {g_selection_rect.left + sx(16), g_selection_rect.top + sx(8),
-                  g_selection_rect.right - sx(16), g_selection_rect.top + sx(32)};
-    draw_text(dc, L"Selected runner", title, g_font_small,
-              rgb(g_palette.kicker_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    RECT primary = {title.left, g_selection_rect.top + sx(29),
-                    title.right, g_selection_rect.top + sx(53)};
-    draw_text(dc, name, primary, g_font_bold, rgb(g_palette.title_rgb),
-              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    RECT secondary = {title.left, g_selection_rect.top + sx(51),
-                      title.right, g_selection_rect.bottom - sx(5)};
-    draw_text(dc, labels[0] ? labels : L"No labels", secondary, g_font_small,
-              rgb(g_palette.muted_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    WinRunnerCardsRendererContext context = {dc, !g_table_view};
+    RunnerUiRenderer renderer = {0};
+    renderer.context = &context;
+    renderer.begin_runner_cards = win_renderer_begin_runner_cards;
+    renderer.runner_card = win_renderer_runner_card;
+    renderer.runner_cards_empty = win_renderer_runner_cards_empty;
+    renderer.runner_selection = win_renderer_runner_selection;
+    renderer.end_runner_cards = win_renderer_end_runner_cards;
+    RunnerUiRunnerCardsState state = {
+        items, visible, selected_index, g_refreshing, g_filter[0] != L'\0'
+    };
+    (void)runner_ui_render_runner_cards(&renderer, &state);
+    free(storage);
+    free(items);
 }
 
 static bool win_renderer_begin_footer(void *context)
@@ -1689,8 +1821,7 @@ static void paint_ui(HDC dc)
         draw_button(dc, g_table_toggle_rect, L"Table", g_table_view, false);
     }
 
-    if (!g_table_view || g_page != 0) draw_cards(dc);
-    draw_selection(dc);
+    draw_cards(dc);
     draw_footer(dc, client);
 }
 

@@ -81,6 +81,8 @@ static const RunnerUiComponentSpec k_components[] = {
     {"shell.workspace.toolbar.search", "shell.workspace.toolbar", RUNNER_UI_COMPONENT_SEARCH},
     {"shell.workspace.page-host", "shell.workspace", RUNNER_UI_COMPONENT_PAGE_HOST},
     {"page.runners", "shell.workspace.page-host", RUNNER_UI_COMPONENT_PAGE},
+    {"page.runners.cards", "page.runners", RUNNER_UI_COMPONENT_GRID},
+    {"page.runners.cards.runner", "page.runners.cards", RUNNER_UI_COMPONENT_CARD},
     {"page.active-jobs", "shell.workspace.page-host", RUNNER_UI_COMPONENT_PAGE},
     {"page.history", "shell.workspace.page-host", RUNNER_UI_COMPONENT_PAGE},
     {"page.local-health", "shell.workspace.page-host", RUNNER_UI_COMPONENT_PAGE},
