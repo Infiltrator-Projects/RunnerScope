@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.3.1 - 2026-10-06
+
+- Add the first true native-renderer adapter seam to the 1.3 shared UI architecture.
+- Emit the left navigation once from toolkit-neutral C, including page order, Local Health separator placement, selected-page state and platform-appropriate labels.
+- Make GTK and Win32 translate that same navigation contract into their own native controls/drawing instead of independently owning the product structure.
+- Add toolkit-free renderer tests proving the Linux and Windows projections receive the same navigation structure, with only the intentional Local Health platform label difference.
+- Keep header/footer, workspace composition, runner cards/tables and the remaining functional-parity work for later small 1.3.x migration slices.
+- Retain Common 1.19.38 and the full Linux/Windows/Debian qualification gates.
+
 ## 1.3.0 - 2026-10-06
 
 - Introduce the first toolkit-neutral Runner Monitor UI contract shared by the native GTK and Win32 products.
