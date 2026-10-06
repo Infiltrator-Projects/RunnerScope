@@ -1,3 +1,16 @@
+infiltrator-runner-monitor (1.3.3) unstable; urgency=medium
+
+  * Move page-transition policy into the toolkit-neutral shared UI layer.
+  * Make GTK and Win32 consume the same page-change/no-op, search/table
+    visibility, selection-clear and provider-refresh decisions.
+  * Keep GTK notebook switching and Win32 show/hide/repaint mechanics native.
+  * Add toolkit-free tests for Runners, Active Jobs, History and Local Health
+    transition semantics, including no-op and invalid-page handling.
+  * Complete the navigation/page-switch policy unification tranche while
+    retaining exact Infiltratr Common 1.19.38.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 06 Oct 2026 12:50:00 +1100
+
 infiltrator-runner-monitor (1.3.2) unstable; urgency=medium
 
   * Move the product header and general footer chrome behind the shared native-

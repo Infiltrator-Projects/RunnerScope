@@ -4,6 +4,14 @@
 
 No unreleased changes.
 
+## 1.3.3 - 2026-10-06
+
+- Move page-transition policy into one toolkit-neutral shared plan consumed by both native shells.
+- Unify real-change/no-op decisions, Runners search/table visibility, selection clearing and page-triggered Activity/Local Health refresh policy.
+- Keep actual GTK notebook switching and Win32 show/hide/repaint operations native to their platforms.
+- Add toolkit-free tests covering Runners, Active Jobs, History and Local Health transitions plus invalid/no-op cases.
+- Complete the navigation/page-switch policy tranche and retain Common 1.19.38.
+
 ## 1.3.2 - 2026-10-06
 
 - Move the product header and general footer chrome into the shared native-renderer translation layer.
