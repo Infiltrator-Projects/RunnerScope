@@ -93,3 +93,29 @@ bool runner_ui_render_footer(const RunnerUiRenderer *renderer,
     if (!renderer->footer_status(renderer->context, state)) return false;
     return renderer->end_footer(renderer->context);
 }
+
+bool runner_ui_plan_page_transition(RunnerUiPageId current_page,
+                                    RunnerUiPageId requested_page,
+                                    bool runners_running,
+                                    bool table_view,
+                                    RunnerUiPageTransition *transition)
+{
+    if (!transition || (int)current_page < 0 ||
+        current_page >= RUNNER_UI_PAGE_COUNT ||
+        (int)requested_page < 0 || requested_page >= RUNNER_UI_PAGE_COUNT)
+        return false;
+
+    transition->current_page = current_page;
+    transition->requested_page = requested_page;
+    transition->changed = current_page != requested_page;
+    transition->show_search = requested_page == RUNNER_UI_PAGE_RUNNERS;
+    transition->show_runner_table = transition->show_search && table_view;
+    transition->clear_selection = transition->changed;
+    transition->request_activity_refresh =
+        transition->changed &&
+        (requested_page == RUNNER_UI_PAGE_ACTIVE_JOBS ||
+         (requested_page == RUNNER_UI_PAGE_RUNNERS && runners_running));
+    transition->request_local_refresh =
+        transition->changed && requested_page == RUNNER_UI_PAGE_LOCAL_HEALTH;
+    return true;
+}

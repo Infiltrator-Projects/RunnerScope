@@ -28,6 +28,17 @@ typedef struct {
 } RunnerUiFooterState;
 
 typedef struct {
+    RunnerUiPageId current_page;
+    RunnerUiPageId requested_page;
+    bool changed;
+    bool show_search;
+    bool show_runner_table;
+    bool clear_selection;
+    bool request_activity_refresh;
+    bool request_local_refresh;
+} RunnerUiPageTransition;
+
+typedef struct {
     void *context;
 
     bool (*begin_header)(void *context,
@@ -68,5 +79,10 @@ bool runner_ui_render_navigation(const RunnerUiRenderer *renderer,
                                  RunnerUiPageId selected_page);
 bool runner_ui_render_footer(const RunnerUiRenderer *renderer,
                              const RunnerUiFooterState *state);
+bool runner_ui_plan_page_transition(RunnerUiPageId current_page,
+                                    RunnerUiPageId requested_page,
+                                    bool runners_running,
+                                    bool table_view,
+                                    RunnerUiPageTransition *transition);
 
 #endif
