@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.3.2 - 2026-10-06
+
+- Move the product header and general footer chrome into the shared native-renderer translation layer.
+- Emit product/family identity and the ordered Settings, Minimize, Maximize/Restore and Close header actions once from toolkit-neutral C.
+- Emit Export CSV, About and Refresh footer actions once, including the Refreshing state plus shared status/application/Common version slots.
+- Keep GTK and Win32 native: GTK creates native controls and Win32 draws native GDI surfaces from the same shared emission.
+- Add toolkit-free tests for header/footer action order, identity, refresh-state labelling and status/version propagation.
+- Leave contextual footer actions, page switching and deeper workspace composition for later small 1.3.x slices; retain Common 1.19.38.
+
 ## 1.3.1 - 2026-10-06
 
 - Add the first true native-renderer adapter seam to the 1.3 shared UI architecture.

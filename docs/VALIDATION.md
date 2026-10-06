@@ -39,6 +39,14 @@ Native renderer qualification remains separate. Linux must prove the GTK rendere
 
 Once a migration slice is complete, CI must reject new application-level direct GTK/Win32 layout composition outside the renderer/platform boundary for that slice. This prevents the old duplicated-layout architecture from quietly returning.
 
+## 1.3.2 shared shell-chrome unification slice
+
+Version 1.3.2 extends the native-renderer seam from navigation into the persistent shell chrome. `runner_ui_render_header()` now owns product/family identity and the ordered Settings, Minimize, Maximize/Restore and Close action semantics. `runner_ui_render_footer()` owns the general Export CSV, About and Refresh actions, the Refreshing label transition, and the status/application/Common-version slots. GTK and Win32 translate those same emissions into native widgets or native GDI drawing.
+
+The toolkit-free renderer test now records header and footer emission as well as navigation. It verifies header action order, product identity, footer action order, the Refresh now → Refreshing… state change, and status/version propagation. Linux native, self-hosted Windows build, hosted Windows runtime and clean Debian build/install/smoke qualification remain required gates.
+
+This slice deliberately does not absorb the page-specific contextual footer actions (`Open selected job`, `Open diagnostic`, `Restart selected runner`) or page-switch event handling. Those still depend on platform/backend parity work and remain separate follow-on slices rather than being hidden behind placeholder controls.
+
 ## 1.3.1 first native-renderer unification slice
 
 Version 1.3.1 moves the navigation rail from shared metadata into the first real translation path. `runner_ui_render_navigation()` now emits navigation semantics once: page order, separator placement, platform label, and selected-page state. GTK and Win32 each provide a thin adapter that translates those semantics into native widgets or native drawing. The shared layer does not create GTK widgets, HWNDs, or a general-purpose compatibility toolkit.
