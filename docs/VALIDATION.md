@@ -39,6 +39,16 @@ Native renderer qualification remains separate. Linux must prove the GTK rendere
 
 Once a migration slice is complete, CI must reject new application-level direct GTK/Win32 layout composition outside the renderer/platform boundary for that slice. This prevents the old duplicated-layout architecture from quietly returning.
 
+## 1.3.4 shared workspace-summary slice
+
+Version 1.3.4 moves the workspace hero and four-metric summary through the toolkit-neutral renderer seam. `runner_ui_render_workspace_summary()` now emits the selected page identity, platform-specific title, subtitle, navigation/hero artwork roles and the ordered four metric caption/value pairs once. GTK and Win32 translate that same summary into native widgets or native GDI drawing.
+
+The platforms still calculate their runtime values natively because the underlying providers are not yet unified. Linux retains its existing Runners, Active Jobs, History and Local Health calculations. Windows provides its available Runners counts and deliberately reports unavailable values for workspaces whose Windows providers have not yet been ported, rather than showing misleading runner counts under unrelated captions.
+
+The toolkit-free renderer test verifies page identity, platform-specific Local Health naming, subtitle/artwork propagation, metric order, captions and values, plus invalid/incomplete renderer rejection. The normal Linux native, self-hosted Windows build, hosted Windows runtime and clean Debian package/install/smoke qualification remain required gates.
+
+This completes the hero/fleet-summary structural tranche. Runner cards/details, Cards/Table/search composition and the missing Windows workspace backends remain separate follow-on work.
+
 ## 1.3.3 shared page-transition policy slice
 
 Version 1.3.3 moves page-transition policy behind the toolkit-neutral UI seam. `runner_ui_plan_page_transition()` is now the single product-level decision point for whether a requested page differs from the current page, whether Runners search/table surfaces should be shown, whether the current selection is cleared, and whether entering Runners/Active Jobs or Local Health requests the corresponding provider refresh.
