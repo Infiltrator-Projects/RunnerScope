@@ -1030,46 +1030,110 @@ static const wchar_t *page_subtitle(int page)
     return value;
 }
 
-static void draw_header(HDC dc)
+typedef struct {
+    HDC dc;
+    RECT client;
+    RECT footer;
+} WinChromeRendererContext;
+
+static bool win_renderer_begin_header(void *context,
+                                      const char *product_title,
+                                      const char *product_family)
 {
-    fill_rect_color(dc, g_header_rect, rgb(g_palette.titlebar_rgb));
+    WinChromeRendererContext *renderer = context;
+    if (!renderer || !renderer->dc || !product_title || !product_family)
+        return false;
+    fill_rect_color(renderer->dc, g_header_rect, rgb(g_palette.titlebar_rgb));
     RECT accent = g_header_rect;
     accent.right = sx(210);
-    fill_rect_color(dc, accent,
+    fill_rect_color(renderer->dc, accent,
                     mix_color(g_palette.titlebar_rgb,
                               g_palette.neutral_accent_rgb, 24U));
 
     RECT icon_well = {sx(16), sx(10), sx(58), sx(50)};
-    fill_round_rect(dc, icon_well,
-                    mix_color(g_palette.card_rgb, g_palette.neutral_accent_rgb, 18U),
+    fill_round_rect(renderer->dc, icon_well,
+                    mix_color(g_palette.card_rgb,
+                              g_palette.neutral_accent_rgb, 18U),
                     rgb(g_palette.neutral_accent_rgb), sx(10));
     RECT icon = {sx(20), sx(12), sx(54), sx(48)};
-    draw_image(dc, &g_nav_images[0], &icon);
+    draw_image(renderer->dc, &g_nav_images[0], &icon);
 
-    wchar_t product_title[96];
-    wchar_t product_family[96];
-    utf8_to_wide(runner_ui_product_title(), product_title, 96U);
-    utf8_to_wide(runner_ui_product_family(), product_family, 96U);
+    wchar_t title_text[96];
+    wchar_t family_text[96];
+    utf8_to_wide(product_title, title_text, 96U);
+    utf8_to_wide(product_family, family_text, 96U);
     RECT title = {sx(70), sx(8), sx(370), sx(34)};
-    draw_text(dc, product_title, title, g_font_brand,
-              rgb(g_palette.title_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    draw_text(renderer->dc, title_text, title, g_font_brand,
+              rgb(g_palette.title_rgb),
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     RECT subtitle = {sx(70), sx(32), sx(370), sx(52)};
-    draw_text(dc, product_family, subtitle, g_font_small,
-              rgb(g_palette.muted_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    draw_text(renderer->dc, family_text, subtitle, g_font_small,
+              rgb(g_palette.muted_rgb),
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    return true;
+}
 
-    fill_round_rect(dc, g_settings_rect,
-                    mix_color(g_palette.surface_rgb, g_palette.neutral_accent_rgb, 8U),
-                    rgb(g_palette.connection_border_rgb), sx(7));
-    draw_outline_icon(dc, g_settings_rect, 3, rgb(g_palette.button_foreground_rgb));
-    fill_round_rect(dc, g_minimize_rect, rgb(g_palette.surface_rgb),
+static bool win_renderer_header_action(void *context,
+                                       RunnerUiChromeActionId action,
+                                       const char *label,
+                                       const char *tooltip,
+                                       bool primary)
+{
+    WinChromeRendererContext *renderer = context;
+    (void)label;
+    (void)tooltip;
+    (void)primary;
+    if (!renderer || !renderer->dc) return false;
+
+    RECT rect;
+    int icon = 0;
+    switch (action) {
+    case RUNNER_UI_CHROME_SETTINGS:
+        rect = g_settings_rect;
+        fill_round_rect(renderer->dc, rect,
+                        mix_color(g_palette.surface_rgb,
+                                  g_palette.neutral_accent_rgb, 8U),
+                        rgb(g_palette.connection_border_rgb), sx(7));
+        draw_outline_icon(renderer->dc, rect, 3,
+                          rgb(g_palette.button_foreground_rgb));
+        return true;
+    case RUNNER_UI_CHROME_MINIMIZE:
+        rect = g_minimize_rect;
+        icon = 0;
+        break;
+    case RUNNER_UI_CHROME_MAXIMIZE:
+        rect = g_maximize_rect;
+        icon = 1;
+        break;
+    case RUNNER_UI_CHROME_CLOSE:
+        rect = g_close_rect;
+        icon = 2;
+        break;
+    default:
+        return false;
+    }
+    fill_round_rect(renderer->dc, rect, rgb(g_palette.surface_rgb),
                     rgb(g_palette.connection_border_rgb), sx(6));
-    fill_round_rect(dc, g_maximize_rect, rgb(g_palette.surface_rgb),
-                    rgb(g_palette.connection_border_rgb), sx(6));
-    fill_round_rect(dc, g_close_rect, rgb(g_palette.surface_rgb),
-                    rgb(g_palette.connection_border_rgb), sx(6));
-    draw_outline_icon(dc, g_minimize_rect, 0, rgb(g_palette.button_foreground_rgb));
-    draw_outline_icon(dc, g_maximize_rect, 1, rgb(g_palette.button_foreground_rgb));
-    draw_outline_icon(dc, g_close_rect, 2, rgb(g_palette.button_foreground_rgb));
+    draw_outline_icon(renderer->dc, rect, icon,
+                      rgb(g_palette.button_foreground_rgb));
+    return true;
+}
+
+static bool win_renderer_end_header(void *context)
+{
+    return context != NULL;
+}
+
+static void draw_header(HDC dc)
+{
+    WinChromeRendererContext chrome = {0};
+    chrome.dc = dc;
+    RunnerUiRenderer renderer = {0};
+    renderer.context = &chrome;
+    renderer.begin_header = win_renderer_begin_header;
+    renderer.header_action = win_renderer_header_action;
+    renderer.end_header = win_renderer_end_header;
+    (void)runner_ui_render_header(&renderer);
 }
 
 
@@ -1430,43 +1494,134 @@ static void draw_selection(HDC dc)
               rgb(g_palette.muted_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
-static void draw_footer(HDC dc, RECT client)
+static bool win_renderer_begin_footer(void *context)
 {
-    int footer_top = client.bottom - sx(96);
-    RECT footer = {sx(20), footer_top, client.right - sx(20), client.bottom - sx(12)};
-    fill_round_rect(dc, footer, rgb(g_palette.panel_rgb),
+    WinChromeRendererContext *renderer = context;
+    if (!renderer || !renderer->dc) return false;
+    int footer_top = renderer->client.bottom - sx(96);
+    renderer->footer = (RECT){
+        sx(20), footer_top,
+        renderer->client.right - sx(20), renderer->client.bottom - sx(12)
+    };
+    fill_round_rect(renderer->dc, renderer->footer,
+                    rgb(g_palette.panel_rgb),
                     rgb(g_palette.connection_border_rgb), sx(12));
-    draw_button(dc, g_export_rect, L"Export CSV", false, false);
-    draw_button(dc, g_about_rect, L"About", false, false);
-    draw_button(dc, g_refresh_rect, g_refreshing ? L"Refreshing…" : L"Refresh now",
-                false, true);
+    return true;
+}
 
-    RECT status = {footer.left + sx(12), footer.top + sx(50),
-                   footer.right - sx(340), footer.bottom - sx(8)};
+static bool win_renderer_footer_action(void *context,
+                                       RunnerUiChromeActionId action,
+                                       const char *label,
+                                       const char *tooltip,
+                                       bool primary)
+{
+    WinChromeRendererContext *renderer = context;
+    (void)tooltip;
+    if (!renderer || !renderer->dc || !label) return false;
+    RECT rect;
+    switch (action) {
+    case RUNNER_UI_CHROME_EXPORT:
+        rect = g_export_rect;
+        break;
+    case RUNNER_UI_CHROME_ABOUT:
+        rect = g_about_rect;
+        break;
+    case RUNNER_UI_CHROME_REFRESH:
+        rect = g_refresh_rect;
+        break;
+    default:
+        return false;
+    }
+    wchar_t text[96];
+    utf8_to_wide(label, text, sizeof(text) / sizeof(text[0]));
+    draw_button(renderer->dc, rect, text, false, primary);
+    return true;
+}
+
+static bool win_renderer_footer_status(void *context,
+                                       const RunnerUiFooterState *state)
+{
+    WinChromeRendererContext *renderer = context;
+    if (!renderer || !renderer->dc || !state) return false;
+
     wchar_t status_text[256];
-    if (g_refreshing)
-        wcscpy_s(status_text, 256U, L"Refreshing GitHub runner state…");
-    else if (!g_organisation[0])
-        wcscpy_s(status_text, 256U, L"Open Settings and enter the GitHub organisation.");
-    else
-        _snwprintf_s(status_text, 256U, _TRUNCATE,
-                     L"%zu runner%ls loaded from %ls.", g_row_count,
-                     g_row_count == 1U ? L"" : L"s", g_organisation);
-    draw_text(dc, status_text, status, g_font,
-              rgb(g_palette.text_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    utf8_to_wide(state->status_text, status_text,
+                 sizeof(status_text) / sizeof(status_text[0]));
+    RECT status = {
+        renderer->footer.left + sx(12), renderer->footer.top + sx(50),
+        renderer->footer.right - sx(340), renderer->footer.bottom - sx(8)
+    };
+    draw_text(renderer->dc, status_text, status, g_font,
+              rgb(g_palette.text_rgb),
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
     wchar_t version[128];
-    _snwprintf_s(version, 128U, _TRUNCATE, L"Runner Monitor %hs", RUNNERSCOPE_VERSION);
-    RECT app_version = {footer.right - sx(310), footer.top + sx(48),
-                        footer.right - sx(12), footer.top + sx(67)};
-    draw_text(dc, version, app_version, g_font_small, rgb(g_palette.muted_rgb),
+    utf8_to_wide(state->app_version, version,
+                 sizeof(version) / sizeof(version[0]));
+    RECT app_version = {
+        renderer->footer.right - sx(310), renderer->footer.top + sx(48),
+        renderer->footer.right - sx(12), renderer->footer.top + sx(67)
+    };
+    draw_text(renderer->dc, version, app_version, g_font_small,
+              rgb(g_palette.muted_rgb),
               DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-    _snwprintf_s(version, 128U, _TRUNCATE, L"Common %hs", INFILTRATR_COMMON_VERSION);
-    RECT common_version = {app_version.left, footer.top + sx(66),
-                           app_version.right, footer.bottom - sx(5)};
-    draw_text(dc, version, common_version, g_font_small, rgb(g_palette.muted_rgb),
+    utf8_to_wide(state->common_version, version,
+                 sizeof(version) / sizeof(version[0]));
+    RECT common_version = {
+        app_version.left, renderer->footer.top + sx(66),
+        app_version.right, renderer->footer.bottom - sx(5)
+    };
+    draw_text(renderer->dc, version, common_version, g_font_small,
+              rgb(g_palette.muted_rgb),
               DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+    return true;
 }
+
+static bool win_renderer_end_footer(void *context)
+{
+    return context != NULL;
+}
+
+static void draw_footer(HDC dc, RECT client)
+{
+    char status[256];
+    if (g_refreshing) {
+        infiltratr_copy_string(
+            status, sizeof(status), "Refreshing GitHub runner state…");
+    } else if (!g_organisation[0]) {
+        infiltratr_copy_string(
+            status, sizeof(status),
+            "Open Settings and enter the GitHub organisation.");
+    } else {
+        char organisation[128] = "";
+        wide_to_utf8(g_organisation, organisation, sizeof(organisation));
+        (void)snprintf(status, sizeof(status), "%zu runner%s loaded from %s.",
+                       g_row_count, g_row_count == 1U ? "" : "s",
+                       organisation);
+    }
+
+    char app_version[128];
+    char common_version[128];
+    (void)snprintf(app_version, sizeof(app_version),
+                   "Runner Monitor %s", RUNNERSCOPE_VERSION);
+    (void)snprintf(common_version, sizeof(common_version),
+                   "Common %s", INFILTRATR_COMMON_VERSION);
+    RunnerUiFooterState state = {
+        status, app_version, common_version, g_refreshing
+    };
+
+    WinChromeRendererContext chrome = {0};
+    chrome.dc = dc;
+    chrome.client = client;
+    RunnerUiRenderer renderer = {0};
+    renderer.context = &chrome;
+    renderer.begin_footer = win_renderer_begin_footer;
+    renderer.footer_action = win_renderer_footer_action;
+    renderer.footer_status = win_renderer_footer_status;
+    renderer.end_footer = win_renderer_end_footer;
+    (void)runner_ui_render_footer(&renderer, &state);
+}
+
 
 static void paint_ui(HDC dc)
 {
