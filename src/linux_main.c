@@ -3704,8 +3704,6 @@ static void build_ui(RunnerScopeApp *app)
     const guint compact_spacing = metrics ? metrics->compact_spacing : 6U;
     const guint control_spacing = metrics ? metrics->control_spacing : 10U;
     const guint screen_padding = metrics ? metrics->screen_padding : 20U;
-    const RunnerUiPageSpec *initial_page =
-        runner_ui_page(RUNNER_UI_PAGE_RUNNERS);
 
     app->window = gtk_application_window_new(app->application);
     enforce_required_typography(app->window);
