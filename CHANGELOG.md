@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.3.4 - 2026-10-06
+
+- Move the workspace hero and four-metric summary behind the shared native-renderer seam.
+- Emit page identity, platform title, subtitle, navigation/hero artwork roles and ordered metric captions/values once from toolkit-neutral C.
+- Make GTK and Win32 translate that same summary into native widgets/drawing while retaining platform-native metric providers.
+- Show unavailable values on Windows workspaces whose providers are not yet ported instead of reusing unrelated runner counts.
+- Add toolkit-free tests for workspace identity, artwork roles, metric order/values, platform naming and invalid-state rejection.
+- Retain Common 1.19.38 and the full Linux/Windows/Debian qualification gates.
+
 ## 1.3.3 - 2026-10-06
 
 - Move page-transition policy into one toolkit-neutral shared plan consumed by both native shells.
