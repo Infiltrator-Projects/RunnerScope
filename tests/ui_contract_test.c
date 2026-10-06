@@ -271,6 +271,108 @@ static int verify_chrome_renderer(void)
     return 0;
 }
 
+typedef struct {
+    size_t begin_count;
+    size_t metric_count;
+    size_t end_count;
+    RunnerUiPageId page;
+    char title[128];
+    char subtitle[128];
+    char nav_asset[64];
+    char hero_asset[64];
+    char captions[4][64];
+    char values[4][64];
+} WorkspaceRecorder;
+
+static bool record_begin_workspace_summary(
+    void *context, const RunnerUiPageSpec *page, const char *platform_title)
+{
+    WorkspaceRecorder *recorder = context;
+    if (!recorder || !page || !platform_title) return false;
+    recorder->begin_count++;
+    recorder->page = page->id;
+    (void)snprintf(recorder->title, sizeof(recorder->title),
+                   "%s", platform_title);
+    (void)snprintf(recorder->subtitle, sizeof(recorder->subtitle),
+                   "%s", page->subtitle);
+    (void)snprintf(recorder->nav_asset, sizeof(recorder->nav_asset),
+                   "%s", page->nav_asset);
+    (void)snprintf(recorder->hero_asset, sizeof(recorder->hero_asset),
+                   "%s", page->hero_asset);
+    return true;
+}
+
+static bool record_workspace_metric(void *context, size_t index,
+                                    const char *caption, const char *value)
+{
+    WorkspaceRecorder *recorder = context;
+    if (!recorder || index >= 4U || !caption || !value ||
+        recorder->metric_count != index)
+        return false;
+    (void)snprintf(recorder->captions[index],
+                   sizeof(recorder->captions[index]), "%s", caption);
+    (void)snprintf(recorder->values[index],
+                   sizeof(recorder->values[index]), "%s", value);
+    recorder->metric_count++;
+    return true;
+}
+
+static bool record_end_workspace_summary(void *context)
+{
+    WorkspaceRecorder *recorder = context;
+    if (!recorder) return false;
+    recorder->end_count++;
+    return true;
+}
+
+static int verify_workspace_summary_renderer(void)
+{
+    WorkspaceRecorder recorder = {0};
+    RunnerUiRenderer renderer = {0};
+    renderer.context = &recorder;
+    renderer.begin_workspace_summary = record_begin_workspace_summary;
+    renderer.workspace_metric = record_workspace_metric;
+    renderer.end_workspace_summary = record_end_workspace_summary;
+    RunnerUiWorkspaceSummaryState state = {
+        RUNNER_UI_PAGE_LOCAL_HEALTH, {"4", "3", "2", "1"}
+    };
+    if (!runner_ui_render_workspace_summary(
+            &renderer, RUNNER_UI_PLATFORM_WINDOWS, &state))
+        return 1;
+    if (recorder.begin_count != 1U || recorder.metric_count != 4U ||
+        recorder.end_count != 1U ||
+        recorder.page != RUNNER_UI_PAGE_LOCAL_HEALTH)
+        return 2;
+    if (strcmp(recorder.title, "Local Windows health") != 0 ||
+        strcmp(recorder.subtitle, "SERVICES  •  DIAGNOSTICS  •  LINK") != 0 ||
+        strcmp(recorder.nav_asset, "nav-health.png") != 0 ||
+        strcmp(recorder.hero_asset, "hero-health.png") != 0)
+        return 3;
+    const char *captions[] = {"SERVICES", "RUNNING", "GITHUB", "DIAGNOSTICS"};
+    const char *values[] = {"4", "3", "2", "1"};
+    for (size_t i = 0U; i < 4U; ++i)
+        if (strcmp(recorder.captions[i], captions[i]) != 0 ||
+            strcmp(recorder.values[i], values[i]) != 0)
+            return 4;
+
+    WorkspaceRecorder linux_recorder = {0};
+    renderer.context = &linux_recorder;
+    if (!runner_ui_render_workspace_summary(
+            &renderer, RUNNER_UI_PLATFORM_LINUX, &state))
+        return 5;
+    if (strcmp(linux_recorder.title, "Local Linux health") != 0) return 6;
+
+    RunnerUiRenderer incomplete = {0};
+    if (runner_ui_render_workspace_summary(
+            &incomplete, RUNNER_UI_PLATFORM_LINUX, &state))
+        return 7;
+    state.metric_values[2] = NULL;
+    if (runner_ui_render_workspace_summary(
+            &renderer, RUNNER_UI_PLATFORM_LINUX, &state))
+        return 8;
+    return 0;
+}
+
 static int verify_page_transition_policy(void)
 {
     RunnerUiPageTransition transition;
@@ -389,7 +491,8 @@ int main(void)
         return 15;
     if (verify_chrome_renderer() != 0) return 16;
     if (verify_page_transition_policy() != 0) return 17;
+    if (verify_workspace_summary_renderer() != 0) return 18;
 
-    puts("Runner Monitor shared UI contract, navigation, page transitions and shell chrome renderers passed.");
+    puts("Runner Monitor shared UI contract, navigation, page transitions, workspace summary and shell chrome renderers passed.");
     return 0;
 }

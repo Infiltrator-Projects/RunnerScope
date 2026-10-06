@@ -72,6 +72,37 @@ bool runner_ui_render_navigation(const RunnerUiRenderer *renderer,
     return renderer->end_navigation(renderer->context);
 }
 
+bool runner_ui_render_workspace_summary(
+    const RunnerUiRenderer *renderer,
+    RunnerUiPlatform platform,
+    const RunnerUiWorkspaceSummaryState *state)
+{
+    if (!renderer || !renderer->begin_workspace_summary ||
+        !renderer->workspace_metric || !renderer->end_workspace_summary ||
+        !state || (int)state->page < 0 || state->page >= RUNNER_UI_PAGE_COUNT ||
+        (platform != RUNNER_UI_PLATFORM_LINUX &&
+         platform != RUNNER_UI_PLATFORM_WINDOWS))
+        return false;
+
+    for (size_t i = 0U; i < 4U; ++i)
+        if (!state->metric_values[i]) return false;
+
+    const RunnerUiPageSpec *page = runner_ui_page(state->page);
+    const char *platform_title = runner_ui_page_title(page, platform);
+    if (!platform_title || !platform_title[0]) return false;
+    if (!renderer->begin_workspace_summary(
+            renderer->context, page, platform_title))
+        return false;
+
+    for (size_t i = 0U; i < 4U; ++i)
+        if (!renderer->workspace_metric(
+                renderer->context, i, page->metric_labels[i],
+                state->metric_values[i]))
+            return false;
+
+    return renderer->end_workspace_summary(renderer->context);
+}
+
 bool runner_ui_render_footer(const RunnerUiRenderer *renderer,
                              const RunnerUiFooterState *state)
 {

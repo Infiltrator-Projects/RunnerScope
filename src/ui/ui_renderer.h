@@ -28,6 +28,11 @@ typedef struct {
 } RunnerUiFooterState;
 
 typedef struct {
+    RunnerUiPageId page;
+    const char *metric_values[4];
+} RunnerUiWorkspaceSummaryState;
+
+typedef struct {
     RunnerUiPageId current_page;
     RunnerUiPageId requested_page;
     bool changed;
@@ -62,6 +67,15 @@ typedef struct {
                             bool selected);
     bool (*end_navigation)(void *context);
 
+    bool (*begin_workspace_summary)(void *context,
+                                    const RunnerUiPageSpec *page,
+                                    const char *platform_title);
+    bool (*workspace_metric)(void *context,
+                             size_t index,
+                             const char *caption,
+                             const char *value);
+    bool (*end_workspace_summary)(void *context);
+
     bool (*begin_footer)(void *context);
     bool (*footer_action)(void *context,
                           RunnerUiChromeActionId action,
@@ -77,6 +91,10 @@ bool runner_ui_render_header(const RunnerUiRenderer *renderer);
 bool runner_ui_render_navigation(const RunnerUiRenderer *renderer,
                                  RunnerUiPlatform platform,
                                  RunnerUiPageId selected_page);
+bool runner_ui_render_workspace_summary(
+    const RunnerUiRenderer *renderer,
+    RunnerUiPlatform platform,
+    const RunnerUiWorkspaceSummaryState *state);
 bool runner_ui_render_footer(const RunnerUiRenderer *renderer,
                              const RunnerUiFooterState *state);
 bool runner_ui_plan_page_transition(RunnerUiPageId current_page,

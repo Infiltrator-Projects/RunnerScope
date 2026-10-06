@@ -1310,16 +1310,120 @@ static GtkWidget *make_workspace_metric(const char *caption,
     return box;
 }
 
-static void workspace_metric(RunnerScopeApp *app, guint index,
-                             const char *caption, const char *value)
+typedef struct {
+    RunnerScopeApp *app;
+    GtkWidget *workspace;
+    guint compact_spacing;
+    guint control_spacing;
+} GtkWorkspaceRendererContext;
+
+static bool gtk_renderer_begin_workspace_summary(
+    void *context, const RunnerUiPageSpec *page, const char *platform_title)
 {
-    if (!app || index >= 4U || !app->workspace_metric_caption[index] ||
+    GtkWorkspaceRendererContext *renderer = context;
+    if (!renderer || !renderer->app || !page || !platform_title) return false;
+    RunnerScopeApp *app = renderer->app;
+
+    if (app->workspace_title && app->workspace_subtitle &&
+        app->workspace_icon && app->workspace_art) {
+        runner_asset_image_set(app->workspace_icon, page->nav_asset, 48, 48);
+        runner_asset_image_set(app->workspace_art, page->hero_asset, 240, 86);
+        label_set_if_changed(app->workspace_title, platform_title);
+        label_set_if_changed(app->workspace_subtitle, page->subtitle);
+        return true;
+    }
+    if (!renderer->workspace) return false;
+
+    GtkWidget *workspace_header = gtk_box_new(
+        GTK_ORIENTATION_HORIZONTAL, (gint)renderer->control_spacing);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(workspace_header), "workspace-header");
+    gtk_box_pack_start(
+        GTK_BOX(renderer->workspace), workspace_header, FALSE, FALSE, 0);
+
+    GtkWidget *workspace_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(workspace_icon_well), "workspace-icon-well");
+    app->workspace_icon = runner_asset_image_new(page->nav_asset, 48, 48);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->workspace_icon), "workspace-icon");
+    gtk_box_pack_start(
+        GTK_BOX(workspace_icon_well), app->workspace_icon, TRUE, TRUE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_header), workspace_icon_well, FALSE, FALSE, 0);
+
+    GtkWidget *workspace_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(workspace_copy, TRUE);
+    app->workspace_title = gtk_label_new(platform_title);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(app->workspace_title), PANGO_ELLIPSIZE_END);
+    app->workspace_subtitle = gtk_label_new(page->subtitle);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->workspace_title), "workspace-title");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(app->workspace_subtitle), "workspace-subtitle");
+    gtk_widget_set_halign(app->workspace_title, GTK_ALIGN_START);
+    gtk_widget_set_halign(app->workspace_subtitle, GTK_ALIGN_START);
+    gtk_label_set_ellipsize(
+        GTK_LABEL(app->workspace_subtitle), PANGO_ELLIPSIZE_END);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_copy), app->workspace_title, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_copy), app->workspace_subtitle, FALSE, FALSE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_header), workspace_copy, TRUE, TRUE, 0);
+
+    GtkWidget *workspace_art_frame = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    app->workspace_art_frame = workspace_art_frame;
+    gtk_widget_set_no_show_all(workspace_art_frame, TRUE);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(workspace_art_frame), "workspace-art-frame");
+    app->workspace_art = runner_asset_image_new(page->hero_asset, 240, 86);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_art_frame), app->workspace_art, TRUE, TRUE, 0);
+    gtk_box_pack_start(
+        GTK_BOX(workspace_header), workspace_art_frame, FALSE, FALSE, 0);
+
+    GtkWidget *workspace_metrics = gtk_grid_new();
+    gtk_grid_set_column_spacing(
+        GTK_GRID(workspace_metrics), renderer->compact_spacing);
+    gtk_grid_set_column_homogeneous(GTK_GRID(workspace_metrics), TRUE);
+    const char *metric_classes[] = {
+        "metric-one", "metric-two", "metric-three", "metric-four"
+    };
+    for (guint i = 0U; i < 4U; ++i) {
+        GtkWidget *metric = make_workspace_metric(
+            "—", &app->workspace_metric_caption[i],
+            &app->workspace_metric_value[i]);
+        gtk_style_context_add_class(
+            gtk_widget_get_style_context(metric), metric_classes[i]);
+        gtk_grid_attach(
+            GTK_GRID(workspace_metrics), metric, (gint)i, 0, 1, 1);
+    }
+    gtk_box_pack_end(
+        GTK_BOX(workspace_header), workspace_metrics, FALSE, FALSE, 0);
+    return true;
+}
+
+static bool gtk_renderer_workspace_metric(void *context, size_t index,
+                                          const char *caption,
+                                          const char *value)
+{
+    GtkWorkspaceRendererContext *renderer = context;
+    if (!renderer || !renderer->app || index >= 4U || !caption || !value)
+        return false;
+    RunnerScopeApp *app = renderer->app;
+    if (!app->workspace_metric_caption[index] ||
         !app->workspace_metric_value[index])
-        return;
-    label_set_if_changed(
-        app->workspace_metric_caption[index], caption ? caption : "—");
-    label_set_if_changed(
-        app->workspace_metric_value[index], value ? value : "—");
+        return false;
+    label_set_if_changed(app->workspace_metric_caption[index], caption);
+    label_set_if_changed(app->workspace_metric_value[index], value);
+    return true;
+}
+
+static bool gtk_renderer_end_workspace_summary(void *context)
+{
+    return context != NULL;
 }
 
 static guint count_local_state(RunnerScopeApp *app, const char *state)
@@ -1519,64 +1623,71 @@ static void on_runner_view_toggled(GtkToggleButton *button, gpointer user_data)
 
 static void update_workspace_context(RunnerScopeApp *app, gint page)
 {
-    if (!app || !app->workspace_title || !app->workspace_subtitle) return;
+    if (!app || page < 0 || page >= RUNNER_UI_PAGE_COUNT) return;
 
-    const RunnerUiPageSpec *ui_page = runner_ui_page((RunnerUiPageId)page);
-    runner_asset_image_set(app->workspace_icon, ui_page->nav_asset, 48, 48);
-    runner_asset_image_set(app->workspace_art, ui_page->hero_asset, 240, 86);
-    label_set_if_changed(
-        app->workspace_title,
-        runner_ui_page_title(ui_page, RUNNER_UI_PLATFORM_LINUX));
-    label_set_if_changed(app->workspace_subtitle, ui_page->subtitle);
-
-    char a[32], b[32], d[32], uptime[64];
+    char metric_values[4][64] = {{0}};
     switch (page) {
-        case 0:
-            g_snprintf(a, sizeof(a), "%u", app->runners_total);
-            g_snprintf(b, sizeof(b), "%u", app->runners_running);
-            g_snprintf(d, sizeof(d), "%u", app->runners_idle);
-            workspace_metric(app, 0U, ui_page->metric_labels[0], a);
-            workspace_metric(app, 1U, ui_page->metric_labels[1], b);
-            workspace_metric(app, 2U, ui_page->metric_labels[2], d);
-            g_snprintf(a, sizeof(a), "%u", app->runners_offline);
-            workspace_metric(app, 3U, ui_page->metric_labels[3], a);
+        case RUNNER_UI_PAGE_RUNNERS:
+            g_snprintf(metric_values[0], sizeof(metric_values[0]), "%u", app->runners_total);
+            g_snprintf(metric_values[1], sizeof(metric_values[1]), "%u", app->runners_running);
+            g_snprintf(metric_values[2], sizeof(metric_values[2]), "%u", app->runners_idle);
+            g_snprintf(metric_values[3], sizeof(metric_values[3]), "%u", app->runners_offline);
             break;
-        case 1:
-            g_snprintf(a, sizeof(a), "%u", app->local_active);
-            g_snprintf(b, sizeof(b), "%u", app->hosted_active);
-            g_snprintf(d, sizeof(d), "%u", app->queued);
-            workspace_metric(app, 0U, ui_page->metric_labels[0], a);
-            workspace_metric(app, 1U, ui_page->metric_labels[1], b);
-            workspace_metric(app, 2U, ui_page->metric_labels[2], d);
-            g_snprintf(a, sizeof(a), "%u", app->local_active + app->hosted_active);
-            workspace_metric(app, 3U, ui_page->metric_labels[3], a);
+        case RUNNER_UI_PAGE_ACTIVE_JOBS:
+            g_snprintf(metric_values[0], sizeof(metric_values[0]), "%u", app->local_active);
+            g_snprintf(metric_values[1], sizeof(metric_values[1]), "%u", app->hosted_active);
+            g_snprintf(metric_values[2], sizeof(metric_values[2]), "%u", app->queued);
+            g_snprintf(metric_values[3], sizeof(metric_values[3]), "%u",
+                       app->local_active + app->hosted_active);
             break;
-        case 2: {
-            g_snprintf(a, sizeof(a), "%u", app->history_rows->len);
-            g_snprintf(b, sizeof(b), "%u", g_hash_table_size(app->sessions));
-            const char *filter = gtk_entry_get_text(GTK_ENTRY(app->filter_entry));
-            char *uptime_text =
-                duration_text(now_monotonic() - app->session_started);
-            g_strlcpy(uptime, uptime_text ? uptime_text : "—", sizeof(uptime));
+        case RUNNER_UI_PAGE_HISTORY: {
+            g_snprintf(metric_values[0], sizeof(metric_values[0]), "%u",
+                       app->history_rows->len);
+            g_snprintf(metric_values[1], sizeof(metric_values[1]), "%u",
+                       g_hash_table_size(app->sessions));
+            char *uptime_text = duration_text(
+                now_monotonic() - app->session_started);
+            g_strlcpy(metric_values[2], uptime_text ? uptime_text : "—",
+                      sizeof(metric_values[2]));
             g_free(uptime_text);
-            workspace_metric(app, 0U, ui_page->metric_labels[0], a);
-            workspace_metric(app, 1U, ui_page->metric_labels[1], b);
-            workspace_metric(app, 2U, ui_page->metric_labels[2], uptime);
-            workspace_metric(app, 3U, ui_page->metric_labels[3], filter && *filter ? "ACTIVE" : "ALL");
+            const char *filter =
+                gtk_entry_get_text(GTK_ENTRY(app->filter_entry));
+            g_strlcpy(metric_values[3], filter && *filter ? "ACTIVE" : "ALL",
+                      sizeof(metric_values[3]));
             break;
         }
-        default:
-            g_snprintf(a, sizeof(a), "%u", app->local_rows->len);
-            g_snprintf(b, sizeof(b), "%u", count_local_state(app, "RUNNING"));
-            g_snprintf(d, sizeof(d), "%u", count_local_github(app));
-            workspace_metric(app, 0U, ui_page->metric_labels[0], a);
-            workspace_metric(app, 1U, ui_page->metric_labels[1], b);
-            workspace_metric(app, 2U, ui_page->metric_labels[2], d);
-            g_snprintf(a, sizeof(a), "%u", count_local_diagnostics(app));
-            workspace_metric(app, 3U, ui_page->metric_labels[3], a);
+        case RUNNER_UI_PAGE_LOCAL_HEALTH:
+            g_snprintf(metric_values[0], sizeof(metric_values[0]), "%u",
+                       app->local_rows->len);
+            g_snprintf(metric_values[1], sizeof(metric_values[1]), "%u",
+                       count_local_state(app, "RUNNING"));
+            g_snprintf(metric_values[2], sizeof(metric_values[2]), "%u",
+                       count_local_github(app));
+            g_snprintf(metric_values[3], sizeof(metric_values[3]), "%u",
+                       count_local_diagnostics(app));
             break;
+        default:
+            return;
     }
 
+    RunnerUiWorkspaceSummaryState summary = {
+        (RunnerUiPageId)page,
+        {metric_values[0], metric_values[1], metric_values[2], metric_values[3]}
+    };
+    GtkWorkspaceRendererContext workspace_context = {0};
+    workspace_context.app = app;
+    RunnerUiRenderer workspace_renderer = {0};
+    workspace_renderer.context = &workspace_context;
+    workspace_renderer.begin_workspace_summary =
+        gtk_renderer_begin_workspace_summary;
+    workspace_renderer.workspace_metric = gtk_renderer_workspace_metric;
+    workspace_renderer.end_workspace_summary =
+        gtk_renderer_end_workspace_summary;
+    if (!runner_ui_render_workspace_summary(
+            &workspace_renderer, RUNNER_UI_PLATFORM_LINUX, &summary))
+        return;
+
+    const RunnerUiPageSpec *ui_page = runner_ui_page((RunnerUiPageId)page);
     if (app->open_job_button)
         gtk_widget_set_visible(
             app->open_job_button,
@@ -3593,8 +3704,6 @@ static void build_ui(RunnerScopeApp *app)
     const guint compact_spacing = metrics ? metrics->compact_spacing : 6U;
     const guint control_spacing = metrics ? metrics->control_spacing : 10U;
     const guint screen_padding = metrics ? metrics->screen_padding : 20U;
-    const RunnerUiPageSpec *initial_page =
-        runner_ui_page(RUNNER_UI_PAGE_RUNNERS);
 
     app->window = gtk_application_window_new(app->application);
     enforce_required_typography(app->window);
@@ -3669,69 +3778,24 @@ static void build_ui(RunnerScopeApp *app)
         gtk_widget_get_style_context(workspace), "runner-workspace");
     gtk_box_pack_start(GTK_BOX(content_shell), workspace, TRUE, TRUE, 0);
 
-    GtkWidget *workspace_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(workspace_header), "workspace-header");
-    gtk_box_pack_start(GTK_BOX(workspace), workspace_header, FALSE, FALSE, 0);
-
-    GtkWidget *workspace_icon_well = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(workspace_icon_well), "workspace-icon-well");
-    app->workspace_icon = runner_asset_image_new(initial_page->nav_asset, 48, 48);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(app->workspace_icon), "workspace-icon");
-    gtk_box_pack_start(
-        GTK_BOX(workspace_icon_well), app->workspace_icon, TRUE, TRUE, 0);
-    gtk_box_pack_start(
-        GTK_BOX(workspace_header), workspace_icon_well, FALSE, FALSE, 0);
-
-    GtkWidget *workspace_copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-    gtk_widget_set_hexpand(workspace_copy, TRUE);
-    app->workspace_title = gtk_label_new(
-        runner_ui_page_title(initial_page, RUNNER_UI_PLATFORM_LINUX));
-    gtk_label_set_ellipsize(GTK_LABEL(app->workspace_title), PANGO_ELLIPSIZE_END);
-    app->workspace_subtitle = gtk_label_new(initial_page->subtitle);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(app->workspace_title), "workspace-title");
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(app->workspace_subtitle), "workspace-subtitle");
-    gtk_widget_set_halign(app->workspace_title, GTK_ALIGN_START);
-    gtk_widget_set_halign(app->workspace_subtitle, GTK_ALIGN_START);
-    gtk_label_set_ellipsize(
-        GTK_LABEL(app->workspace_subtitle), PANGO_ELLIPSIZE_END);
-    gtk_box_pack_start(
-        GTK_BOX(workspace_copy), app->workspace_title, FALSE, FALSE, 0);
-    gtk_box_pack_start(
-        GTK_BOX(workspace_copy), app->workspace_subtitle, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(workspace_header), workspace_copy, TRUE, TRUE, 0);
-
-    GtkWidget *workspace_art_frame = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    app->workspace_art_frame = workspace_art_frame;
-    gtk_widget_set_no_show_all(workspace_art_frame, TRUE);
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(workspace_art_frame), "workspace-art-frame");
-    app->workspace_art = runner_asset_image_new(initial_page->hero_asset, 240, 86);
-    gtk_box_pack_start(
-        GTK_BOX(workspace_art_frame), app->workspace_art, TRUE, TRUE, 0);
-    gtk_box_pack_start(
-        GTK_BOX(workspace_header), workspace_art_frame, FALSE, FALSE, 0);
-
-    GtkWidget *workspace_metrics = gtk_grid_new();
-    gtk_grid_set_column_spacing(GTK_GRID(workspace_metrics), compact_spacing);
-    gtk_grid_set_column_homogeneous(GTK_GRID(workspace_metrics), TRUE);
-    for (guint i = 0U; i < 4U; i++) {
-        GtkWidget *metric = make_workspace_metric(
-            "—", &app->workspace_metric_caption[i],
-            &app->workspace_metric_value[i]);
-        const char *metric_classes[] = {
-            "metric-one", "metric-two", "metric-three", "metric-four"
-        };
-        gtk_style_context_add_class(
-            gtk_widget_get_style_context(metric), metric_classes[i]);
-        gtk_grid_attach(GTK_GRID(workspace_metrics), metric, (gint)i, 0, 1, 1);
-    }
-    gtk_box_pack_end(
-        GTK_BOX(workspace_header), workspace_metrics, FALSE, FALSE, 0);
+    RunnerUiWorkspaceSummaryState initial_summary = {
+        RUNNER_UI_PAGE_RUNNERS, {"—", "—", "—", "—"}
+    };
+    GtkWorkspaceRendererContext workspace_context = {0};
+    workspace_context.app = app;
+    workspace_context.workspace = workspace;
+    workspace_context.compact_spacing = compact_spacing;
+    workspace_context.control_spacing = control_spacing;
+    RunnerUiRenderer workspace_renderer = {0};
+    workspace_renderer.context = &workspace_context;
+    workspace_renderer.begin_workspace_summary =
+        gtk_renderer_begin_workspace_summary;
+    workspace_renderer.workspace_metric = gtk_renderer_workspace_metric;
+    workspace_renderer.end_workspace_summary =
+        gtk_renderer_end_workspace_summary;
+    if (!runner_ui_render_workspace_summary(
+            &workspace_renderer, RUNNER_UI_PLATFORM_LINUX, &initial_summary))
+        g_error("Unable to render the shared workspace summary contract.");
 
     GtkWidget *workspace_toolbar =
         gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
