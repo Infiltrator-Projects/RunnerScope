@@ -51,6 +51,7 @@ add_subdirectory(infiltratr-common EXCLUDE_FROM_ALL)
 
 add_library(runnerscope_ui_contract STATIC
     src/ui/ui_contract.c
+    src/ui/ui_renderer.c
 )
 target_include_directories(runnerscope_ui_contract PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
