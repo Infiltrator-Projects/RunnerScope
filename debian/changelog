@@ -1,3 +1,18 @@
+infiltrator-runner-monitor (1.3.5) unstable; urgency=medium
+
+  * Move runner-card presentation and selected-runner detail composition behind
+    the toolkit-neutral native-renderer seam used by both GTK and Win32.
+  * Share runner state labels/tone, utilisation normalization, job visibility,
+    empty-state copy and complete selected-runner detail formatting.
+  * Add stable runner-card grid/card component identities and toolkit-free
+    renderer tests for state, selection, empty/loading and clamp behaviour.
+  * Make the Windows selection surface consume the same detail payload as Linux
+    while leaving unavailable Windows repository/job/runtime data explicit.
+  * Keep Cards/Table and search/filter control composition for the next small
+    migration slice; retain exact Infiltratr Common 1.19.38.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Tue, 06 Oct 2026 14:15:00 +1100
+
 infiltrator-runner-monitor (1.3.4) unstable; urgency=medium
 
   * Move the workspace hero and four-metric summary behind the shared native-

@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.3.5 - 2026-10-06
+
+- Move runner-card state/presentation and selected-runner detail composition through the shared native-renderer seam.
+- Emit state labels/tone, utilisation, job visibility, empty/loading copy and selected-runner detail text once from toolkit-neutral C.
+- Make GTK and Win32 translate the same runner-card/detail contract into native controls/drawing.
+- Give the runner-card grid and card template stable component IDs and add toolkit-free renderer tests.
+- Expand the Windows selection surface to the shared full-detail shape without inventing repository/job/runtime data whose Windows provider is not yet ported.
+- Leave Cards/Table and search/filter control composition for the next contained 1.3.x slice; retain Common 1.19.38.
+
 ## 1.3.4 - 2026-10-06
 
 - Move the workspace hero and four-metric summary behind the shared native-renderer seam.
