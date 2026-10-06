@@ -39,6 +39,14 @@ Native renderer qualification remains separate. Linux must prove the GTK rendere
 
 Once a migration slice is complete, CI must reject new application-level direct GTK/Win32 layout composition outside the renderer/platform boundary for that slice. This prevents the old duplicated-layout architecture from quietly returning.
 
+## 1.3.1 first native-renderer unification slice
+
+Version 1.3.1 moves the navigation rail from shared metadata into the first real translation path. `runner_ui_render_navigation()` now emits navigation semantics once: page order, separator placement, platform label, and selected-page state. GTK and Win32 each provide a thin adapter that translates those semantics into native widgets or native drawing. The shared layer does not create GTK widgets, HWNDs, or a general-purpose compatibility toolkit.
+
+The toolkit-free renderer test records the emitted navigation and verifies that both platform projections receive all four pages in the same order, exactly one separator before Local Health, and exactly one selected item. It also verifies that the only intended label difference remains `Local Linux health` versus `Local Windows health`. Both native applications continue to run their own runtime/self-tests in addition to this contract test.
+
+This completes the renderer-interface seam and navigation emission only. Page-switch event handling and the header/footer, workspace hero/metrics, cards/tables/details, Active Jobs, History, Local Health and settings/actions composition remain native code until their own small migration slices are qualified.
+
 ## 1.3.0 first shared-contract tranche
 
 Version 1.3.0 establishes the first executable cross-platform seam. The toolkit-neutral C contract owns the stable four-page identities, major shell/component IDs, shared product identity, navigation/page metadata, hero assets, metric captions, contextual action policy and the Runners view-switch rule. Both GTK and Win32 consume that same contract instead of carrying independent copies of those product decisions.
