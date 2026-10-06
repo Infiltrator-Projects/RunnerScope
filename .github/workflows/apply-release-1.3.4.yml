@@ -1,0 +1,61 @@
+name: Apply 1.3.4 release
+
+on:
+  push:
+    branches:
+      - release/1.3.4
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Seed 1.3.4 release'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: release/1.3.4
+          fetch-depth: 0
+
+      - name: Apply release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '1.3.4\n' > VERSION
+
+          cat > /tmp/changelog.new <<'EOF'
+          infiltrator-runner-monitor (1.3.4) unstable; urgency=medium
+
+            * Move the workspace hero and four-metric summary behind the shared native-
+              renderer seam used by both GTK and Win32.
+            * Emit page identity, platform title, subtitle, navigation/hero artwork
+              roles and ordered metric caption/value slots once from toolkit-neutral C.
+            * Keep runtime metric calculation native while preventing Windows pages
+              without ported providers from displaying misleading runner totals.
+            * Add toolkit-free workspace-summary tests for identity, artwork, metric
+              order/values, platform naming and invalid renderer/state handling.
+            * Retain exact Infiltratr Common 1.19.38 and the full Linux, Windows and
+              clean Debian qualification gates.
+
+           -- Shannon Smith <infiltratr@yandex.com>  Tue, 06 Oct 2026 13:30:00 +1100
+
+          EOF
+          cat debian/changelog >> /tmp/changelog.new
+          mv /tmp/changelog.new debian/changelog
+
+          perl -0pi -e 's/## Unreleased\n\nNo unreleased changes\.\n/## Unreleased\n\nNo unreleased changes.\n\n## 1.3.4 - 2026-10-06\n\n- Move the workspace hero and four-metric summary behind the shared native-renderer seam.\n- Emit page identity, platform title, subtitle, navigation\/hero artwork roles and ordered metric captions\/values once from toolkit-neutral C.\n- Make GTK and Win32 translate that same summary into native widgets\/drawing while retaining platform-native metric providers.\n- Show unavailable values on Windows workspaces whose providers are not yet ported instead of reusing unrelated runner counts.\n- Add toolkit-free tests for workspace identity, artwork roles, metric order\/values, platform naming and invalid-state rejection.\n- Retain Common 1.19.38 and the full Linux\/Windows\/Debian qualification gates.\n/' CHANGELOG.md
+
+          rm .github/workflows/apply-release-1.3.4.yml
+          git diff --check
+
+      - name: Commit release candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -A
+          git commit -m 'Release 1.3.4'
+          git push origin HEAD:release/1.3.4
