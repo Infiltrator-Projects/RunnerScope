@@ -32,6 +32,51 @@ typedef struct {
     const char *metric_values[4];
 } RunnerUiWorkspaceSummaryState;
 
+typedef enum {
+    RUNNER_UI_RUNNER_IDLE = 0,
+    RUNNER_UI_RUNNER_RUNNING,
+    RUNNER_UI_RUNNER_OFFLINE,
+    RUNNER_UI_RUNNER_UNKNOWN
+} RunnerUiRunnerTone;
+
+typedef struct {
+    const char *name;
+    const char *os;
+    const char *state;
+    const char *repo;
+    const char *job;
+    const char *runtime;
+    const char *state_for;
+    const char *jobs;
+    const char *busy_pct;
+    const char *labels;
+    double busy_fraction;
+} RunnerUiRunnerItem;
+
+typedef struct {
+    const RunnerUiRunnerItem *item;
+    const char *state_label;
+    RunnerUiRunnerTone tone;
+    double busy_fraction;
+    bool selected;
+    bool show_job;
+} RunnerUiRunnerCardSpec;
+
+typedef struct {
+    const char *eyebrow;
+    const char *title;
+    char primary[512];
+    char secondary[1024];
+} RunnerUiRunnerSelectionSpec;
+
+typedef struct {
+    const RunnerUiRunnerItem *items;
+    size_t item_count;
+    ptrdiff_t selected_index;
+    bool refreshing;
+    bool filter_active;
+} RunnerUiRunnerCardsState;
+
 typedef struct {
     RunnerUiPageId current_page;
     RunnerUiPageId requested_page;
@@ -76,6 +121,15 @@ typedef struct {
                              const char *value);
     bool (*end_workspace_summary)(void *context);
 
+    bool (*begin_runner_cards)(void *context, size_t item_count);
+    bool (*runner_card)(void *context,
+                        size_t index,
+                        const RunnerUiRunnerCardSpec *card);
+    bool (*runner_cards_empty)(void *context, const char *message);
+    bool (*runner_selection)(void *context,
+                             const RunnerUiRunnerSelectionSpec *selection);
+    bool (*end_runner_cards)(void *context);
+
     bool (*begin_footer)(void *context);
     bool (*footer_action)(void *context,
                           RunnerUiChromeActionId action,
@@ -95,6 +149,14 @@ bool runner_ui_render_workspace_summary(
     const RunnerUiRenderer *renderer,
     RunnerUiPlatform platform,
     const RunnerUiWorkspaceSummaryState *state);
+bool runner_ui_prepare_runner_card(const RunnerUiRunnerItem *item,
+                                   bool selected,
+                                   RunnerUiRunnerCardSpec *card);
+bool runner_ui_prepare_runner_selection(
+    const RunnerUiRunnerItem *item,
+    RunnerUiRunnerSelectionSpec *selection);
+bool runner_ui_render_runner_cards(const RunnerUiRenderer *renderer,
+                                   const RunnerUiRunnerCardsState *state);
 bool runner_ui_render_footer(const RunnerUiRenderer *renderer,
                              const RunnerUiFooterState *state);
 bool runner_ui_plan_page_transition(RunnerUiPageId current_page,

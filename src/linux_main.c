@@ -1464,6 +1464,26 @@ static guint count_local_diagnostics(RunnerScopeApp *app)
     return count;
 }
 
+static RunnerUiRunnerItem runner_ui_item_from_row(const RunnerRow *row)
+{
+    RunnerUiRunnerItem item = {0};
+    if (!row) return item;
+    item.name = row->name;
+    item.os = row->os;
+    item.state = row->state;
+    item.repo = row->repo;
+    item.job = row->job;
+    item.runtime = row->runtime;
+    item.state_for = row->state_for;
+    item.jobs = row->jobs;
+    item.busy_pct = row->busy_pct;
+    item.labels = row->labels;
+    item.busy_fraction = CLAMP(
+        g_ascii_strtod(row->busy_pct ? row->busy_pct : "0", NULL) / 100.0,
+        0.0, 1.0);
+    return item;
+}
+
 static void clear_selection_card(RunnerScopeApp *app)
 {
     if (!app || !app->selection_card) return;
@@ -1486,15 +1506,11 @@ static void show_selection_card(RunnerScopeApp *app,
 static void show_runner_details(RunnerScopeApp *app, const RunnerRow *row)
 {
     if (!row) return;
-    char *primary = g_strdup_printf(
-        "%s  •  %s for %s  •  %s jobs  •  %s session utilisation",
-        row->os, row->state, row->state_for, row->jobs, row->busy_pct);
-    char *secondary = g_strdup_printf(
-        "Repository: %s  •  Job: %s  •  Runtime: %s\nLabels: %s",
-        row->repo, row->job, row->runtime, row->labels);
-    show_selection_card(app, row->name, primary, secondary);
-    g_free(primary);
-    g_free(secondary);
+    RunnerUiRunnerItem item = runner_ui_item_from_row(row);
+    RunnerUiRunnerSelectionSpec selection;
+    if (!runner_ui_prepare_runner_selection(&item, &selection)) return;
+    show_selection_card(app, selection.title,
+                        selection.primary, selection.secondary);
 }
 
 static void on_runner_card_selection(GtkFlowBox *box, gpointer user_data)
@@ -1531,22 +1547,35 @@ static GtkWidget *runner_card_label(const char *text, const char *css_class)
     return label;
 }
 
-static GtkWidget *make_runner_card(RunnerScopeApp *app, const RunnerRow *row)
+static const char *runner_tone_css(RunnerUiRunnerTone tone)
 {
+    switch (tone) {
+        case RUNNER_UI_RUNNER_RUNNING: return "running";
+        case RUNNER_UI_RUNNER_IDLE: return "idle";
+        case RUNNER_UI_RUNNER_OFFLINE: return "offline";
+        default: return "offline";
+    }
+}
+
+static GtkWidget *make_runner_card(RunnerScopeApp *app,
+                                   const RunnerUiRunnerCardSpec *spec)
+{
+    const RunnerUiRunnerItem *item = spec->item;
     GtkWidget *child = gtk_flow_box_child_new();
     GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_set_size_request(card, 205, -1);
     gtk_style_context_add_class(gtk_widget_get_style_context(card), "runner-card");
     gtk_container_add(GTK_CONTAINER(child), card);
-    g_object_set_data_full(G_OBJECT(child), "runner-name", g_strdup(row->name), g_free);
+    g_object_set_data_full(
+        G_OBJECT(child), "runner-name", g_strdup(item->name), g_free);
 
     GtkWidget *identity = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 9);
     GtkWidget *art = gtk_image_new_from_pixbuf(app->runner_card_art);
     GtkWidget *copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-    GtkWidget *name = runner_card_label(row->name, "runner-card-name");
+    GtkWidget *name = runner_card_label(item->name, "runner-card-name");
     gtk_label_set_ellipsize(GTK_LABEL(name), PANGO_ELLIPSIZE_END);
     gtk_label_set_width_chars(GTK_LABEL(name), 15);
-    GtkWidget *os = runner_card_label(row->os, "runner-card-os");
+    GtkWidget *os = runner_card_label(item->os, "runner-card-os");
     gtk_box_pack_start(GTK_BOX(copy), name, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(copy), os, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(identity), art, FALSE, FALSE, 0);
@@ -1558,7 +1587,8 @@ static GtkWidget *make_runner_card(RunnerScopeApp *app, const RunnerRow *row)
     GtkWidget *bar = gtk_progress_bar_new();
     gtk_widget_set_hexpand(bar, TRUE);
     gtk_widget_set_valign(bar, GTK_ALIGN_CENTER);
-    gtk_style_context_add_class(gtk_widget_get_style_context(bar), "runner-utilisation");
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(bar), "runner-utilisation");
     gtk_box_pack_start(GTK_BOX(status_row), state, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(status_row), bar, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(card), status_row, FALSE, FALSE, 0);
@@ -1575,34 +1605,133 @@ static GtkWidget *make_runner_card(RunnerScopeApp *app, const RunnerRow *row)
     return child;
 }
 
-static void update_runner_card(GtkWidget *child, const RunnerRow *row)
+static void update_runner_card_spec(
+    GtkWidget *child, const RunnerUiRunnerCardSpec *spec)
 {
+    const RunnerUiRunnerItem *item = spec->item;
     GtkWidget *state = g_object_get_data(G_OBJECT(child), "runner-state");
     GtkWidget *bar = g_object_get_data(G_OBJECT(child), "runner-utilisation");
     GtkWidget *job = g_object_get_data(G_OBJECT(child), "runner-job");
     GtkWidget *os = g_object_get_data(G_OBJECT(child), "runner-os");
-    const gboolean running = strcmp(row->state, "RUNNING") == 0;
-    const gboolean offline = strcmp(row->state, "OFFLINE") == 0;
-    label_set_if_changed(os, row->os);
-    label_set_if_changed(state, running ? "● Running" : offline ? "● Offline" : "● Idle");
+    label_set_if_changed(os, item->os);
+    label_set_if_changed(state, spec->state_label);
     GtkStyleContext *context = gtk_widget_get_style_context(state);
-    const char *state_class = running ? "running" : offline ? "offline" : "idle";
+    const char *state_class = runner_tone_css(spec->tone);
     if (!gtk_style_context_has_class(context, state_class)) {
         gtk_style_context_remove_class(context, "running");
         gtk_style_context_remove_class(context, "idle");
         gtk_style_context_remove_class(context, "offline");
         gtk_style_context_add_class(context, state_class);
     }
-    const double fraction = CLAMP(g_ascii_strtod(row->busy_pct, NULL) / 100.0, 0.0, 1.0);
-    if (gtk_progress_bar_get_fraction(GTK_PROGRESS_BAR(bar)) != fraction)
-        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(bar), fraction);
-    char *tooltip = g_strdup_printf("%s\nSession utilisation: %s", row->name, row->busy_pct);
+    if (gtk_progress_bar_get_fraction(GTK_PROGRESS_BAR(bar)) != spec->busy_fraction)
+        gtk_progress_bar_set_fraction(
+            GTK_PROGRESS_BAR(bar), spec->busy_fraction);
+    char *tooltip = g_strdup_printf(
+        "%s\nSession utilisation: %s", item->name, item->busy_pct);
     gtk_widget_set_tooltip_text(child, tooltip);
     gtk_widget_set_tooltip_text(bar, tooltip);
     g_free(tooltip);
-    label_set_if_changed(job, row->job);
+    label_set_if_changed(job, item->job);
     gtk_widget_show_all(child);
-    gtk_widget_set_visible(job, running);
+    gtk_widget_set_visible(job, spec->show_job);
+}
+
+static void update_runner_card(GtkWidget *child, const RunnerRow *row)
+{
+    RunnerUiRunnerItem item = runner_ui_item_from_row(row);
+    RunnerUiRunnerCardSpec spec;
+    if (runner_ui_prepare_runner_card(&item, FALSE, &spec))
+        update_runner_card_spec(child, &spec);
+}
+
+typedef struct {
+    RunnerScopeApp *app;
+    bool selection_emitted;
+} GtkRunnerCardsRendererContext;
+
+static bool gtk_renderer_begin_runner_cards(void *context, size_t item_count)
+{
+    (void)item_count;
+    GtkRunnerCardsRendererContext *renderer = context;
+    if (!renderer || !renderer->app) return false;
+    renderer->selection_emitted = false;
+    gtk_widget_hide(renderer->app->runner_cards_empty);
+    return true;
+}
+
+static bool gtk_renderer_runner_card(
+    void *context, size_t index, const RunnerUiRunnerCardSpec *spec)
+{
+    (void)index;
+    GtkRunnerCardsRendererContext *renderer = context;
+    if (!renderer || !renderer->app || !spec || !spec->item) return false;
+    RunnerScopeApp *app = renderer->app;
+    GtkWidget *card = g_hash_table_lookup(
+        app->runner_card_by_name, spec->item->name);
+    if (!card) {
+        card = make_runner_card(app, spec);
+        g_hash_table_insert(
+            app->runner_card_by_name, g_strdup(spec->item->name), card);
+    }
+    update_runner_card_spec(card, spec);
+    if (spec->selected) {
+        renderer->selection_emitted = true;
+        gtk_flow_box_select_child(
+            GTK_FLOW_BOX(app->runner_cards), GTK_FLOW_BOX_CHILD(card));
+        GtkTreeIter iter;
+        gboolean valid = gtk_tree_model_get_iter_first(
+            GTK_TREE_MODEL(app->runner_store), &iter);
+        while (valid) {
+            char *name = NULL;
+            gtk_tree_model_get(
+                GTK_TREE_MODEL(app->runner_store), &iter,
+                RUNNER_COL_NAME, &name, -1);
+            const gboolean match =
+                g_strcmp0(name, spec->item->name) == 0;
+            g_free(name);
+            if (match) {
+                gtk_tree_selection_select_iter(
+                    gtk_tree_view_get_selection(GTK_TREE_VIEW(app->runner_tree)),
+                    &iter);
+                break;
+            }
+            valid = gtk_tree_model_iter_next(
+                GTK_TREE_MODEL(app->runner_store), &iter);
+        }
+    }
+    return true;
+}
+
+static bool gtk_renderer_runner_cards_empty(void *context, const char *message)
+{
+    GtkRunnerCardsRendererContext *renderer = context;
+    if (!renderer || !renderer->app || !message) return false;
+    label_set_if_changed(renderer->app->runner_cards_empty, message);
+    gtk_widget_show(renderer->app->runner_cards_empty);
+    return true;
+}
+
+static bool gtk_renderer_runner_selection(
+    void *context, const RunnerUiRunnerSelectionSpec *selection)
+{
+    GtkRunnerCardsRendererContext *renderer = context;
+    if (!renderer || !renderer->app || !selection) return false;
+    renderer->selection_emitted = true;
+    show_selection_card(renderer->app, selection->title,
+                        selection->primary, selection->secondary);
+    return true;
+}
+
+static bool gtk_renderer_end_runner_cards(void *context)
+{
+    GtkRunnerCardsRendererContext *renderer = context;
+    if (!renderer || !renderer->app) return false;
+    if (!renderer->selection_emitted) {
+        g_clear_pointer(&renderer->app->selected_runner_name, g_free);
+        gtk_flow_box_unselect_all(GTK_FLOW_BOX(renderer->app->runner_cards));
+        clear_selection_card(renderer->app);
+    }
+    return true;
 }
 
 static void on_runner_view_toggled(GtkToggleButton *button, gpointer user_data)
@@ -1731,9 +1860,6 @@ static void render_history(RunnerScopeApp *app)
 static void render_runners(RunnerScopeApp *app)
 {
     char *folded_needle = filter_needle_casefold(app);
-    label_set_if_changed(app->runner_cards_empty, folded_needle && *folded_needle
-        ? "No runners match this filter." : "No runners detected.");
-    guint visible_cards = 0U;
     app->runner_rendering = TRUE;
     GHashTableIter cards;
     gpointer card_name, card_widget;
@@ -1746,22 +1872,25 @@ static void render_runners(RunnerScopeApp *app)
             gtk_widget_hide(card_widget);
         }
     }
+
+    GArray *items = g_array_new(FALSE, FALSE, sizeof(RunnerUiRunnerItem));
+    ptrdiff_t selected_index = -1;
     tree_model_rebuild_begin(app->runner_tree);
     gtk_list_store_clear(app->runner_store);
     for (guint i = 0U; i < app->runner_rows->len; i++) {
         RunnerRow *row = g_ptr_array_index(app->runner_rows, i);
-        char *search = g_strdup_printf("%s %s %s %s %s %s", row->name, row->os,
-                                       row->state, row->repo, row->job, row->labels);
+        char *search = g_strdup_printf(
+            "%s %s %s %s %s %s", row->name, row->os,
+            row->state, row->repo, row->job, row->labels);
         const gboolean visible = text_matches_folded(folded_needle, search);
         g_free(search);
         if (!visible) continue;
-        visible_cards++;
-        GtkWidget *card = g_hash_table_lookup(app->runner_card_by_name, row->name);
-        if (!card) {
-            card = make_runner_card(app, row);
-            g_hash_table_insert(app->runner_card_by_name, g_strdup(row->name), card);
-        }
-        update_runner_card(card, row);
+
+        RunnerUiRunnerItem item = runner_ui_item_from_row(row);
+        if (g_strcmp0(row->name, app->selected_runner_name) == 0)
+            selected_index = (ptrdiff_t)items->len;
+        g_array_append_val(items, item);
+
         GtkTreeIter iter;
         gtk_list_store_append(app->runner_store, &iter);
         gtk_list_store_set(app->runner_store, &iter,
@@ -1772,30 +1901,26 @@ static void render_runners(RunnerScopeApp *app)
             RUNNER_COL_BUSY, row->busy_pct, RUNNER_COL_LABELS, row->labels, -1);
     }
     tree_model_rebuild_end(app->runner_tree, app->runner_store);
-    gtk_widget_set_visible(app->runner_cards_empty, visible_cards == 0U);
-    GtkWidget *selected = app->selected_runner_name
-        ? g_hash_table_lookup(app->runner_card_by_name, app->selected_runner_name) : NULL;
-    if (selected && gtk_widget_get_visible(selected)) {
-        gtk_flow_box_select_child(GTK_FLOW_BOX(app->runner_cards), GTK_FLOW_BOX_CHILD(selected));
-        GtkTreeIter iter;
-        gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(app->runner_store), &iter);
-        while (valid) {
-            char *name = NULL;
-            gtk_tree_model_get(GTK_TREE_MODEL(app->runner_store), &iter, RUNNER_COL_NAME, &name, -1);
-            const gboolean match = g_strcmp0(name, app->selected_runner_name) == 0;
-            g_free(name);
-            if (match) {
-                gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(app->runner_tree)), &iter);
-                break;
-            }
-            valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(app->runner_store), &iter);
-        }
-        show_runner_details(app, g_hash_table_lookup(app->runner_row_by_name, app->selected_runner_name));
-    } else {
-        g_clear_pointer(&app->selected_runner_name, g_free);
-        gtk_flow_box_unselect_all(GTK_FLOW_BOX(app->runner_cards));
-        clear_selection_card(app);
-    }
+
+    GtkRunnerCardsRendererContext context = {app, false};
+    RunnerUiRenderer renderer = {0};
+    renderer.context = &context;
+    renderer.begin_runner_cards = gtk_renderer_begin_runner_cards;
+    renderer.runner_card = gtk_renderer_runner_card;
+    renderer.runner_cards_empty = gtk_renderer_runner_cards_empty;
+    renderer.runner_selection = gtk_renderer_runner_selection;
+    renderer.end_runner_cards = gtk_renderer_end_runner_cards;
+    RunnerUiRunnerCardsState state = {
+        (const RunnerUiRunnerItem *)items->data,
+        items->len,
+        selected_index,
+        g_atomic_int_get(&app->runner_refreshing) != 0,
+        folded_needle && *folded_needle
+    };
+    if (!runner_ui_render_runner_cards(&renderer, &state))
+        g_warning("Unable to render the shared runner-card contract.");
+
+    g_array_unref(items);
     app->runner_rendering = FALSE;
     g_free(folded_needle);
 }
