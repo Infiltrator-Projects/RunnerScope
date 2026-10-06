@@ -11,6 +11,7 @@
 #include <infiltratr/posix.h>
 
 #include "ui/ui_contract.h"
+#include "ui/ui_renderer.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -3272,6 +3273,63 @@ static GtkWidget *make_action_button(const char *icon_name,
     return button;
 }
 
+
+typedef struct {
+    RunnerScopeApp *app;
+    GtkWidget *nav_rail;
+} GtkNavigationRendererContext;
+
+static bool gtk_renderer_begin_navigation(void *context,
+                                          size_t item_count,
+                                          RunnerUiPageId selected_page)
+{
+    (void)item_count;
+    (void)selected_page;
+    GtkNavigationRendererContext *renderer = context;
+    return renderer && renderer->app && renderer->nav_rail;
+}
+
+static bool gtk_renderer_navigation_separator(
+    void *context, const RunnerUiPageSpec *before_page)
+{
+    GtkNavigationRendererContext *renderer = context;
+    if (!renderer || !renderer->nav_rail || !before_page) return false;
+    GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(separator),
+        "runner-main-nav-separator");
+    gtk_box_pack_start(
+        GTK_BOX(renderer->nav_rail), separator, FALSE, FALSE, 5);
+    return true;
+}
+
+static bool gtk_renderer_navigation_item(void *context,
+                                         const RunnerUiPageSpec *page,
+                                         const char *platform_label,
+                                         bool selected)
+{
+    GtkNavigationRendererContext *renderer = context;
+    if (!renderer || !renderer->app || !renderer->nav_rail ||
+        !page || !platform_label)
+        return false;
+    GtkWidget *button = make_nav_button(
+        renderer->app,
+        (gint)page->id,
+        page->nav_asset,
+        platform_label,
+        page->tooltip);
+    gtk_box_pack_start(
+        GTK_BOX(renderer->nav_rail), button, FALSE, TRUE, 0);
+    if (selected)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
+    return true;
+}
+
+static bool gtk_renderer_end_navigation(void *context)
+{
+    return context != NULL;
+}
+
 static void build_ui(RunnerScopeApp *app)
 {
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
@@ -3664,23 +3722,19 @@ static void build_ui(RunnerScopeApp *app)
     g_signal_connect(
         selection, "changed", G_CALLBACK(on_local_selection), app);
 
-    for (gint i = 0; i < RUNNER_UI_PAGE_COUNT; i++) {
-        const RunnerUiPageSpec *ui_page =
-            runner_ui_page((RunnerUiPageId)i);
-        if (ui_page->separator_before) {
-            GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-            gtk_style_context_add_class(
-                gtk_widget_get_style_context(separator),
-                "runner-main-nav-separator");
-            gtk_box_pack_start(GTK_BOX(nav_rail), separator, FALSE, FALSE, 5);
-        }
-        GtkWidget *nav_button = make_nav_button(
-            app, i, ui_page->nav_asset,
-            runner_ui_page_nav_label(ui_page, RUNNER_UI_PLATFORM_LINUX),
-            ui_page->tooltip);
-        gtk_box_pack_start(
-            GTK_BOX(nav_rail), nav_button, FALSE, TRUE, 0);
-    }
+    GtkNavigationRendererContext navigation_context = {app, nav_rail};
+    RunnerUiRenderer navigation_renderer = {0};
+    navigation_renderer.context = &navigation_context;
+    navigation_renderer.begin_navigation = gtk_renderer_begin_navigation;
+    navigation_renderer.navigation_separator =
+        gtk_renderer_navigation_separator;
+    navigation_renderer.navigation_item = gtk_renderer_navigation_item;
+    navigation_renderer.end_navigation = gtk_renderer_end_navigation;
+    if (!runner_ui_render_navigation(
+            &navigation_renderer,
+            RUNNER_UI_PLATFORM_LINUX,
+            RUNNER_UI_PAGE_RUNNERS))
+        g_error("Unable to render the shared navigation contract.");
     sync_navigation(app, RUNNER_UI_PAGE_RUNNERS);
 
     GtkWidget *nav_art_frame = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);

@@ -22,6 +22,7 @@
 
 #include "windows_resources.h"
 #include "ui/ui_contract.h"
+#include "ui/ui_renderer.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -1071,36 +1072,92 @@ static void draw_header(HDC dc)
     draw_outline_icon(dc, g_close_rect, 2, rgb(g_palette.button_foreground_rgb));
 }
 
+
+typedef struct {
+    HDC dc;
+} WinNavigationRendererContext;
+
+static bool win_renderer_begin_navigation(void *context,
+                                          size_t item_count,
+                                          RunnerUiPageId selected_page)
+{
+    (void)item_count;
+    (void)selected_page;
+    WinNavigationRendererContext *renderer = context;
+    return renderer && renderer->dc;
+}
+
+static bool win_renderer_navigation_separator(
+    void *context, const RunnerUiPageSpec *before_page)
+{
+    WinNavigationRendererContext *renderer = context;
+    if (!renderer || !renderer->dc || !before_page) return false;
+    int page = (int)before_page->id;
+    if (page < 0 || page >= RUNNER_UI_PAGE_COUNT) return false;
+    RECT separator = {
+        g_nav_rects[page].left + sx(2),
+        g_nav_rects[page].top - sx(7),
+        g_nav_rects[page].right - sx(2),
+        g_nav_rects[page].top - sx(6)
+    };
+    fill_rect_color(renderer->dc, separator, rgb(g_palette.border_rgb));
+    return true;
+}
+
+static bool win_renderer_navigation_item(void *context,
+                                         const RunnerUiPageSpec *page,
+                                         const char *platform_label,
+                                         bool selected)
+{
+    WinNavigationRendererContext *renderer = context;
+    if (!renderer || !renderer->dc || !page || !platform_label) return false;
+    int index = (int)page->id;
+    if (index < 0 || index >= RUNNER_UI_PAGE_COUNT) return false;
+
+    wchar_t nav_label[128];
+    utf8_to_wide(platform_label, nav_label,
+                 sizeof(nav_label) / sizeof(nav_label[0]));
+    RECT item = g_nav_rects[index];
+    if (selected) {
+        fill_round_rect(renderer->dc, item,
+                        rgb(g_palette.selection_background_rgb),
+                        rgb(g_palette.neutral_accent_rgb), sx(12));
+    }
+    RECT image_rect = {item.left + sx(5), item.top + sx(5),
+                       item.left + sx(45), item.bottom - sx(5)};
+    draw_image(renderer->dc, &g_nav_images[index], &image_rect);
+    RECT text_rect = {item.left + sx(54), item.top,
+                      item.right - sx(6), item.bottom};
+    draw_text(renderer->dc, nav_label, text_rect, g_font_bold,
+              selected ? rgb(g_palette.selection_foreground_rgb)
+                       : rgb(g_palette.text_rgb),
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    return true;
+}
+
+static bool win_renderer_end_navigation(void *context)
+{
+    return context != NULL;
+}
+
 static void draw_navigation(HDC dc, RECT content)
 {
     RECT nav = {content.left, content.top, g_workspace_rect.left, content.bottom};
     fill_round_rect(dc, nav, rgb(g_palette.panel_rgb),
                     rgb(g_palette.connection_border_rgb), sx(12));
-    for (int i = 0; i < RUNNER_UI_PAGE_COUNT; ++i) {
-        const RunnerUiPageSpec *ui_page =
-            runner_ui_page((RunnerUiPageId)i);
-        wchar_t nav_label[128];
-        utf8_to_wide(
-            runner_ui_page_nav_label(ui_page, RUNNER_UI_PLATFORM_WINDOWS),
-            nav_label, sizeof(nav_label) / sizeof(nav_label[0]));
-        RECT item = g_nav_rects[i];
-        if (i == g_page) {
-            fill_round_rect(dc, item, rgb(g_palette.selection_background_rgb),
-                            rgb(g_palette.neutral_accent_rgb), sx(12));
-        }
-        RECT image_rect = {item.left + sx(5), item.top + sx(5),
-                           item.left + sx(45), item.bottom - sx(5)};
-        draw_image(dc, &g_nav_images[i], &image_rect);
-        RECT text_rect = {item.left + sx(54), item.top,
-                          item.right - sx(6), item.bottom};
-        draw_text(dc, nav_label, text_rect, g_font_bold,
-                  i == g_page ? rgb(g_palette.selection_foreground_rgb)
-                              : rgb(g_palette.text_rgb),
-                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    }
-    RECT separator = {nav.left + sx(10), g_nav_rects[3].top - sx(7),
-                      nav.right - sx(10), g_nav_rects[3].top - sx(6)};
-    fill_rect_color(dc, separator, rgb(g_palette.border_rgb));
+    WinNavigationRendererContext navigation_context = {dc};
+    RunnerUiRenderer navigation_renderer = {0};
+    navigation_renderer.context = &navigation_context;
+    navigation_renderer.begin_navigation = win_renderer_begin_navigation;
+    navigation_renderer.navigation_separator =
+        win_renderer_navigation_separator;
+    navigation_renderer.navigation_item = win_renderer_navigation_item;
+    navigation_renderer.end_navigation = win_renderer_end_navigation;
+    if (!runner_ui_render_navigation(
+            &navigation_renderer,
+            RUNNER_UI_PLATFORM_WINDOWS,
+            (RunnerUiPageId)g_page))
+        return;
 
     if (g_side_image.bitmap) {
         int image_h = sx(180);
