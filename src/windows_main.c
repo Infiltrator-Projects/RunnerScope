@@ -1650,12 +1650,30 @@ static void paint_ui(HDC dc)
 
 static void set_page(int page)
 {
-    if (page < 0 || page >= RUNNER_UI_PAGE_COUNT || page == g_page) return;
-    g_page = page;
-    g_selected_row = -1;
+    if (page < 0 || page >= RUNNER_UI_PAGE_COUNT) return;
+    bool runners_running = false;
+    for (size_t i = 0U; i < g_row_count; ++i) {
+        if (strcmp(g_rows[i].state, "RUNNING") == 0) {
+            runners_running = true;
+            break;
+        }
+    }
+
+    RunnerUiPageTransition transition;
+    if (!runner_ui_plan_page_transition(
+            (RunnerUiPageId)g_page,
+            (RunnerUiPageId)page,
+            runners_running,
+            g_table_view,
+            &transition) ||
+        !transition.changed)
+        return;
+
+    g_page = (int)transition.requested_page;
+    if (transition.clear_selection) g_selected_row = -1;
     g_card_scroll_y = 0;
-    ShowWindow(g_search, page == 0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(g_list, page == 0 && g_table_view ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_search, transition.show_search ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_list, transition.show_runner_table ? SW_SHOW : SW_HIDE);
     update_layout(g_main);
     InvalidateRect(g_main, NULL, FALSE);
 }

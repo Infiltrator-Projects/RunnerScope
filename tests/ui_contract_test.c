@@ -271,6 +271,62 @@ static int verify_chrome_renderer(void)
     return 0;
 }
 
+static int verify_page_transition_policy(void)
+{
+    RunnerUiPageTransition transition;
+    if (!runner_ui_plan_page_transition(
+            RUNNER_UI_PAGE_RUNNERS, RUNNER_UI_PAGE_ACTIVE_JOBS,
+            false, false, &transition))
+        return 1;
+    if (!transition.changed || !transition.clear_selection ||
+        !transition.request_activity_refresh ||
+        transition.request_local_refresh || transition.show_search ||
+        transition.show_runner_table)
+        return 2;
+
+    if (!runner_ui_plan_page_transition(
+            RUNNER_UI_PAGE_ACTIVE_JOBS, RUNNER_UI_PAGE_RUNNERS,
+            true, true, &transition))
+        return 3;
+    if (!transition.changed || !transition.show_search ||
+        !transition.show_runner_table ||
+        !transition.request_activity_refresh ||
+        transition.request_local_refresh)
+        return 4;
+
+    if (!runner_ui_plan_page_transition(
+            RUNNER_UI_PAGE_HISTORY, RUNNER_UI_PAGE_LOCAL_HEALTH,
+            false, false, &transition))
+        return 5;
+    if (!transition.request_local_refresh ||
+        transition.request_activity_refresh)
+        return 6;
+
+    if (!runner_ui_plan_page_transition(
+            RUNNER_UI_PAGE_RUNNERS, RUNNER_UI_PAGE_RUNNERS,
+            true, true, &transition))
+        return 7;
+    if (transition.changed || transition.clear_selection ||
+        transition.request_activity_refresh ||
+        transition.request_local_refresh || !transition.show_search ||
+        !transition.show_runner_table)
+        return 8;
+
+    if (runner_ui_plan_page_transition(
+            (RunnerUiPageId)-1, RUNNER_UI_PAGE_RUNNERS,
+            false, false, &transition))
+        return 9;
+    if (runner_ui_plan_page_transition(
+            RUNNER_UI_PAGE_RUNNERS, RUNNER_UI_PAGE_COUNT,
+            false, false, &transition))
+        return 10;
+    if (runner_ui_plan_page_transition(
+            RUNNER_UI_PAGE_RUNNERS, RUNNER_UI_PAGE_HISTORY,
+            false, false, NULL))
+        return 11;
+    return 0;
+}
+
 int main(void)
 {
     char error[256];
@@ -332,7 +388,8 @@ int main(void)
             RUNNER_UI_PAGE_RUNNERS))
         return 15;
     if (verify_chrome_renderer() != 0) return 16;
+    if (verify_page_transition_policy() != 0) return 17;
 
-    puts("Runner Monitor shared UI contract, navigation and shell chrome renderers passed.");
+    puts("Runner Monitor shared UI contract, navigation, page transitions and shell chrome renderers passed.");
     return 0;
 }

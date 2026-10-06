@@ -3094,21 +3094,31 @@ static void on_nav_clicked(GtkButton *button, gpointer user_data)
     const gint encoded = GPOINTER_TO_INT(
         g_object_get_data(G_OBJECT(button), "runner-nav-page"));
     const gint page = encoded - 1;
-    if (page < 0 || page >= 4) return;
+    if (page < 0 || page >= RUNNER_UI_PAGE_COUNT) return;
 
     const gint current_page =
         gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
-    if (current_page == page) return;
+    RunnerUiPageTransition transition;
+    if (!runner_ui_plan_page_transition(
+            (RunnerUiPageId)current_page,
+            (RunnerUiPageId)page,
+            app->runners_running != 0U,
+            false,
+            &transition) ||
+        !transition.changed)
+        return;
 
-    gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page);
-    sync_navigation(app, page);
-    render_page(app, page);
-    update_workspace_context(app, page);
-    if (page == 1 || (page == 0 && app->runners_running != 0U))
+    gtk_notebook_set_current_page(
+        GTK_NOTEBOOK(app->notebook), (gint)transition.requested_page);
+    sync_navigation(app, (gint)transition.requested_page);
+    render_page(app, (gint)transition.requested_page);
+    update_workspace_context(app, (gint)transition.requested_page);
+    if (transition.request_activity_refresh)
         request_activity_refresh(app);
-    else if (page == 3)
+    else if (transition.request_local_refresh)
         request_local_refresh(app);
-    clear_selection_card(app);
+    if (transition.clear_selection)
+        clear_selection_card(app);
 }
 
 static GtkWidget *make_nav_button(RunnerScopeApp *app,
