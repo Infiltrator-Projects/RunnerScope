@@ -39,6 +39,16 @@ Native renderer qualification remains separate. Linux must prove the GTK rendere
 
 Once a migration slice is complete, CI must reject new application-level direct GTK/Win32 layout composition outside the renderer/platform boundary for that slice. This prevents the old duplicated-layout architecture from quietly returning.
 
+## 1.3.3 shared page-transition policy slice
+
+Version 1.3.3 moves page-transition policy behind the toolkit-neutral UI seam. `runner_ui_plan_page_transition()` is now the single product-level decision point for whether a requested page differs from the current page, whether Runners search/table surfaces should be shown, whether the current selection is cleared, and whether entering Runners/Active Jobs or Local Health requests the corresponding provider refresh.
+
+GTK and Win32 consume that same transition plan but continue to perform platform mechanics natively: GTK changes the notebook page and updates its workspace widgets, while Win32 shows/hides native controls and repaints its workspace. The shared layer therefore owns application semantics without becoming a cross-platform widget toolkit.
+
+The toolkit-free contract test verifies Active Jobs, Runners, Local Health and no-op transitions, including runner-running/table-view state and invalid input rejection. Linux native, self-hosted Windows build, hosted Windows runtime and clean Debian build/install/smoke qualification remain required gates.
+
+This completes the navigation/page-switch policy tranche. It does not claim functional parity for the Windows Active Jobs, History or Local Health backends; those remain later 1.3.x work.
+
 ## 1.3.2 shared shell-chrome unification slice
 
 Version 1.3.2 extends the native-renderer seam from navigation into the persistent shell chrome. `runner_ui_render_header()` now owns product/family identity and the ordered Settings, Minimize, Maximize/Restore and Close action semantics. `runner_ui_render_footer()` owns the general Export CSV, About and Refresh actions, the Refreshing label transition, and the status/application/Common-version slots. GTK and Win32 translate those same emissions into native widgets or native GDI drawing.
