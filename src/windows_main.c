@@ -1010,26 +1010,6 @@ static void update_layout(HWND window)
             width - pad, button_y + sx(34));
 }
 
-static const wchar_t *page_title(int page)
-{
-    static wchar_t value[128];
-    const RunnerUiPageSpec *ui_page =
-        runner_ui_page((RunnerUiPageId)page);
-    utf8_to_wide(
-        runner_ui_page_title(ui_page, RUNNER_UI_PLATFORM_WINDOWS),
-        value, sizeof(value) / sizeof(value[0]));
-    return value;
-}
-
-static const wchar_t *page_subtitle(int page)
-{
-    static wchar_t value[160];
-    const RunnerUiPageSpec *ui_page =
-        runner_ui_page((RunnerUiPageId)page);
-    utf8_to_wide(ui_page->subtitle, value, sizeof(value) / sizeof(value[0]));
-    return value;
-}
-
 typedef struct {
     HDC dc;
     RECT client;
@@ -1231,70 +1211,136 @@ static void draw_navigation(HDC dc, RECT content)
     }
 }
 
-static void draw_metrics(HDC dc, RECT header)
-{
-    size_t total = g_row_count, running = 0U, idle = 0U, offline = 0U;
-    for (size_t i = 0U; i < g_row_count; ++i) {
-        if (strcmp(g_rows[i].state, "RUNNING") == 0) running++;
-        else if (strcmp(g_rows[i].state, "IDLE") == 0) idle++;
-        else offline++;
-    }
-    const wchar_t *captions[4] = {L"TOTAL", L"RUNNING", L"IDLE", L"OFFLINE"};
-    size_t values[4] = {total, running, idle, offline};
-    int metric_w = sx(76);
-    int gap = sx(6);
-    int right = header.right - sx(8);
-    for (int i = 3; i >= 0; --i) {
-        RECT metric = {right - metric_w, header.top + sx(18),
-                       right, header.top + sx(82)};
-        fill_round_rect(dc, metric,
-                        mix_color(g_palette.surface_rgb, g_palette.neutral_accent_rgb,
-                                  i == 1 ? 12U : 5U),
-                        rgb(g_palette.border_rgb), sx(9));
-        wchar_t value[32];
-        _snwprintf_s(value, 32U, _TRUNCATE, L"%zu", values[i]);
-        RECT value_rect = {metric.left + sx(4), metric.top + sx(7),
-                           metric.right - sx(4), metric.top + sx(37)};
-        draw_text(dc, value, value_rect, g_font_title,
-                  rgb(g_palette.title_rgb), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        RECT caption_rect = {metric.left + sx(3), metric.top + sx(38),
-                             metric.right - sx(3), metric.bottom - sx(5)};
-        draw_text(dc, captions[i], caption_rect, g_font_small,
-                  rgb(g_palette.muted_rgb), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        right = metric.left - gap;
-    }
-}
+typedef struct {
+    HDC dc;
+    RECT header;
+} WinWorkspaceRendererContext;
 
-static void draw_workspace_header(HDC dc)
+static bool win_renderer_begin_workspace_summary(
+    void *context, const RunnerUiPageSpec *page, const char *platform_title)
 {
-    RECT header = {g_workspace_rect.left, g_workspace_rect.top,
-                   g_workspace_rect.right, g_workspace_rect.top + sx(108)};
-    fill_round_rect(dc, header, rgb(g_palette.card_rgb),
+    WinWorkspaceRendererContext *renderer = context;
+    if (!renderer || !renderer->dc || !page || !platform_title) return false;
+    int page_index = (int)page->id;
+    if (page_index < 0 || page_index >= RUNNER_UI_PAGE_COUNT) return false;
+
+    renderer->header = (RECT){
+        g_workspace_rect.left, g_workspace_rect.top,
+        g_workspace_rect.right, g_workspace_rect.top + sx(108)
+    };
+    RECT header = renderer->header;
+    fill_round_rect(renderer->dc, header, rgb(g_palette.card_rgb),
                     rgb(g_palette.connection_border_rgb), sx(12));
 
     RECT icon_well = {header.left + sx(16), header.top + sx(17),
                       header.left + sx(74), header.top + sx(75)};
-    fill_round_rect(dc, icon_well,
-                    mix_color(g_palette.surface_rgb, g_palette.neutral_accent_rgb, 11U),
+    fill_round_rect(renderer->dc, icon_well,
+                    mix_color(g_palette.surface_rgb,
+                              g_palette.neutral_accent_rgb, 11U),
                     rgb(g_palette.neutral_accent_rgb), sx(11));
     RECT icon = {icon_well.left + sx(5), icon_well.top + sx(5),
                  icon_well.right - sx(5), icon_well.bottom - sx(5)};
-    draw_image(dc, &g_nav_images[g_page], &icon);
+    draw_image(renderer->dc, &g_nav_images[page_index], &icon);
 
+    wchar_t title_text[128];
+    wchar_t subtitle_text[160];
+    utf8_to_wide(platform_title, title_text,
+                 sizeof(title_text) / sizeof(title_text[0]));
+    utf8_to_wide(page->subtitle, subtitle_text,
+                 sizeof(subtitle_text) / sizeof(subtitle_text[0]));
     RECT title = {icon_well.right + sx(12), header.top + sx(16),
                   header.left + sx(420), header.top + sx(47)};
-    draw_text(dc, page_title(g_page), title, g_font_brand,
-              rgb(g_palette.title_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    draw_text(renderer->dc, title_text, title, g_font_brand,
+              rgb(g_palette.title_rgb),
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     RECT subtitle = {title.left, header.top + sx(50),
                      header.left + sx(430), header.top + sx(73)};
-    draw_text(dc, page_subtitle(g_page), subtitle, g_font_small,
-              rgb(g_palette.kicker_rgb), DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    draw_text(renderer->dc, subtitle_text, subtitle, g_font_small,
+              rgb(g_palette.kicker_rgb),
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
     int metrics_width = sx(322);
     RECT hero = {header.right - metrics_width - sx(258), header.top + sx(11),
                  header.right - metrics_width - sx(18), header.top + sx(97)};
-    draw_image(dc, &g_hero_images[g_page], &hero);
-    draw_metrics(dc, header);
+    draw_image(renderer->dc, &g_hero_images[page_index], &hero);
+    return true;
+}
+
+static bool win_renderer_workspace_metric(void *context, size_t index,
+                                          const char *caption,
+                                          const char *value)
+{
+    WinWorkspaceRendererContext *renderer = context;
+    if (!renderer || !renderer->dc || index >= 4U || !caption || !value)
+        return false;
+    int metric_w = sx(76);
+    int gap = sx(6);
+    int slot_from_right = 3 - (int)index;
+    int right = renderer->header.right - sx(8) -
+                slot_from_right * (metric_w + gap);
+    RECT metric = {right - metric_w, renderer->header.top + sx(18),
+                   right, renderer->header.top + sx(82)};
+    fill_round_rect(renderer->dc, metric,
+                    mix_color(g_palette.surface_rgb,
+                              g_palette.neutral_accent_rgb,
+                              index == 1U ? 12U : 5U),
+                    rgb(g_palette.border_rgb), sx(9));
+
+    wchar_t value_text[64];
+    wchar_t caption_text[64];
+    utf8_to_wide(value, value_text,
+                 sizeof(value_text) / sizeof(value_text[0]));
+    utf8_to_wide(caption, caption_text,
+                 sizeof(caption_text) / sizeof(caption_text[0]));
+    RECT value_rect = {metric.left + sx(4), metric.top + sx(7),
+                       metric.right - sx(4), metric.top + sx(37)};
+    draw_text(renderer->dc, value_text, value_rect, g_font_title,
+              rgb(g_palette.title_rgb),
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    RECT caption_rect = {metric.left + sx(3), metric.top + sx(38),
+                         metric.right - sx(3), metric.bottom - sx(5)};
+    draw_text(renderer->dc, caption_text, caption_rect, g_font_small,
+              rgb(g_palette.muted_rgb),
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    return true;
+}
+
+static bool win_renderer_end_workspace_summary(void *context)
+{
+    return context != NULL;
+}
+
+static void draw_workspace_header(HDC dc)
+{
+    char storage[4][32] = {{0}};
+    const char *metric_values[4] = {"—", "—", "—", "—"};
+    if (g_page == RUNNER_UI_PAGE_RUNNERS) {
+        size_t total = g_row_count, running = 0U, idle = 0U, offline = 0U;
+        for (size_t i = 0U; i < g_row_count; ++i) {
+            if (strcmp(g_rows[i].state, "RUNNING") == 0) running++;
+            else if (strcmp(g_rows[i].state, "IDLE") == 0) idle++;
+            else offline++;
+        }
+        size_t values[4] = {total, running, idle, offline};
+        for (size_t i = 0U; i < 4U; ++i) {
+            (void)snprintf(storage[i], sizeof(storage[i]), "%zu", values[i]);
+            metric_values[i] = storage[i];
+        }
+    }
+
+    RunnerUiWorkspaceSummaryState summary = {
+        (RunnerUiPageId)g_page,
+        {metric_values[0], metric_values[1], metric_values[2], metric_values[3]}
+    };
+    WinWorkspaceRendererContext workspace = {0};
+    workspace.dc = dc;
+    RunnerUiRenderer renderer = {0};
+    renderer.context = &workspace;
+    renderer.begin_workspace_summary = win_renderer_begin_workspace_summary;
+    renderer.workspace_metric = win_renderer_workspace_metric;
+    renderer.end_workspace_summary = win_renderer_end_workspace_summary;
+    (void)runner_ui_render_workspace_summary(
+        &renderer, RUNNER_UI_PLATFORM_WINDOWS, &summary);
 }
 
 static COLORREF state_color(const char *state)
