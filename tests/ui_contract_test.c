@@ -101,6 +101,176 @@ static int verify_navigation_renderer(RunnerUiPlatform platform,
     return 0;
 }
 
+
+typedef struct {
+    size_t header_begin_count;
+    size_t header_action_count;
+    size_t header_end_count;
+    size_t footer_begin_count;
+    size_t footer_action_count;
+    size_t footer_status_count;
+    size_t footer_end_count;
+    RunnerUiChromeActionId header_ids[4];
+    RunnerUiChromeActionId footer_ids[3];
+    char header_labels[4][64];
+    char footer_labels[3][64];
+    char product_title[64];
+    char product_family[64];
+    char status_text[128];
+    char app_version[64];
+    char common_version[64];
+} ChromeRecorder;
+
+static bool record_begin_header(void *context,
+                                const char *product_title,
+                                const char *product_family)
+{
+    ChromeRecorder *recorder = context;
+    if (!recorder || !product_title || !product_family) return false;
+    recorder->header_begin_count++;
+    (void)snprintf(recorder->product_title, sizeof(recorder->product_title),
+                   "%s", product_title);
+    (void)snprintf(recorder->product_family, sizeof(recorder->product_family),
+                   "%s", product_family);
+    return true;
+}
+
+static bool record_header_action(void *context,
+                                 RunnerUiChromeActionId action,
+                                 const char *label,
+                                 const char *tooltip,
+                                 bool primary)
+{
+    ChromeRecorder *recorder = context;
+    (void)tooltip;
+    (void)primary;
+    if (!recorder || !label || recorder->header_action_count >= 4U)
+        return false;
+    size_t index = recorder->header_action_count++;
+    recorder->header_ids[index] = action;
+    (void)snprintf(recorder->header_labels[index],
+                   sizeof(recorder->header_labels[index]), "%s", label);
+    return true;
+}
+
+static bool record_end_header(void *context)
+{
+    ChromeRecorder *recorder = context;
+    if (!recorder) return false;
+    recorder->header_end_count++;
+    return true;
+}
+
+static bool record_begin_footer(void *context)
+{
+    ChromeRecorder *recorder = context;
+    if (!recorder) return false;
+    recorder->footer_begin_count++;
+    return true;
+}
+
+static bool record_footer_action(void *context,
+                                 RunnerUiChromeActionId action,
+                                 const char *label,
+                                 const char *tooltip,
+                                 bool primary)
+{
+    ChromeRecorder *recorder = context;
+    (void)tooltip;
+    (void)primary;
+    if (!recorder || !label || recorder->footer_action_count >= 3U)
+        return false;
+    size_t index = recorder->footer_action_count++;
+    recorder->footer_ids[index] = action;
+    (void)snprintf(recorder->footer_labels[index],
+                   sizeof(recorder->footer_labels[index]), "%s", label);
+    return true;
+}
+
+static bool record_footer_status(void *context,
+                                 const RunnerUiFooterState *state)
+{
+    ChromeRecorder *recorder = context;
+    if (!recorder || !state) return false;
+    recorder->footer_status_count++;
+    (void)snprintf(recorder->status_text, sizeof(recorder->status_text),
+                   "%s", state->status_text);
+    (void)snprintf(recorder->app_version, sizeof(recorder->app_version),
+                   "%s", state->app_version);
+    (void)snprintf(recorder->common_version, sizeof(recorder->common_version),
+                   "%s", state->common_version);
+    return true;
+}
+
+static bool record_end_footer(void *context)
+{
+    ChromeRecorder *recorder = context;
+    if (!recorder) return false;
+    recorder->footer_end_count++;
+    return true;
+}
+
+static int verify_chrome_renderer(void)
+{
+    ChromeRecorder recorder = {0};
+    RunnerUiRenderer renderer = {0};
+    renderer.context = &recorder;
+    renderer.begin_header = record_begin_header;
+    renderer.header_action = record_header_action;
+    renderer.end_header = record_end_header;
+    renderer.begin_footer = record_begin_footer;
+    renderer.footer_action = record_footer_action;
+    renderer.footer_status = record_footer_status;
+    renderer.end_footer = record_end_footer;
+
+    if (!runner_ui_render_header(&renderer)) return 1;
+    if (recorder.header_begin_count != 1U ||
+        recorder.header_action_count != 4U ||
+        recorder.header_end_count != 1U)
+        return 2;
+    const RunnerUiChromeActionId expected_header[] = {
+        RUNNER_UI_CHROME_SETTINGS, RUNNER_UI_CHROME_MINIMIZE,
+        RUNNER_UI_CHROME_MAXIMIZE, RUNNER_UI_CHROME_CLOSE
+    };
+    for (size_t i = 0U; i < 4U; ++i)
+        if (recorder.header_ids[i] != expected_header[i]) return 3;
+    if (strcmp(recorder.product_title, "Runner Monitor") != 0 ||
+        strcmp(recorder.product_family, "Infiltrator OS") != 0)
+        return 4;
+
+    RunnerUiFooterState state = {
+        "Ready", "Runner Monitor test", "Common test", false
+    };
+    if (!runner_ui_render_footer(&renderer, &state)) return 5;
+    if (recorder.footer_begin_count != 1U ||
+        recorder.footer_action_count != 3U ||
+        recorder.footer_status_count != 1U ||
+        recorder.footer_end_count != 1U)
+        return 6;
+    const RunnerUiChromeActionId expected_footer[] = {
+        RUNNER_UI_CHROME_EXPORT, RUNNER_UI_CHROME_ABOUT,
+        RUNNER_UI_CHROME_REFRESH
+    };
+    for (size_t i = 0U; i < 3U; ++i)
+        if (recorder.footer_ids[i] != expected_footer[i]) return 7;
+    if (strcmp(recorder.footer_labels[2], "Refresh now") != 0 ||
+        strcmp(recorder.status_text, "Ready") != 0 ||
+        strcmp(recorder.app_version, "Runner Monitor test") != 0 ||
+        strcmp(recorder.common_version, "Common test") != 0)
+        return 8;
+
+    ChromeRecorder refreshing = {0};
+    renderer.context = &refreshing;
+    state.refreshing = true;
+    if (!runner_ui_render_footer(&renderer, &state)) return 9;
+    if (strcmp(refreshing.footer_labels[2], "Refreshing…") != 0) return 10;
+
+    RunnerUiRenderer incomplete = {0};
+    if (runner_ui_render_header(&incomplete)) return 11;
+    if (runner_ui_render_footer(&incomplete, &state)) return 12;
+    return 0;
+}
+
 int main(void)
 {
     char error[256];
@@ -161,7 +331,8 @@ int main(void)
             &incomplete_renderer, RUNNER_UI_PLATFORM_LINUX,
             RUNNER_UI_PAGE_RUNNERS))
         return 15;
+    if (verify_chrome_renderer() != 0) return 16;
 
-    puts("Runner Monitor shared UI contract and navigation renderer passed.");
+    puts("Runner Monitor shared UI contract, navigation and shell chrome renderers passed.");
     return 0;
 }
