@@ -10,13 +10,26 @@ Runner Monitor validation is a current contract, not a release-by-release diary.
 - The build does not carry a second expected Common version/commit literal.
 - Third-party GitHub Actions used by the workflow are pinned to immutable commit SHAs.
 
+## Core configuration contract
+
+The toolkit-neutral configuration test runs on every platform and must prove:
+
+1. canonical defaults;
+2. complete schema parsing;
+3. deterministic serialisation and parse/serialise round-tripping;
+4. duplicate known-key rejection;
+5. invalid organisation and interval rejection; and
+6. preservation of every unrelated field when only the organisation is changed.
+
+The last point is a regression gate for the pre-1.3.8 Windows Settings defect that rewrote non-Windows settings with hard-coded defaults.
+
 ## Linux qualification
 
 The hosted Ubuntu job is both the Linux build gate and the package gate. It must:
 
 1. check out the exact source revision and recursive Common gitlink;
 2. build the Debian package from that source;
-3. run the package build's full CTest suite, including the native self-test, shared UI-contract test and failure-semantics test;
+3. run the package build's full CTest suite, including the native self-test, configuration contract, shared UI-contract test and failure-semantics test;
 4. install the exact `.deb` that will be published;
 5. execute the installed native self-test and GTK UI self-test under Xvfb;
 6. verify ELF/native runtime identity and reject Python/Tk runtime dependencies;
@@ -31,9 +44,11 @@ The hosted Windows x64 job must:
 
 1. check out the exact source revision and recursive Common gitlink;
 2. configure and build the Release/x64 executable;
-3. run CTest against that build, including the native executable self-test and toolkit-neutral UI tests;
-4. verify the staged executable is AMD64 PE; and
-5. upload that same executable as the release artifact.
+3. run CTest against that build, including the native executable self-test, configuration contract, shared UI tests, Windows durable-config-store test and Windows bounded-process test;
+4. prove a short child process is captured successfully and an intentionally long child is terminated/classified as a timeout;
+5. prove Windows configuration save/load round-trips all fields and corrupt persisted configuration fails closed;
+6. verify the staged executable is AMD64 PE; and
+7. upload that same executable as the release artifact.
 
 The release EXE must be the executable that was runtime-qualified. A separate self-hosted cross-build is not a substitute for testing the published binary.
 
@@ -60,8 +75,6 @@ A successful push to `main` must correspond to exactly one release identity:
 
 Release publication no longer depends on commit-message wording or a second workflow. It consumes only artifacts produced by the same successful CI run and targets the exact validated commit.
 
-Published releases are immutable. Recovery from a contradictory tag/release state is explicit rather than silently retargeting or replacing an existing release.
-
 ## Packaging
 
 Debian's `debian/changelog` version must equal `VERSION`. The package build runs all CTest gates through `dh_auto_test`. Font cache maintenance is left to Debian/fontconfig triggers rather than duplicated package maintainer scripts.
@@ -74,4 +87,4 @@ A platform feature is complete only when its behaviour is present, its shared pr
 
 ## Remaining architectural hardening
 
-Issue #2 remains the authority for completion of the shared declarative UI migration. Issue #14 tracks the separate provider/configuration/persistence/process-boundary extraction identified by the 2026-10-15 forensic review. Those migrations must preserve one shipping implementation per platform and delete superseded inline policy as each new boundary becomes authoritative.
+Issue #2 remains the authority for completion of the shared declarative UI migration. Issue #14 now tracks the remaining Linux-side provider/configuration/persistence extraction and the eventual removal of the inline Linux schema/parser after that controller consumes the tested core contract. Windows configuration storage and bounded process execution are no longer inline controller policy.

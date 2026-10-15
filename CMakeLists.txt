@@ -15,9 +15,6 @@ if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-# The repository gitlink is the sole exact identity of Common.  Do not mirror
-# its version or commit in CMake: duplicated literals turn one dependency pin
-# into several independently editable authorities.
 set(RUNNERSCOPE_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/infiltratr-common")
 if(NOT EXISTS "${RUNNERSCOPE_COMMON_DIR}/VERSION" OR
    NOT EXISTS "${RUNNERSCOPE_COMMON_DIR}/CMakeLists.txt")
@@ -31,9 +28,6 @@ if(RUNNERSCOPE_COMMON_VERSION STREQUAL "")
     message(FATAL_ERROR "Infiltratr Common VERSION is empty")
 endif()
 
-# When configuring from a Git checkout, fail closed if the populated submodule
-# is not the commit recorded by this source revision.  This derives the
-# expectation from the gitlink itself rather than another hand-maintained pin.
 find_package(Git QUIET)
 if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git" AND
    EXISTS "${RUNNERSCOPE_COMMON_DIR}/.git")
@@ -66,6 +60,20 @@ set(INFILTRATR_COMMON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(INFILTRATR_COMMON_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 add_subdirectory(infiltratr-common EXCLUDE_FROM_ALL)
 
+add_library(runnerscope_core STATIC
+    src/core/runner_config.c
+)
+target_include_directories(runnerscope_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+if(MSVC)
+    target_compile_options(runnerscope_core PRIVATE /W4 /utf-8)
+elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(runnerscope_core PRIVATE
+        -Wall -Wextra -Wpedantic -Wshadow -Wformat=2
+    )
+endif()
+
 add_library(runnerscope_ui_contract STATIC
     src/ui/ui_contract.c
     src/ui/ui_renderer.c
@@ -81,8 +89,6 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     )
 endif()
 
-# Runner Monitor is one visual product on both native platforms.  The same
-# Common-verified MB faces are therefore mandatory on Windows and Linux.
 include("${RUNNERSCOPE_COMMON_DIR}/cmake/InfiltratrTypographyAssets.cmake")
 set(RUNNERSCOPE_FONT_ARCHIVE "${CMAKE_BINARY_DIR}/mb-corpo-fonts.tar.xz")
 if(NOT EXISTS "${RUNNERSCOPE_FONT_ARCHIVE}")
@@ -122,9 +128,22 @@ endforeach()
 if(WIN32)
     enable_language(RC)
 
-    # Keep the Windows release as a single native executable while shipping the
-    # exact bitmap identity and MB faces used by the Linux shell.  The Win32
-    # frontend loads these RCDATA resources directly at runtime.
+    add_library(runnerscope_windows_platform STATIC
+        src/platform/windows_config_store.c
+        src/platform/windows_process.c
+    )
+    target_include_directories(runnerscope_windows_platform PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(runnerscope_windows_platform PUBLIC runnerscope_core)
+    if(MSVC)
+        target_compile_options(runnerscope_windows_platform PRIVATE /W4 /utf-8)
+    elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(runnerscope_windows_platform PRIVATE
+            -Wall -Wextra -Wpedantic -Wshadow -Wformat=2
+        )
+    endif()
+
     file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" RUNNERSCOPE_SOURCE_RC)
     file(TO_CMAKE_PATH "${RUNNERSCOPE_FONT_DIR}" RUNNERSCOPE_FONT_RC)
     set(RUNNERSCOPE_WINDOWS_RC "${CMAKE_CURRENT_BINARY_DIR}/runnerscope_windows.rc")
@@ -145,10 +164,18 @@ if(WIN32)
     add_executable(runnerscope WIN32
         src/windows_main.c
         src/windows_resources.h
+        src/windows/windows_foundation.inc
+        src/windows/windows_runner.inc
+        src/windows/windows_layout.inc
+        src/windows/windows_presentation.inc
+        src/windows/windows_actions.inc
+        src/windows/windows_controller.inc
         "${RUNNERSCOPE_WINDOWS_RC}"
     )
     set_target_properties(runnerscope PROPERTIES OUTPUT_NAME "Runner-Monitor")
     target_link_libraries(runnerscope PRIVATE
+        runnerscope_core
+        runnerscope_windows_platform
         runnerscope_ui_contract
         InfiltratrCommon::Common
         user32
@@ -181,6 +208,7 @@ else()
         src/linux_main.c
     )
     target_link_libraries(runnerscope PRIVATE
+        runnerscope_core
         runnerscope_ui_contract
         InfiltratrCommon::Common
         PkgConfig::GTK3
@@ -217,6 +245,12 @@ target_compile_definitions(runnerscope PRIVATE
 
 add_test(NAME runnerscope-native-self-test COMMAND runnerscope --self-test)
 
+add_executable(runnerscope-config-test
+    tests/runner_config_test.c
+)
+target_link_libraries(runnerscope-config-test PRIVATE runnerscope_core)
+add_test(NAME runnerscope-config-test COMMAND runnerscope-config-test)
+
 add_executable(runnerscope-ui-contract-test
     tests/ui_contract_test.c
 )
@@ -228,3 +262,17 @@ add_executable(runnerscope-ui-failure-semantics-test
 )
 target_link_libraries(runnerscope-ui-failure-semantics-test PRIVATE runnerscope_ui_contract)
 add_test(NAME runnerscope-ui-failure-semantics-test COMMAND runnerscope-ui-failure-semantics-test)
+
+if(WIN32)
+    add_executable(runnerscope-windows-process-test
+        tests/windows_process_test.c
+    )
+    target_link_libraries(runnerscope-windows-process-test PRIVATE runnerscope_windows_platform)
+    add_test(NAME runnerscope-windows-process-test COMMAND runnerscope-windows-process-test)
+
+    add_executable(runnerscope-windows-config-store-test
+        tests/windows_config_store_test.c
+    )
+    target_link_libraries(runnerscope-windows-config-store-test PRIVATE runnerscope_windows_platform)
+    add_test(NAME runnerscope-windows-config-store-test COMMAND runnerscope-windows-config-store-test)
+endif()

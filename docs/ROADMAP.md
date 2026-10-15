@@ -1,6 +1,6 @@
 # Roadmap
 
-## Current foundation — 1.3.6
+## Current foundation — 1.3.8
 
 - native C/GTK Linux Runner Monitor is the shipping Linux application;
 - native C/Win32 Windows Runner Monitor is built, runtime-qualified and released as an EXE;
@@ -10,10 +10,13 @@
 - Linux runner/job/history/local-service functionality is mature;
 - the Windows fleet shell is in the current Infiltrator OS visual family;
 - the toolkit-neutral UI contract owns the migrated navigation, shell chrome, page transitions, workspace summary and runner-card/detail semantics;
+- `src/core/runner_config.c` owns the tested extracted configuration schema/validation/serialisation contract;
+- Windows durable configuration storage is isolated from the Win32 controller and preserves unrelated configuration fields on Settings saves;
+- Windows provider process execution is isolated, bounded and timeout-tested;
 - hosted CI builds and tests the exact Debian package and exact Windows EXE that it publishes; and
 - `VERSION`, the release tag and the validated `main` commit are mechanically kept in sync.
 
-Two architectural migrations remain. Issue #2 owns completion of the shared UI definition. Issue #14 owns extraction of provider/configuration/persistence/process policy from the oversized platform controllers.
+Two architectural migrations remain. Issue #2 owns completion of the shared UI definition. Issue #14 now primarily owns migration of the Linux controller onto the extracted configuration/provider/persistence boundaries and removal of its superseded inline policy.
 
 ## 1.3.x UI migration objective
 
@@ -44,7 +47,9 @@ Remaining:
 
 ## Controller hardening objective
 
-Issue #14 is a separate ownership cleanup, not a second implementation. Its target is to extract provider facts/correlation, configuration validation, persistence failure handling and bounded provider-process execution behind focused contracts while leaving GTK/Win32 responsible for native mechanics. Each extraction must replace and delete the corresponding inline policy rather than coexist indefinitely.
+Issue #14 is a separate ownership cleanup, not a second implementation. The first extraction is complete on Windows: configuration schema semantics live in `runner_config`, durable Windows storage lives in `windows_config_store`, and bounded provider process execution lives in `windows_process`. Refresh workers consume immutable request snapshots rather than mutable UI-owned configuration.
+
+The remaining hardening work is to migrate Linux onto those same application contracts, extract Linux provider/persistence mechanics behind native adapters, surface Linux persisted-state failures consistently, and delete the superseded inline parser/process policy as each slice becomes authoritative.
 
 ## Version policy
 
