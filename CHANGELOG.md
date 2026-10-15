@@ -4,6 +4,11 @@
 
 No unreleased changes.
 
+## 1.3.7 - 2026-10-15
+
+- Make `SHA256SUMS.txt` portable by recording release asset basenames instead of workflow-local `release/` paths.
+- Verify the checksum manifest against the exact qualified Debian and Windows artifacts before publishing the release.
+
 ## 1.3.6 - 2026-10-15
 
 - Advance the exact repository gitlink to released Infiltratr Common 1.19.42 and remove the duplicated Common version/commit literals from CMake and README.

@@ -237,7 +237,12 @@ jobs:
           cp "$win" "$win_release"
           cp "$deb" "release/$(basename "$deb")"
           deb_release="release/$(basename "$deb")"
-          sha256sum "$deb_release" "$win_release" > release/SHA256SUMS.txt
+          (
+            cd release
+            sha256sum "$(basename "$deb_release")" "$(basename "$win_release")" > SHA256SUMS.txt
+            sha256sum --check SHA256SUMS.txt
+            ! grep -qE '  .*/' SHA256SUMS.txt
+          )
 
           gh release create "$tag" \
             "$deb_release" "$win_release" release/SHA256SUMS.txt \

@@ -1,3 +1,12 @@
+infiltrator-runner-monitor (1.3.7) unstable; urgency=medium
+
+  * Make published SHA256SUMS portable by recording release asset basenames
+    instead of workflow-local release/ paths.
+  * Verify the generated checksum manifest against the exact qualified Debian
+    and Windows artifacts before creating the GitHub release.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 15 Oct 2026 15:20:00 +1100
+
 infiltrator-runner-monitor (1.3.6) unstable; urgency=medium
 
   * Advance the exact Common gitlink to released Infiltratr Common 1.19.42 and
@@ -411,7 +420,7 @@ infiltrator-runner-monitor (1.2.11) unstable; urgency=medium
 infiltrator-runner-monitor (1.2.10) unstable; urgency=medium
 
   * Align native Linux outer shell padding with the 20 px publisher screen rhythm.
-  * Preserve runner monitoring behaviour, native platform architecture and dependencies.
+  * Preserve monitoring behaviour, native platform architecture and dependencies.
 
  -- Shannon Smith <infiltratr@yandex.com>  Thu, 24 Sep 2026 23:49:00 +1000
 
