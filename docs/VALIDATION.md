@@ -29,7 +29,7 @@ The hosted Ubuntu job is both the Linux build gate and the package gate. It must
 
 1. check out the exact source revision and recursive Common gitlink;
 2. build the Debian package from that source;
-3. run the package build's full CTest suite, including the native self-test, configuration contract, shared UI-contract test and failure-semantics test;
+3. run the package build's full CTest suite, including the native self-test, configuration contract, shared UI-contract test, failure-semantics test and offline GitHub authorization tests;
 4. install the exact `.deb` that will be published;
 5. execute the installed native self-test and GTK UI self-test under Xvfb;
 6. verify ELF/native runtime identity and reject Python/Tk runtime dependencies;
