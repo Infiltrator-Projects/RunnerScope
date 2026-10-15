@@ -48,9 +48,12 @@
 
 #define APP_CLASS L"InfiltratrRunnerMonitor"
 #define SETTINGS_CLASS L"InfiltratrRunnerMonitorSettings"
+#define AUTH_CLASS L"InfiltratrRunnerMonitorGitHub"
 #define APP_TITLE L"Runner Monitor"
 #define WM_APP_REFRESH_DONE (WM_APP + 1)
 #define WM_APP_OPEN_SETTINGS (WM_APP + 2)
+#define WM_APP_AUTH_PROGRESS (WM_APP + 3)
+#define WM_APP_AUTH_DONE (WM_APP + 4)
 #define TIMER_REFRESH 1U
 #define TIMER_PRESENT 2U
 #define ID_SEARCH 1001
@@ -58,7 +61,16 @@
 #define ID_SETTINGS_ORG 1101
 #define ID_SETTINGS_SAVE 1102
 #define ID_SETTINGS_CANCEL 1103
+#define ID_CONNECT_GITHUB 1104
+#define ID_AUTH_OPEN 1201
+#define ID_AUTH_COPY 1202
+#define ID_AUTH_CANCEL 1203
 #define GH_TIMEOUT_MS 30000U
+#define GH_AUTH_TIMEOUT_MS (15U * 60U * 1000U)
+
+typedef enum {
+    GITHUB_AUTH_NONE, GITHUB_AUTH_LOGIN, GITHUB_AUTH_SCOPE, GITHUB_AUTH_ACCESS
+} GitHubAuthFailure;
 
 typedef struct {
     char name[192];
@@ -90,7 +102,9 @@ typedef struct {
 typedef struct {
     RunnerRow *rows;
     size_t count;
+    char organisation[128];
     char error[640];
+    GitHubAuthFailure auth_failure;
 } RefreshResult;
 
 typedef struct {
@@ -100,6 +114,21 @@ typedef struct {
     HWND list;
     HWND settings_window;
     HWND settings_org;
+    HWND connect_github;
+    HWND auth_window;
+    HWND auth_status;
+    HWND auth_code_control;
+    HWND auth_open_button;
+    HWND auth_copy_button;
+    HWND auth_cancel_button;
+    HANDLE auth_cancel;
+    HANDLE auth_thread;
+    char auth_code[32];
+    char auth_message[640];
+    GitHubAuthFailure auth_failure;
+    bool authorizing;
+    bool rows_stale;
+    char provider_error[640];
     RunnerConfig config;
     char config_error[320];
 
@@ -150,11 +179,17 @@ typedef struct {
 
 static App g_app;
 
+static GitHubAuthFailure github_auth_failure(const char *message);
+static void open_github_auth(void);
+static void refresh_begin(void);
+static void rebuild_table(void);
+
 #include "windows/windows_foundation.inc"
 #include "windows/windows_runner.inc"
 #include "windows/windows_layout.inc"
 #include "windows/windows_presentation.inc"
 #include "windows/windows_actions.inc"
+#include "windows/windows_auth.inc"
 #include "windows/windows_controller.inc"
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous,
@@ -209,6 +244,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous,
     settings_wc.lpszClassName = SETTINGS_CLASS;
     if (!RegisterClassExW(&settings_wc)) return 1;
 
+    settings_wc.lpfnWndProc = github_auth_proc;
+    settings_wc.lpszClassName = AUTH_CLASS;
+    if (!RegisterClassExW(&settings_wc)) return 1;
+
     g_app.window = CreateWindowExW(
         WS_EX_APPWINDOW, APP_CLASS, APP_TITLE,
         WS_POPUP | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX |
@@ -221,7 +260,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous,
 
     MSG message;
     while (GetMessageW(&message, NULL, 0U, 0U) > 0) {
+        if (g_app.auth_window && IsDialogMessageW(g_app.auth_window, &message))
+            continue;
         if (g_app.settings_window && IsDialogMessageW(g_app.settings_window, &message))
+            continue;
+        if (g_app.window && IsDialogMessageW(g_app.window, &message))
             continue;
         TranslateMessage(&message);
         DispatchMessageW(&message);

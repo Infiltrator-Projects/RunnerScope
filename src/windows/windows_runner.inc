@@ -29,13 +29,14 @@ static void update_sessions(void)
         RunnerRow *row = &g_app.rows[i];
         RunnerSession *session = session_for(row->name, true);
         if (!session) continue;
+        if (g_app.rows_stale) session->state_since_ms = now;
         const bool running = strcmp(row->state, "RUNNING") == 0;
         if (running != session->running) {
             if (session->running && session->busy_started_ms != 0U)
                 session->busy_total_ms += now - session->busy_started_ms;
             if (running) {
                 session->busy_started_ms = now;
-                session->jobs++;
+                if (!g_app.rows_stale) session->jobs++;
             } else {
                 session->busy_started_ms = 0U;
             }
@@ -43,6 +44,22 @@ static void update_sessions(void)
             session->state_since_ms = now;
         }
     }
+}
+
+static void mark_rows_stale(void)
+{
+    if (!g_app.rows_stale) {
+        const ULONGLONG now = GetTickCount64();
+        for (size_t i = 0U; i < g_app.session_count; ++i) {
+            RunnerSession *session = &g_app.sessions[i];
+            if (session->running && session->busy_started_ms)
+                session->busy_total_ms += now - session->busy_started_ms;
+            session->busy_started_ms = 0U;
+            session->running = false;
+        }
+    }
+    g_app.rows_stale = true;
+    rebuild_table();
 }
 
 static double busy_fraction(const RunnerSession *session)
@@ -132,11 +149,15 @@ static void rebuild_table(void)
         RunnerSession *session = session_for(row->name, false);
         wchar_t name[192], os[64], state[32], state_for[64] = L"—";
         wchar_t jobs[32] = L"0", busy[32] = L"0.0%", labels[512];
+        if (g_app.rows_stale) {
+            wcscpy_s(jobs, 32U, L"—");
+            wcscpy_s(busy, 32U, L"—");
+        }
         utf8_to_wide(row->name, name, 192U);
         utf8_to_wide(row->os, os, 64U);
-        utf8_to_wide(row->state, state, 32U);
+        utf8_to_wide(g_app.rows_stale ? "STALE" : row->state, state, 32U);
         utf8_to_wide(row->labels, labels, 512U);
-        if (session) {
+        if (session && !g_app.rows_stale) {
             format_duration(now - session->state_since_ms, state_for, 64U);
             _snwprintf_s(jobs, 32U, _TRUNCATE, L"%u", session->jobs);
             _snwprintf_s(busy, 32U, _TRUNCATE, L"%.1f%%", busy_fraction(session) * 100.0);
@@ -166,15 +187,19 @@ static DWORD WINAPI refresh_worker(LPVOID parameter)
     RefreshRequest *request = (RefreshRequest *)parameter;
     RefreshResult *result = (RefreshResult *)calloc(1U, sizeof(*result));
     if (!result) {
+        HWND target = request->target;
         free(request);
+        (void)PostMessageW(target, WM_APP_REFRESH_DONE, 0, 0);
         return 0U;
     }
+    infiltratr_copy_string(result->organisation, sizeof(result->organisation),
+                           request->organisation);
 
     wchar_t org[128];
     utf8_to_wide(request->organisation, org, 128U);
     wchar_t command[2048];
     _snwprintf_s(command, 2048U, _TRUNCATE,
-        L"gh api \"/orgs/%ls/actions/runners?per_page=100\" --paginate "
+        L"gh api --hostname github.com \"/orgs/%ls/actions/runners?per_page=100\" --paginate "
         L"--jq \".runners[] | [.name, .os, .status, (.busy|tostring), "
         L"([.labels[].name] | join(\\\",\\\"))] | @tsv\"", org);
 
@@ -190,6 +215,7 @@ static DWORD WINAPI refresh_worker(LPVOID parameter)
                        process_error[0] ? process_error : "GitHub request failed.",
                        output && *output ? " " : "",
                        output && *output ? output : "");
+        result->auth_failure = github_auth_failure(result->error);
         runner_windows_process_result_destroy(&process_result);
         HWND target = request->target;
         free(request);
@@ -253,7 +279,7 @@ static DWORD WINAPI refresh_worker(LPVOID parameter)
 
 static void refresh_begin(void)
 {
-    if (g_app.refreshing || !g_app.window) return;
+    if (g_app.refreshing || g_app.authorizing || !g_app.window) return;
     if (!g_app.config.organisation[0]) {
         PostMessageW(g_app.window, WM_APP_OPEN_SETTINGS, 0, 0);
         return;
@@ -276,24 +302,56 @@ static void refresh_begin(void)
 static void apply_refresh(RefreshResult *result)
 {
     g_app.refreshing = false;
+    if (result && strcmp(result->organisation, g_app.config.organisation) != 0) {
+        free(result->rows);
+        free(result);
+        refresh_begin();
+        return;
+    }
     if (!result) {
+        mark_rows_stale();
+        infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error),
+                               "Unable to refresh runners.");
         InvalidateRect(g_app.window, NULL, FALSE);
         return;
     }
     if (result->error[0]) {
-        wchar_t message[640];
-        utf8_to_wide(result->error, message, 640U);
-        MessageBoxW(g_app.window, message, APP_TITLE, MB_OK | MB_ICONWARNING);
+        mark_rows_stale();
+        g_app.auth_failure = result->auth_failure;
+        const char *message = result->auth_failure == GITHUB_AUTH_LOGIN
+            ? "Connect GitHub to view organisation runners."
+            : result->auth_failure == GITHUB_AUTH_SCOPE
+                ? "GitHub runner permission is missing. Select Connect GitHub."
+                : result->auth_failure == GITHUB_AUTH_ACCESS
+                    ? "GitHub denied access. Check organisation runner access or SSO."
+                    : result->error;
+        infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error), message);
     } else {
+        g_app.auth_failure = GITHUB_AUTH_NONE;
+        g_app.provider_error[0] = '\0';
+        if (g_app.auth_window) {
+            SetWindowTextW(g_app.auth_status, L"Connected. GitHub runner access was verified.");
+            SetWindowTextW(g_app.auth_cancel_button, L"Close");
+        }
         free(g_app.rows);
         g_app.rows = result->rows;
         g_app.row_count = result->count;
         result->rows = NULL;
         update_sessions();
+        g_app.rows_stale = false;
         if (g_app.selected_row >= (int)g_app.row_count) g_app.selected_row = -1;
         rebuild_table();
     }
     free(result->rows);
     free(result);
+    ShowWindow(g_app.connect_github,
+        g_app.auth_failure == GITHUB_AUTH_LOGIN || g_app.auth_failure == GITHUB_AUTH_SCOPE
+            ? SW_SHOW : SW_HIDE);
+    if (g_app.auth_window && g_app.rows_stale) {
+        wchar_t message[640];
+        utf8_to_wide(g_app.provider_error, message, 640U);
+        SetWindowTextW(g_app.auth_status, message);
+        SetWindowTextW(g_app.auth_cancel_button, L"Close");
+    }
     InvalidateRect(g_app.window, NULL, FALSE);
 }

@@ -52,6 +52,23 @@ The hosted Windows x64 job must:
 
 The release EXE must be the executable that was runtime-qualified. A separate self-hosted cross-build is not a substitute for testing the published binary.
 
+## GitHub connection recovery
+
+Authorization tests use fake child processes and must never change real account
+credentials. Linux CTest covers streamed device codes, login versus scope
+refresh, active-account probing, failed authorization, cancellation and reaping,
+bounded output drain, environment-token overrides and suppressed debug output.
+Windows process tests additionally cover incremental output, stdin EOF,
+cancellation and descendants retaining output handles; the native self-test
+checks device-code parsing and permission-error classification.
+
+Native UI qualification must prove that missing runner permissions provide a
+visible Connect GitHub action, the one-time code arrives while authorization is
+still running, copying works, and success triggers a new runner request. A
+continued HTTP 403 must leave the connection notice and stale data visible.
+Closing the authorization dialog or application must cancel and reap the child.
+No account is reported connected until the runner endpoint succeeds.
+
 ## Shared UI contract
 
 The toolkit-neutral UI layer is the application-structure authority for every migrated surface. Its tests must run without GTK or Win32 and must cover:

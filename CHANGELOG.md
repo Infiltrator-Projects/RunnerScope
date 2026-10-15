@@ -4,6 +4,14 @@
 
 No unreleased changes.
 
+## 1.3.9 - 2026-10-15
+
+- Add native Connect GitHub dialogs with streamed sign-in codes, Copy/Open/Cancel controls, and automatic runner-access verification on Linux and Windows.
+- Recover missing GitHub login or organisation runner scope inside the app while preserving existing account scopes and Git settings.
+- Show failed runner refreshes prominently, mark prior data as stale, and withhold live counts until runner access succeeds.
+- Cancel and reap authorization processes on dialog/application closure, bound output drain and authorization time, and suppress debug output during sign-in.
+- Add offline authorization and child-process regression tests covering streamed codes, account selection, environment credentials, failure, cancellation and cleanup.
+
 ## 1.3.8 - 2026-10-15
 
 - Introduce a toolkit-neutral Runner Monitor configuration contract with one authority for defaults, validation, parsing and serialisation.

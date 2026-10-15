@@ -50,7 +50,7 @@ The native Windows application currently provides the C/Common Win32 monitor she
 ### Windows
 
 - 64-bit Windows supported by the current GitHub Actions Windows image/toolchain;
-- GitHub CLI (`gh`) authenticated with access to the target organisation.
+- GitHub CLI (`gh`); connect your account inside Runner Monitor.
 
 ### Linux
 
@@ -59,11 +59,18 @@ The native Windows application currently provides the C/Common Win32 monitor she
 - systemd for local runner-service health;
 - polkit/`pkexec` for service restart.
 
-Authenticate GitHub CLI before starting Runner Monitor:
+Use **Connect GitHub** in Settings or the connection notice. Runner Monitor
+shows a one-time code and opens GitHub's browser authorization page. Copy the
+code, approve access, and Runner Monitor checks organisation runner access
+automatically. No terminal command is needed.
 
-```text
-gh auth login
-```
+When an existing login lacks the organisation runner permission, Connect GitHub
+requests the additional `admin:org` OAuth scope. The account must already have
+access to the organisation's runners; authorization cannot grant an organisation
+role. Other access-denied responses remain visible for diagnosis.
+
+Failed runner refreshes show a prominent notice, mark displayed rows as last
+known data, and withhold live runner counts until a successful refresh.
 
 ## Install and run
 
@@ -102,7 +109,14 @@ On Windows, configure with the Visual Studio generator and build the Release con
 
 ## Privacy and credentials
 
-Runner Monitor does not store a GitHub token. The shipping provider adapter uses the authenticated GitHub CLI credential store. Provider changes must be made directly in the shipping native implementation rather than through a second experimental product path.
+Runner Monitor manages browser authorization through GitHub CLI and uses its
+existing credential store. It does not copy tokens into application settings.
+An externally supplied `GH_TOKEN` or `GITHUB_TOKEN` overrides that store and
+cannot be refreshed through browser sign-in; Runner Monitor explains when this
+requires updating the managed token or removing the override. Fine-grained
+tokens need the organisation's **Self-hosted runners: read** permission.
+Provider changes must be made directly in the shipping native implementation
+rather than through a second experimental product path.
 
 ## Licence
 

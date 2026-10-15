@@ -62,6 +62,9 @@ static void update_layout(HWND window)
             g_app.export_rect.right + sx(98), button_y + sx(34));
     SetRect(&g_app.refresh_rect, width - pad - sx(126), button_y,
             width - pad, button_y + sx(34));
+    if (g_app.connect_github)
+        MoveWindow(g_app.connect_github, g_app.about_rect.right + sx(10), button_y,
+                   sx(160), sx(34), TRUE);
 }
 
 static void draw_button(HDC dc, RECT rect, const wchar_t *label, bool active, bool primary)
@@ -294,7 +297,7 @@ static void draw_workspace_header(HDC dc)
 {
     char storage[4][32] = {{0}};
     const char *values[4] = {"—", "—", "—", "—"};
-    if (g_app.page == RUNNER_UI_PAGE_RUNNERS) {
+    if (g_app.page == RUNNER_UI_PAGE_RUNNERS && !g_app.rows_stale) {
         size_t running = 0U, idle = 0U, offline = 0U;
         for (size_t i = 0U; i < g_app.row_count; ++i) {
             if (strcmp(g_app.rows[i].state, "RUNNING") == 0) running++;

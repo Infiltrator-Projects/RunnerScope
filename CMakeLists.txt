@@ -166,6 +166,7 @@ if(WIN32)
         src/windows_resources.h
         src/windows/windows_foundation.inc
         src/windows/windows_runner.inc
+        src/windows/windows_auth.inc
         src/windows/windows_layout.inc
         src/windows/windows_presentation.inc
         src/windows/windows_actions.inc
@@ -204,12 +205,22 @@ else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
 
+    add_library(runnerscope_linux_auth STATIC src/platform/linux_github_auth.c)
+    target_include_directories(runnerscope_linux_auth PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(runnerscope_linux_auth PUBLIC PkgConfig::GTK3)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        target_compile_options(runnerscope_linux_auth PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2
+            -Wconversion -Wsign-conversion)
+    endif()
+
     add_executable(runnerscope
         src/linux_main.c
     )
     target_link_libraries(runnerscope PRIVATE
         runnerscope_core
         runnerscope_ui_contract
+        runnerscope_linux_auth
         InfiltratrCommon::Common
         PkgConfig::GTK3
     )
@@ -237,6 +248,20 @@ else()
         "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_BOLD_FILE}"
         "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_REGULAR_FILE}"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/fonts/truetype/runnerscope")
+endif()
+
+if(NOT WIN32)
+    add_executable(runnerscope-linux-github-auth-test tests/linux_github_auth_test.c)
+    target_link_libraries(runnerscope-linux-github-auth-test PRIVATE runnerscope_linux_auth)
+    add_test(NAME runnerscope-linux-github-auth-test COMMAND runnerscope-linux-github-auth-test)
+    find_program(RUNNERSCOPE_XVFB_RUN xvfb-run)
+    if(RUNNERSCOPE_XVFB_RUN)
+        add_test(NAME runnerscope-ui-self-test
+            COMMAND "${RUNNERSCOPE_XVFB_RUN}" -a $<TARGET_FILE:runnerscope> --ui-self-test)
+        set_tests_properties(runnerscope-ui-self-test PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            ENVIRONMENT "XDG_CONFIG_HOME=${CMAKE_BINARY_DIR}/test-config;XDG_STATE_HOME=${CMAKE_BINARY_DIR}/test-state;GTK_USE_PORTAL=0;GSETTINGS_BACKEND=memory;NO_AT_BRIDGE=1;GIO_USE_VFS=local")
+    endif()
 endif()
 
 target_compile_definitions(runnerscope PRIVATE

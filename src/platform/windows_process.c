@@ -38,6 +38,30 @@ static bool append_capture(char **buffer, size_t *used, size_t *capacity,
     return true;
 }
 
+static wchar_t *provider_environment(void)
+{
+    wchar_t *environment = GetEnvironmentStringsW();
+    if (!environment) return NULL;
+    size_t count = 1U;
+    for (const wchar_t *entry = environment; *entry; entry += wcslen(entry) + 1U)
+        count += wcslen(entry) + 1U;
+    wchar_t *filtered = (wchar_t *)calloc(count + 1U, sizeof(wchar_t));
+    if (filtered) {
+        wchar_t *destination = filtered;
+        for (const wchar_t *entry = environment; *entry; entry += wcslen(entry) + 1U) {
+            /* gh debug HTTP logs can contain OAuth request/response secrets.
+             * Remove these flags only in the child, preserving the app's env. */
+            if (_wcsnicmp(entry, L"GH_DEBUG=", 9U) == 0 ||
+                _wcsnicmp(entry, L"DEBUG=", 6U) == 0) continue;
+            const size_t amount = wcslen(entry) + 1U;
+            memcpy(destination, entry, amount * sizeof(wchar_t));
+            destination += amount;
+        }
+    }
+    FreeEnvironmentStringsW(environment);
+    return filtered;
+}
+
 void runner_windows_process_result_destroy(RunnerWindowsProcessResult *result)
 {
     if (!result) return;
@@ -45,12 +69,13 @@ void runner_windows_process_result_destroy(RunnerWindowsProcessResult *result)
     result->output = NULL;
     result->exit_code = 0U;
     result->timed_out = false;
+    result->cancelled = false;
 }
 
-bool runner_windows_process_capture(const wchar_t *command,
-                                    unsigned long timeout_ms,
-                                    RunnerWindowsProcessResult *result,
-                                    char *error, size_t error_size)
+bool runner_windows_process_capture_stream(const wchar_t *command,
+        unsigned long timeout_ms, RunnerWindowsProcessProgress progress,
+        RunnerWindowsProcessCancelled cancelled, void *context,
+        RunnerWindowsProcessResult *result, char *error, size_t error_size)
 {
     if (!result) return false;
     memset(result, 0, sizeof(*result));
@@ -81,31 +106,82 @@ bool runner_windows_process_capture(const wchar_t *command,
     startup.dwFlags = STARTF_USESTDHANDLES;
     startup.hStdOutput = write_pipe;
     startup.hStdError = write_pipe;
-    startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    /* A GUI has no console stdin. An explicit EOF handle also prevents provider
+     * prompts from waiting on whichever console launched Runner Monitor. */
+    HANDLE input = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              &security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (input == INVALID_HANDLE_VALUE) {
+        CloseHandle(read_pipe);
+        CloseHandle(write_pipe);
+        if (error && error_size)
+            (void)snprintf(error, error_size, "Unable to create provider input handle.");
+        return false;
+    }
+    startup.hStdInput = input;
 
     const size_t command_chars = wcslen(command) + 1U;
     wchar_t *mutable_command = (wchar_t *)calloc(command_chars, sizeof(wchar_t));
     if (!mutable_command) {
         CloseHandle(read_pipe);
         CloseHandle(write_pipe);
+        CloseHandle(input);
         if (error && error_size)
             (void)snprintf(error, error_size, "Unable to allocate provider command buffer.");
         return false;
     }
     wcscpy_s(mutable_command, command_chars, command);
 
+    wchar_t *environment = provider_environment();
+    if (!environment) {
+        free(mutable_command);
+        CloseHandle(read_pipe);
+        CloseHandle(write_pipe);
+        CloseHandle(input);
+        if (error && error_size)
+            (void)snprintf(error, error_size, "Unable to prepare provider environment.");
+        return false;
+    }
+
     const BOOL created = CreateProcessW(NULL, mutable_command, NULL, NULL, TRUE,
-                                        CREATE_NO_WINDOW, NULL, NULL,
+                                        CREATE_NO_WINDOW | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT,
+                                        environment, NULL,
                                         &startup, &process);
+    const DWORD launch_error = created ? ERROR_SUCCESS : GetLastError();
+    free(environment);
     free(mutable_command);
     CloseHandle(write_pipe);
+    CloseHandle(input);
     if (!created) {
-        const DWORD failure = GetLastError();
         CloseHandle(read_pipe);
         if (error && error_size)
             (void)snprintf(error, error_size,
                            "Unable to start provider process (Windows error %lu).",
-                           (unsigned long)failure);
+                           (unsigned long)launch_error);
+        return false;
+    }
+
+    /* Terminate descendants too, including helpers holding the capture pipe.
+     * Nested jobs are supported on the Windows versions this app targets. */
+    HANDLE job = CreateJobObjectW(NULL, NULL);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits;
+        ZeroMemory(&limits, sizeof(limits));
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                                      &limits, sizeof(limits)) ||
+            !AssignProcessToJobObject(job, process.hProcess)) {
+            CloseHandle(job);
+            job = NULL;
+        }
+    }
+    if (ResumeThread(process.hThread) == (DWORD)-1) {
+        (void)TerminateProcess(process.hProcess, ERROR_PROCESS_ABORTED);
+        if (job) CloseHandle(job);
+        CloseHandle(read_pipe);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        if (error && error_size)
+            (void)snprintf(error, error_size, "Unable to resume provider process.");
         return false;
     }
 
@@ -117,12 +193,20 @@ bool runner_windows_process_capture(const wchar_t *command,
     bool capture_ok = true;
 
     for (;;) {
+        if (cancelled && cancelled(context)) {
+            result->cancelled = true;
+            break;
+        }
+        if (GetTickCount64() - started >= (ULONGLONG)timeout_ms) {
+            result->timed_out = true;
+            break;
+        }
         DWORD available = 0U;
         const BOOL peek_ok = PeekNamedPipe(read_pipe, NULL, 0U, NULL, &available, NULL);
         if (!peek_ok) {
             const DWORD pipe_error = GetLastError();
             if (pipe_error != ERROR_BROKEN_PIPE) capture_ok = false;
-            if (exited || pipe_error == ERROR_BROKEN_PIPE) break;
+            if (exited || !capture_ok) break;
         }
 
         while (available > 0U) {
@@ -141,7 +225,11 @@ bool runner_windows_process_capture(const wchar_t *command,
                 available = 0U;
                 break;
             }
+            if (progress) progress(chunk, (size_t)amount, context);
             available -= amount;
+            if ((cancelled && cancelled(context)) ||
+                GetTickCount64() - started >= (ULONGLONG)timeout_ms)
+                break;
         }
         if (!capture_ok) break;
 
@@ -154,13 +242,6 @@ bool runner_windows_process_capture(const wchar_t *command,
             }
         }
 
-        if (!exited && GetTickCount64() - started >= (ULONGLONG)timeout_ms) {
-            result->timed_out = true;
-            (void)TerminateProcess(process.hProcess, ERROR_TIMEOUT);
-            (void)WaitForSingleObject(process.hProcess, 5000U);
-            exited = true;
-        }
-
         if (exited) {
             DWORD remaining = 0U;
             if (!PeekNamedPipe(read_pipe, NULL, 0U, NULL, &remaining, NULL) ||
@@ -169,22 +250,33 @@ bool runner_windows_process_capture(const wchar_t *command,
         }
     }
 
+    if (!exited || !capture_ok || result->timed_out || result->cancelled) {
+        if (job) (void)TerminateJobObject(job, ERROR_PROCESS_ABORTED);
+        else (void)TerminateProcess(process.hProcess, ERROR_PROCESS_ABORTED);
+        (void)WaitForSingleObject(process.hProcess, 5000U);
+    }
+
     DWORD code = 1U;
     (void)GetExitCodeProcess(process.hProcess, &code);
     CloseHandle(read_pipe);
     CloseHandle(process.hThread);
     CloseHandle(process.hProcess);
+    if (job) CloseHandle(job);
     result->exit_code = (unsigned long)code;
 
     if (!buffer) {
         buffer = (char *)calloc(1U, 1U);
         if (!buffer) capture_ok = false;
     }
-    if (result->timed_out) {
+    if (result->timed_out || result->cancelled) {
         free(buffer);
-        if (error && error_size)
-            (void)snprintf(error, error_size,
-                           "Provider process exceeded the %lu ms timeout.", timeout_ms);
+        if (error && error_size) {
+            if (result->cancelled)
+                (void)snprintf(error, error_size, "Provider process cancelled.");
+            else
+                (void)snprintf(error, error_size,
+                               "Provider process exceeded the %lu ms timeout.", timeout_ms);
+        }
         return false;
     }
     if (!capture_ok) {
@@ -195,4 +287,13 @@ bool runner_windows_process_capture(const wchar_t *command,
     }
     result->output = buffer;
     return true;
+}
+
+bool runner_windows_process_capture(const wchar_t *command,
+                                    unsigned long timeout_ms,
+                                    RunnerWindowsProcessResult *result,
+                                    char *error, size_t error_size)
+{
+    return runner_windows_process_capture_stream(command, timeout_ms, NULL, NULL,
+                                                  NULL, result, error, error_size);
 }

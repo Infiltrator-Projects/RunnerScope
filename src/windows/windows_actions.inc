@@ -32,7 +32,11 @@ static void export_csv(void)
         RunnerRow *row = &g_app.rows[i];
         RunnerSession *session = session_for(row->name, false);
         char duration[64] = "—", jobs[32] = "0", busy[32] = "0.0%";
-        if (session) {
+        if (g_app.rows_stale) {
+            strcpy_s(jobs, sizeof(jobs), "—");
+            strcpy_s(busy, sizeof(busy), "—");
+        }
+        if (session && !g_app.rows_stale) {
             wchar_t wide[64];
             format_duration(GetTickCount64() - session->state_since_ms, wide, 64U);
             (void)wide_to_utf8(wide, duration, sizeof(duration));
@@ -41,10 +45,10 @@ static void export_csv(void)
         }
         csv_field(stream, row->name); fputc(',', stream);
         csv_field(stream, row->os); fputc(',', stream);
-        csv_field(stream, row->state); fputc(',', stream);
+        csv_field(stream, g_app.rows_stale ? "STALE" : row->state); fputc(',', stream);
         csv_field(stream, ""); fputc(',', stream);
         csv_field(stream, ""); fputc(',', stream);
-        csv_field(stream, session && session->running ? duration : ""); fputc(',', stream);
+        csv_field(stream, !g_app.rows_stale && session && session->running ? duration : ""); fputc(',', stream);
         csv_field(stream, duration); fputc(',', stream);
         csv_field(stream, jobs); fputc(',', stream);
         csv_field(stream, busy); fputc(',', stream);
@@ -71,7 +75,7 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
     case WM_CREATE: {
         RECT owner;
         GetWindowRect(g_app.window, &owner);
-        const int width = sx(520), height = sx(230);
+        const int width = sx(520), height = sx(300);
         SetWindowPos(window, HWND_TOP,
                      owner.left + ((owner.right - owner.left) - width) / 2,
                      owner.top + ((owner.bottom - owner.top) - height) / 2,
@@ -87,27 +91,32 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         wchar_t organisation[128];
         utf8_to_wide(g_app.config.organisation, organisation, 128U);
         g_app.settings_org = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", organisation,
-            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
             sx(20), sx(88), sx(460), sx(31), window,
             (HMENU)(INT_PTR)ID_SETTINGS_ORG, g_app.instance, NULL);
         SendMessageW(g_app.settings_org, WM_SETFONT, (WPARAM)g_app.font, TRUE);
         HWND hint = CreateWindowW(L"STATIC",
-            L"Other configuration fields are preserved exactly when this value is saved.",
+            L"Connect GitHub saves this organisation and opens browser authorization.",
             WS_CHILD | WS_VISIBLE, sx(20), sx(124), sx(460), sx(22),
             window, NULL, g_app.instance, NULL);
         SendMessageW(hint, WM_SETFONT, (WPARAM)g_app.font_small, TRUE);
-        HWND save = CreateWindowW(L"BUTTON", L"Save", WS_CHILD | WS_VISIBLE,
-            sx(300), sx(158), sx(86), sx(32), window,
+        HWND connect = CreateWindowW(L"BUTTON", L"Connect &GitHub…",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            sx(20), sx(162), sx(180), sx(32), window,
+            (HMENU)(INT_PTR)ID_CONNECT_GITHUB, g_app.instance, NULL);
+        SendMessageW(connect, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
+        HWND save = CreateWindowW(L"BUTTON", L"&Save", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            sx(300), sx(224), sx(86), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_SAVE, g_app.instance, NULL);
-        HWND cancel = CreateWindowW(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE,
-            sx(394), sx(158), sx(86), sx(32), window,
+        HWND cancel = CreateWindowW(L"BUTTON", L"&Cancel", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            sx(394), sx(224), sx(86), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_CANCEL, g_app.instance, NULL);
         SendMessageW(save, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
         SendMessageW(cancel, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
         return 0;
     }
     case WM_COMMAND:
-        if (LOWORD(wparam) == ID_SETTINGS_SAVE) {
+        if (LOWORD(wparam) == ID_SETTINGS_SAVE || LOWORD(wparam) == ID_CONNECT_GITHUB) {
             wchar_t wide[128];
             GetWindowTextW(g_app.settings_org, wide, 128);
             RunnerConfig next = g_app.config;
@@ -130,16 +139,19 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
                 MessageBoxW(window, message, APP_TITLE, MB_OK | MB_ICONERROR);
                 return 0;
             }
+            if (strcmp(g_app.config.organisation, next.organisation) != 0)
+                mark_rows_stale();
             g_app.config = next;
             g_app.config_error[0] = '\0';
             KillTimer(g_app.window, TIMER_REFRESH);
             SetTimer(g_app.window, TIMER_REFRESH,
                      g_app.config.runner_poll_seconds * 1000U, NULL);
             DestroyWindow(window);
-            refresh_begin();
+            if (LOWORD(wparam) == ID_CONNECT_GITHUB) open_github_auth();
+            else refresh_begin();
             return 0;
         }
-        if (LOWORD(wparam) == ID_SETTINGS_CANCEL) {
+        if (LOWORD(wparam) == ID_SETTINGS_CANCEL || LOWORD(wparam) == IDCANCEL) {
             DestroyWindow(window);
             return 0;
         }
@@ -184,7 +196,7 @@ static void open_settings(void)
     g_app.settings_window = CreateWindowExW(
         WS_EX_DLGMODALFRAME, SETTINGS_CLASS, L"Runner Monitor settings",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, sx(520), sx(230),
+        CW_USEDEFAULT, CW_USEDEFAULT, sx(520), sx(300),
         g_app.window, NULL, g_app.instance, NULL);
     if (!g_app.settings_window) EnableWindow(g_app.window, TRUE);
 }

@@ -18,6 +18,10 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         load_images();
         create_search();
         init_list();
+        g_app.connect_github = CreateWindowW(L"BUTTON", L"Connect &GitHub…",
+            WS_CHILD | WS_TABSTOP, 0, 0, sx(160), sx(34), window,
+            (HMENU)(INT_PTR)ID_CONNECT_GITHUB, g_app.instance, NULL);
+        SendMessageW(g_app.connect_github, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
         g_app.session_started_ms = GetTickCount64();
         BOOL dark = system_prefers_dark() ? TRUE : FALSE;
         const DWORD attribute = 20U;
@@ -82,6 +86,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         }
         break;
     case WM_COMMAND:
+        if (LOWORD(wparam) == ID_CONNECT_GITHUB) { open_github_auth(); return 0; }
         if (LOWORD(wparam) == ID_SEARCH && HIWORD(wparam) == EN_CHANGE) {
             GetWindowTextW(g_app.search, g_app.filter,
                            (int)(sizeof(g_app.filter) / sizeof(g_app.filter[0])));
@@ -130,6 +135,17 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
     case WM_APP_REFRESH_DONE:
         apply_refresh((RefreshResult *)lparam);
         return 0;
+    case WM_APP_AUTH_PROGRESS: {
+        GitHubAuthProgress *progress = (GitHubAuthProgress *)lparam;
+        if (progress) {
+            if (g_app.authorizing) github_auth_update_code(progress->code);
+            free(progress);
+        }
+        return 0;
+    }
+    case WM_APP_AUTH_DONE:
+        github_auth_done((GitHubAuthResult *)lparam);
+        return 0;
     case WM_CTLCOLORSTATIC: {
         HDC dc = (HDC)wparam;
         SetBkMode(dc, TRANSPARENT);
@@ -162,6 +178,13 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         return 0;
     }
     case WM_DESTROY:
+        if (g_app.auth_cancel) SetEvent(g_app.auth_cancel);
+        if (g_app.auth_thread) {
+            (void)WaitForSingleObject(g_app.auth_thread, 6000U);
+            CloseHandle(g_app.auth_thread);
+            g_app.auth_thread = NULL;
+        }
+        if (g_app.auth_cancel) { CloseHandle(g_app.auth_cancel); g_app.auth_cancel = NULL; }
         KillTimer(window, TIMER_REFRESH);
         KillTimer(window, TIMER_PRESENT);
         unload_images();
@@ -215,5 +238,17 @@ static int self_test(void)
     };
     for (size_t i = 0U; i < sizeof(required) / sizeof(required[0]); ++i)
         if (!resource_exists(required[i])) return 6;
+    if (github_auth_failure("gh: HTTP 401 Bad credentials") != GITHUB_AUTH_LOGIN ||
+        github_auth_failure("gh: This API operation needs the admin:org scope (HTTP 403)") != GITHUB_AUTH_SCOPE ||
+        github_auth_failure("gh: Resource not accessible (HTTP 403)") != GITHUB_AUTH_ACCESS ||
+        github_auth_failure("gh: API rate limit exceeded (HTTP 403)") != GITHUB_AUTH_ACCESS ||
+        github_auth_failure("connection timed out") != GITHUB_AUTH_NONE)
+        return 7;
+    char code[32];
+    if (!github_parse_device_code("! First copy your one-time code: ABCD-1234\r\nhttps://github.com/login/device\n",
+                                   code, sizeof(code)) || strcmp(code, "ABCD-1234") != 0 ||
+        github_parse_device_code("! First copy your one-time code: ABCD-12", code, sizeof(code)) ||
+        github_parse_device_code("https://untrusted.example/code", code, sizeof(code)))
+        return 8;
     return 0;
 }

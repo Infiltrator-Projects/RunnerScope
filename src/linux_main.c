@@ -12,6 +12,7 @@
 
 #include "ui/ui_contract.h"
 #include "ui/ui_renderer.h"
+#include "platform/linux_github_auth.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -177,6 +178,21 @@ typedef struct {
     GtkWidget *notebook;
     GtkWidget *filter_entry;
     GtkWidget *status_label;
+    GtkWidget *connection_bar;
+    GtkWidget *connection_label;
+    GtkWidget *connect_button;
+    GtkWidget *auth_dialog;
+    GtkWidget *auth_status;
+    GtkWidget *auth_code;
+    GtkWidget *auth_output;
+    GtkWidget *auth_details;
+    GtkWidget *auth_copy_button;
+    GtkWidget *auth_open_button;
+    RunnerGithubAuth *auth;
+    RunnerGithubAuthIssue auth_issue;
+    gboolean runner_data_stale;
+    gboolean auth_verify_pending;
+    char *runner_error;
     GtkWidget *open_job_button;
     GtkWidget *open_diag_button;
     GtkWidget *restart_button;
@@ -284,6 +300,8 @@ typedef struct {
 static gboolean activity_apply_idle(gpointer data);
 static gboolean local_apply_idle(gpointer data);
 static void request_activity_refresh(RunnerScopeApp *app);
+static void request_runner_refresh(RunnerScopeApp *app);
+static void on_connect_github(GtkButton *button, gpointer user_data);
 static void on_export(GtkButton *button, gpointer user_data);
 static InfiltratrProjectInfo project_info(void);
 
@@ -1757,6 +1775,11 @@ static void update_workspace_context(RunnerScopeApp *app, gint page)
     char metric_values[4][64] = {{0}};
     switch (page) {
         case RUNNER_UI_PAGE_RUNNERS:
+            if (app->runner_data_stale) {
+                for (guint i = 0U; i < 4U; i++)
+                    g_strlcpy(metric_values[i], "—", sizeof(metric_values[i]));
+                break;
+            }
             g_snprintf(metric_values[0], sizeof(metric_values[0]), "%u", app->runners_total);
             g_snprintf(metric_values[1], sizeof(metric_values[1]), "%u", app->runners_running);
             g_snprintf(metric_values[2], sizeof(metric_values[2]), "%u", app->runners_idle);
@@ -2087,14 +2110,60 @@ static gboolean runner_apply_idle(gpointer data)
         g_thread_unref(app->runner_thread);
         app->runner_thread = NULL;
     }
+    if (g_atomic_int_get(&app->shutting_down)) {
+        g_free(result->error);
+        if (result->rows) g_ptr_array_unref(result->rows);
+        g_free(result);
+        return G_SOURCE_REMOVE;
+    }
+    if (app->auth_verify_pending) {
+        g_free(result->error);
+        if (result->rows) g_ptr_array_unref(result->rows);
+        g_atomic_int_set(&app->runner_refreshing, 0);
+        g_free(result);
+        request_runner_refresh(app);
+        return G_SOURCE_REMOVE;
+    }
     if (result->error) {
-        label_set_if_changed(app->status_label, result->error);
+        app->runner_data_stale = TRUE;
+        app->auth_issue = runner_github_auth_issue(result->error);
+        g_free(app->runner_error);
+        app->runner_error = g_strdup(result->error);
+        const char *message = app->auth_issue == RUNNER_GITHUB_AUTH_SCOPE
+            ? "GitHub needs permission to read organisation runners. Connect GitHub to authorize access."
+            : app->auth_issue == RUNNER_GITHUB_AUTH_LOGIN
+            ? "Connect GitHub to view your organisation's runners."
+            : app->auth_issue == RUNNER_GITHUB_AUTH_ACCESS
+            ? "GitHub denied runner access. Check your account's organisation permissions."
+            : "Runner refresh failed. Check the connection and try again.";
+        char *notice = g_strdup_printf("%s %s", message,
+            app->runner_rows->len ? "Displayed runners are last known data." : "Runner status is unavailable.");
+        label_set_if_changed(app->connection_label, notice);
+        g_free(notice);
+        gtk_widget_show(app->connection_bar);
+        gtk_widget_set_tooltip_text(app->connection_label, result->error);
+        label_set_if_changed(app->status_label, "Runner data unavailable — refresh failed");
+        gtk_widget_set_tooltip_text(app->status_label, result->error);
+        update_workspace_context(app, gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
+        if (app->auth_dialog && !app->auth) {
+            label_set_if_changed(app->auth_status, message);
+            label_set_if_changed(app->auth_output, result->error);
+            gtk_expander_set_expanded(GTK_EXPANDER(app->auth_details), TRUE);
+        }
         g_free(result->error);
         if (result->rows) g_ptr_array_unref(result->rows);
         g_atomic_int_set(&app->runner_refreshing, 0);
         g_free(result);
         return G_SOURCE_REMOVE;
     }
+
+    app->runner_data_stale = FALSE;
+    app->auth_issue = RUNNER_GITHUB_AUTH_NONE;
+    g_clear_pointer(&app->runner_error, g_free);
+    gtk_widget_hide(app->connection_bar);
+    gtk_widget_set_tooltip_text(app->status_label, NULL);
+    if (app->auth_dialog && !app->auth)
+        label_set_if_changed(app->auth_status, "Connected. Runner access verified.");
 
     GPtrArray *next_rows = g_ptr_array_new_with_free_func(runner_row_free);
     guint total = 0U, running = 0U, idle = 0U, offline = 0U;
@@ -2256,8 +2325,168 @@ static gpointer runner_worker(gpointer data)
 static void request_runner_refresh(RunnerScopeApp *app)
 {
     if (!app->config.organisation[0] || g_atomic_int_get(&app->shutting_down)) return;
+    if (app->auth) return;
     if (!g_atomic_int_compare_and_exchange(&app->runner_refreshing, 0, 1)) return;
+    app->auth_verify_pending = FALSE;
     app->runner_thread = g_thread_new("runnerscope-runners", runner_worker, app);
+}
+
+static void auth_dialog_destroyed(GtkWidget *widget, gpointer user_data)
+{
+    (void)widget;
+    RunnerScopeApp *app = user_data;
+    app->auth_dialog = NULL;
+    app->auth_status = NULL;
+    app->auth_code = NULL;
+    app->auth_output = NULL;
+    app->auth_details = NULL;
+    app->auth_copy_button = NULL;
+    app->auth_open_button = NULL;
+    runner_github_auth_cancel(app->auth);
+}
+
+static void auth_dialog_response(GtkDialog *dialog, gint response, gpointer user_data)
+{
+    (void)response;
+    RunnerScopeApp *app = user_data;
+    runner_github_auth_cancel(app->auth);
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+}
+
+static void auth_copy_code(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    RunnerScopeApp *app = user_data;
+    if (app->auth_code)
+        gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),
+            gtk_label_get_text(GTK_LABEL(app->auth_code)), -1);
+}
+
+static void auth_open_github(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    RunnerScopeApp *app = user_data;
+    GError *error = NULL;
+    if (!gtk_show_uri_on_window(GTK_WINDOW(app->auth_dialog),
+            "https://github.com/login/device", GDK_CURRENT_TIME, &error)) {
+        label_set_if_changed(app->auth_status,
+            "Open https://github.com/login/device in your browser and enter the code shown here.");
+        g_clear_error(&error);
+    }
+}
+
+static void auth_update(const char *output, gpointer user_data)
+{
+    RunnerScopeApp *app = user_data;
+    if (!app->auth_dialog || g_atomic_int_get(&app->shutting_down)) return;
+    label_set_if_changed(app->auth_output, output);
+    char *lower = g_ascii_strdown(output, -1);
+    const char *marker = strstr(lower, "one-time code:");
+    if (marker) {
+        const char *start = output + (marker - lower) + strlen("one-time code:");
+        while (g_ascii_isspace(*start)) start++;
+        if (strlen(start) >= 9U) {
+            gboolean valid = start[4] == '-';
+            for (guint i = 0U; i < 9U; i++)
+                if (i != 4U && !g_ascii_isalnum(start[i])) valid = FALSE;
+            if (valid) {
+                char *code = g_strndup(start, 9U);
+                label_set_if_changed(app->auth_code, code);
+                g_free(code);
+                gtk_widget_set_sensitive(app->auth_copy_button, TRUE);
+                gtk_widget_set_sensitive(app->auth_open_button, TRUE);
+                label_set_if_changed(app->auth_status,
+                    "Copy this code, open GitHub, and approve access. Runner Monitor will reconnect automatically.");
+            }
+        }
+    }
+    g_free(lower);
+}
+
+static void auth_complete(gboolean succeeded, const char *detail, gpointer user_data)
+{
+    RunnerScopeApp *app = user_data;
+    runner_github_auth_free(app->auth);
+    app->auth = NULL;
+    if (g_atomic_int_get(&app->shutting_down)) return;
+    gtk_widget_set_sensitive(app->connect_button, TRUE);
+    if (app->auth_dialog) {
+        label_set_if_changed(app->auth_status, detail);
+        gtk_widget_set_sensitive(app->auth_copy_button, FALSE);
+        gtk_widget_set_sensitive(app->auth_open_button, FALSE);
+        GtkWidget *close = gtk_dialog_get_widget_for_response(GTK_DIALOG(app->auth_dialog), GTK_RESPONSE_CLOSE);
+        gtk_button_set_label(GTK_BUTTON(close), "_Close");
+        if (!succeeded) gtk_expander_set_expanded(GTK_EXPANDER(app->auth_details), TRUE);
+    }
+    if (succeeded) {
+        app->auth_verify_pending = TRUE;
+        request_runner_refresh(app);
+    }
+}
+
+static void on_connect_github(GtkButton *button, gpointer user_data)
+{
+    RunnerScopeApp *app = user_data;
+    if (app->auth_dialog) {
+        gtk_window_present(GTK_WINDOW(app->auth_dialog));
+        return;
+    }
+    if (app->auth || g_atomic_int_get(&app->shutting_down)) return;
+    GtkWidget *parent = button ? gtk_widget_get_toplevel(GTK_WIDGET(button)) : app->window;
+    if (!GTK_IS_WINDOW(parent)) parent = app->window;
+    app->auth_dialog = gtk_dialog_new_with_buttons("Connect GitHub", GTK_WINDOW(parent),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        "_Cancel", GTK_RESPONSE_CLOSE, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(app->auth_dialog), 540, -1);
+    GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(app->auth_dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(area), 20U);
+    gtk_box_set_spacing(GTK_BOX(area), 12);
+    app->auth_status = gtk_label_new("Starting GitHub authorization…");
+    gtk_label_set_line_wrap(GTK_LABEL(app->auth_status), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(app->auth_status), 65);
+    gtk_label_set_xalign(GTK_LABEL(app->auth_status), 0.0F);
+    gtk_box_pack_start(GTK_BOX(area), app->auth_status, FALSE, FALSE, 0);
+    app->auth_code = gtk_label_new("Waiting for a sign-in code…");
+    gtk_label_set_selectable(GTK_LABEL(app->auth_code), TRUE);
+    gtk_box_pack_start(GTK_BOX(area), app->auth_code, FALSE, FALSE, 4);
+    GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    app->auth_copy_button = gtk_button_new_with_label("Copy code");
+    app->auth_open_button = gtk_button_new_with_label("Open GitHub");
+    gtk_widget_set_sensitive(app->auth_copy_button, FALSE);
+    gtk_widget_set_sensitive(app->auth_open_button, FALSE);
+    g_signal_connect(app->auth_copy_button, "clicked", G_CALLBACK(auth_copy_code), app);
+    g_signal_connect(app->auth_open_button, "clicked", G_CALLBACK(auth_open_github), app);
+    gtk_box_pack_start(GTK_BOX(actions), app->auth_copy_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(actions), app->auth_open_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(area), actions, FALSE, FALSE, 0);
+    GtkWidget *url = gtk_label_new("https://github.com/login/device");
+    gtk_label_set_selectable(GTK_LABEL(url), TRUE);
+    gtk_box_pack_start(GTK_BOX(area), url, FALSE, FALSE, 0);
+    app->auth_details = gtk_expander_new("GitHub details");
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_size_request(scroll, -1, 140);
+    app->auth_output = gtk_label_new(app->runner_error ? app->runner_error : "Waiting for GitHub…");
+    gtk_label_set_selectable(GTK_LABEL(app->auth_output), TRUE);
+    gtk_label_set_line_wrap(GTK_LABEL(app->auth_output), TRUE);
+    gtk_label_set_line_wrap_mode(GTK_LABEL(app->auth_output), PANGO_WRAP_WORD_CHAR);
+    gtk_label_set_max_width_chars(GTK_LABEL(app->auth_output), 65);
+    gtk_label_set_xalign(GTK_LABEL(app->auth_output), 0.0F);
+    gtk_container_add(GTK_CONTAINER(scroll), app->auth_output);
+    gtk_container_add(GTK_CONTAINER(app->auth_details), scroll);
+    gtk_box_pack_start(GTK_BOX(area), app->auth_details, TRUE, TRUE, 0);
+    g_signal_connect(app->auth_dialog, "response", G_CALLBACK(auth_dialog_response), app);
+    g_signal_connect(app->auth_dialog, "destroy", G_CALLBACK(auth_dialog_destroyed), app);
+    gtk_widget_show_all(app->auth_dialog);
+    GError *error = NULL;
+    app->auth = runner_github_auth_start(app->auth_issue, auth_update, auth_complete, app, &error);
+    if (!app->auth) {
+        label_set_if_changed(app->auth_status, error ? error->message : "Unable to start GitHub authorization.");
+        gtk_label_set_text(GTK_LABEL(app->auth_code), "Authorization unavailable");
+        g_clear_error(&error);
+    } else {
+        gtk_widget_set_sensitive(app->connect_button, FALSE);
+    }
 }
 
 static double parse_iso8601_epoch(const char *text)
@@ -2395,8 +2624,15 @@ static gboolean activity_apply_idle(gpointer data)
         g_thread_unref(app->activity_thread);
         app->activity_thread = NULL;
     }
+    if (g_atomic_int_get(&app->shutting_down)) {
+        g_free(result->error);
+        if (result->rows) g_ptr_array_unref(result->rows);
+        g_free(result);
+        return G_SOURCE_REMOVE;
+    }
     if (result->error) {
-        label_set_if_changed(app->status_label, result->error);
+        if (!app->runner_data_stale)
+            label_set_if_changed(app->status_label, result->error);
         g_free(result->error);
         if (result->rows) g_ptr_array_unref(result->rows);
         g_atomic_int_set(&app->activity_refreshing, 0);
@@ -2445,6 +2681,7 @@ static gboolean activity_apply_idle(gpointer data)
 static void request_activity_refresh(RunnerScopeApp *app)
 {
     if (!app->config.organisation[0] || g_atomic_int_get(&app->shutting_down)) return;
+    if (app->auth) return;
     if (!g_atomic_int_compare_and_exchange(&app->activity_refreshing, 0, 1)) return;
     app->activity_thread = g_thread_new("runnerscope-activity", activity_worker, app);
 }
@@ -2586,6 +2823,12 @@ static gboolean local_apply_idle(gpointer data)
     if (app->local_thread) {
         g_thread_unref(app->local_thread);
         app->local_thread = NULL;
+    }
+    if (g_atomic_int_get(&app->shutting_down)) {
+        g_free(result->error);
+        if (result->rows) g_ptr_array_unref(result->rows);
+        g_free(result);
+        return G_SOURCE_REMOVE;
     }
     if (result->error) {
         label_set_if_changed(app->status_label, result->error);
@@ -2776,6 +3019,10 @@ static void refresh_activity_clock_cells(RunnerScopeApp *app, double wall_now)
 static gboolean tick_timer_cb(gpointer data)
 {
     RunnerScopeApp *app = data;
+    if (g_atomic_int_get(&app->shutting_down)) {
+        app->tick_timer = 0U;
+        return G_SOURCE_REMOVE;
+    }
     if (app->window) {
         GdkWindow *window = gtk_widget_get_window(app->window);
         if (window &&
@@ -2785,7 +3032,7 @@ static gboolean tick_timer_cb(gpointer data)
 
     const gint page =
         gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
-    if (page == 0) {
+    if (page == 0 && !app->runner_data_stale) {
         const double monotonic_now = now_monotonic();
         refresh_runner_clock_cells(
             app, monotonic_now, (double)time(NULL));
@@ -2900,9 +3147,14 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
     gtk_grid_attach(GTK_GRID(grid), theme, 1, 6, 1, 1);
 
     GtkWidget *hint = gtk_label_new(
-        "Authentication stays in GitHub CLI (gh auth login). Runner Monitor never stores your token.");
+        "Connect GitHub here to authorize access to your organisation's runners.");
     gtk_widget_set_halign(hint, GTK_ALIGN_START);
     gtk_grid_attach(GTK_GRID(grid), hint, 0, 7, 2, 1);
+    if (!first_run) {
+        GtkWidget *connect = gtk_button_new_with_label("Connect GitHub");
+        g_signal_connect(connect, "clicked", G_CALLBACK(on_connect_github), app);
+        gtk_grid_attach(GTK_GRID(grid), connect, 0, 8, 2, 1);
+    }
 
     gtk_widget_show_all(dialog);
     gboolean saved = FALSE;
@@ -3108,6 +3360,13 @@ static gboolean restart_apply_idle(gpointer data)
     if (app->restart_thread) {
         g_thread_unref(app->restart_thread);
         app->restart_thread = NULL;
+    }
+
+    if (g_atomic_int_get(&app->shutting_down)) {
+        g_free(result->service);
+        g_free(result->error);
+        g_free(result);
+        return G_SOURCE_REMOVE;
     }
 
     if (result->error) {
@@ -3823,6 +4082,14 @@ static bool gtk_renderer_end_navigation(void *context)
     return context != NULL;
 }
 
+static void on_main_destroy(GtkWidget *widget, gpointer user_data)
+{
+    (void)widget;
+    RunnerScopeApp *app = user_data;
+    g_atomic_int_set(&app->shutting_down, 1);
+    runner_github_auth_cancel(app->auth);
+}
+
 static void build_ui(RunnerScopeApp *app)
 {
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
@@ -3831,6 +4098,7 @@ static void build_ui(RunnerScopeApp *app)
     const guint screen_padding = metrics ? metrics->screen_padding : 20U;
 
     app->window = gtk_application_window_new(app->application);
+    g_signal_connect(app->window, "destroy", G_CALLBACK(on_main_destroy), app);
     enforce_required_typography(app->window);
     gtk_window_set_title(GTK_WINDOW(app->window), runner_ui_product_title());
     gtk_window_set_default_size(GTK_WINDOW(app->window), 1280, 800);
@@ -3859,6 +4127,21 @@ static void build_ui(RunnerScopeApp *app)
     gtk_widget_set_name(outer, "runner-root");
     gtk_container_set_border_width(GTK_CONTAINER(outer), screen_padding);
     gtk_container_add(GTK_CONTAINER(app->window), outer);
+
+    app->connection_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
+    gtk_widget_set_no_show_all(app->connection_bar, TRUE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(app->connection_bar), "selection-card");
+    app->connection_label = gtk_label_new("Checking GitHub runner access…");
+    gtk_label_set_line_wrap(GTK_LABEL(app->connection_label), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(app->connection_label), 0.0F);
+    gtk_widget_set_hexpand(app->connection_label, TRUE);
+    gtk_box_pack_start(GTK_BOX(app->connection_bar), app->connection_label, TRUE, TRUE, 0);
+    app->connect_button = gtk_button_new_with_label("Connect GitHub");
+    g_signal_connect(app->connect_button, "clicked", G_CALLBACK(on_connect_github), app);
+    gtk_box_pack_end(GTK_BOX(app->connection_bar), app->connect_button, FALSE, FALSE, 0);
+    gtk_widget_show(app->connection_label);
+    gtk_widget_show(app->connect_button);
+    gtk_box_pack_start(GTK_BOX(outer), app->connection_bar, FALSE, FALSE, 0);
 
     app->runner_store = gtk_list_store_new(RUNNER_N_COLS,
         G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,
@@ -4309,6 +4592,8 @@ static void app_init(RunnerScopeApp *app)
 static void app_destroy(RunnerScopeApp *app)
 {
     g_atomic_int_set(&app->shutting_down, 1);
+    runner_github_auth_cancel(app->auth);
+    while (app->auth) g_main_context_iteration(NULL, TRUE);
     if (app->runner_timer) g_source_remove(app->runner_timer);
     if (app->activity_timer) g_source_remove(app->activity_timer);
     if (app->local_timer) g_source_remove(app->local_timer);
@@ -4340,6 +4625,7 @@ static void app_destroy(RunnerScopeApp *app)
         g_thread_join(app->restart_thread);
         app->restart_thread = NULL;
     }
+    while (g_main_context_pending(NULL)) g_main_context_iteration(NULL, FALSE);
     if (app->theme_provider) {
         GdkScreen *screen = gdk_screen_get_default();
         if (screen) {
@@ -4354,6 +4640,7 @@ static void app_destroy(RunnerScopeApp *app)
     g_hash_table_unref(app->runner_card_by_name);
     g_clear_object(&app->runner_card_art);
     g_free(app->selected_runner_name);
+    g_free(app->runner_error);
     g_hash_table_unref(app->activity_row_by_url);
     g_ptr_array_unref(app->runner_rows);
     g_ptr_array_unref(app->activity_rows);
