@@ -294,7 +294,7 @@ static void draw_workspace_header(HDC dc)
 {
     char storage[4][32] = {{0}};
     const char *values[4] = {"—", "—", "—", "—"};
-    if (g_app.page == RUNNER_UI_PAGE_RUNNERS) {
+    if (g_app.page == RUNNER_UI_PAGE_RUNNERS && !g_app.rows_stale) {
         size_t running = 0U, idle = 0U, offline = 0U;
         for (size_t i = 0U; i < g_app.row_count; ++i) {
             if (strcmp(g_app.rows[i].state, "RUNNING") == 0) running++;

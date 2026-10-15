@@ -21,7 +21,7 @@ The application therefore separates provider facts from application interpretati
 
 GitHub is authoritative for GitHub runner/workflow facts. Runner Monitor owns caching, correlation, timing, presentation and persistence.
 
-The current release line uses GitHub CLI as the authenticated provider adapter. Any future provider replacement must be integrated and qualified in the shipping native path rather than maintained as a second implementation.
+The shipping native application makes its own bounded HTTPS requests. Organisation and access token are entered in Settings and saved in the existing private JSON configuration. Normal operation must not require a CLI program, terminal command, external credential store or browser authorization flow. Failed requests must remain visible and must not turn stale observations into current idle counts.
 
 ## Common usage
 

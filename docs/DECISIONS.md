@@ -59,3 +59,15 @@
 **Rationale.** The migration is a substantial backward-compatible internal architecture improvement, not an intended incompatible public/user-data change.
 
 **Consequence.** 1.2.39 remains the pre-migration parity baseline. 1.3.0 is released when the first functional shared contract and both native renderers ship and pass qualification; later migration slices may ship as 1.3.x patches while compatibility is preserved.
+
+## ADR-010 — Settings owns setup; requests stay internal
+
+**Decision.** Users enter an organisation and access token in Settings. Runner Monitor saves them in its existing JSON configuration and calls GitHub through native HTTPS libraries. Linux service work uses native D-Bus APIs.
+
+**Consequence.** No GitHub CLI, systemctl, pkexec or other subprocess is required for monitoring or restart. Both platforms consume one configuration and GitHub response contract. Tokens are masked in the UI, kept in owner-restricted files and excluded from errors. Missing permissions are reported inside the application.
+
+## ADR-011 — Main is the only branch
+
+**Decision.** Work directly on `main`; do not retain feature or review branches or introduce a PR-based implementation route.
+
+**Consequence.** Validate locally, advance the release version, then publish qualified artifacts through the main pipeline. Published versions remain immutable.

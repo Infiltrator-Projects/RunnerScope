@@ -31,8 +31,8 @@ static void export_csv(void)
     for (size_t i = 0U; i < g_app.row_count; ++i) {
         RunnerRow *row = &g_app.rows[i];
         RunnerSession *session = session_for(row->name, false);
-        char duration[64] = "—", jobs[32] = "0", busy[32] = "0.0%";
-        if (session) {
+        char duration[64] = "—", jobs[32] = "—", busy[32] = "—";
+        if (session && !g_app.rows_stale) {
             wchar_t wide[64];
             format_duration(GetTickCount64() - session->state_since_ms, wide, 64U);
             (void)wide_to_utf8(wide, duration, sizeof(duration));
@@ -41,10 +41,10 @@ static void export_csv(void)
         }
         csv_field(stream, row->name); fputc(',', stream);
         csv_field(stream, row->os); fputc(',', stream);
-        csv_field(stream, row->state); fputc(',', stream);
+        csv_field(stream, g_app.rows_stale ? "STALE" : row->state); fputc(',', stream);
         csv_field(stream, ""); fputc(',', stream);
         csv_field(stream, ""); fputc(',', stream);
-        csv_field(stream, session && session->running ? duration : ""); fputc(',', stream);
+        csv_field(stream, !g_app.rows_stale && session && session->running ? duration : ""); fputc(',', stream);
         csv_field(stream, duration); fputc(',', stream);
         csv_field(stream, jobs); fputc(',', stream);
         csv_field(stream, busy); fputc(',', stream);
@@ -63,83 +63,154 @@ static void show_about(void)
     MessageBoxW(g_app.window, text, L"About Runner Monitor", MB_OK | MB_ICONINFORMATION);
 }
 
+static void settings_status(const char *message)
+{
+    if (!g_app.settings_status) return;
+    char path[4096], text[5000];
+    const bool has_path = runner_windows_config_path(path, sizeof(path));
+    (void)snprintf(text, sizeof(text), "%s\r\n\r\nSaved configuration: %s",
+        message ? message : "", has_path ? path : "Path unavailable");
+    wchar_t wide[5000];
+    utf8_to_wide(text, wide, sizeof(wide) / sizeof(wide[0]));
+    SetWindowTextW(g_app.settings_status, wide);
+}
+
+static void save_settings(HWND window, bool test_access)
+{
+    wchar_t organisation[128], token[RUNNER_GITHUB_TOKEN_CAPACITY];
+    GetWindowTextW(g_app.settings_org, organisation, 128);
+    GetWindowTextW(g_app.settings_token, token, RUNNER_GITHUB_TOKEN_CAPACITY);
+    RunnerConfig next = g_app.config;
+    char error[640] = "";
+    bool valid = wide_to_utf8(organisation, next.organisation, sizeof(next.organisation)) &&
+                 next.organisation[0] &&
+                 wide_to_utf8(token, next.github_token, sizeof(next.github_token));
+    SecureZeroMemory(token, sizeof(token));
+    if (!valid) infiltratr_copy_string(error, sizeof(error), "Enter a valid organisation and GitHub token.");
+    else valid = runner_config_validate(&next, error, sizeof(error));
+    if (valid) valid = runner_windows_config_save(&next, error, sizeof(error));
+    if (!valid) {
+        settings_status(error);
+        SecureZeroMemory(next.github_token, sizeof(next.github_token));
+        return;
+    }
+    const bool organisation_changed = strcmp(next.organisation, g_app.config.organisation) != 0;
+    const bool credentials_changed = organisation_changed ||
+                                     strcmp(next.github_token, g_app.config.github_token) != 0;
+    SecureZeroMemory(g_app.config.github_token, sizeof(g_app.config.github_token));
+    g_app.config = next;
+    SecureZeroMemory(next.github_token, sizeof(next.github_token));
+    g_app.config_generation++;
+    if (g_app.refresh_cancel) SetEvent(g_app.refresh_cancel);
+    g_app.settings_dirty = false;
+    g_app.config_error[0] = '\0';
+    if (organisation_changed) {
+        free(g_app.rows);
+        free(g_app.sessions);
+        g_app.rows = NULL;
+        g_app.sessions = NULL;
+        g_app.row_count = 0U;
+        g_app.session_count = 0U;
+        g_app.session_capacity = 0U;
+        g_app.session_started_ms = GetTickCount64();
+        g_app.selected_row = -1;
+    }
+    KillTimer(g_app.window, TIMER_REFRESH);
+    SetTimer(g_app.window, TIMER_REFRESH, g_app.config.runner_poll_seconds * 1000U, NULL);
+    if (credentials_changed || !g_app.config.github_token[0]) {
+        mark_rows_stale();
+        infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error),
+            g_app.config.github_token[0] ? "Settings saved. Runner access has not been verified yet."
+                : "No GitHub token saved. Open Settings to connect.");
+    }
+    if (!g_app.config.github_token[0]) settings_status("Settings saved. Add a GitHub token to connect.");
+    else if (test_access) {
+        settings_status("Settings saved. Checking access to this organisation's runners…");
+        refresh_begin();
+    } else settings_status("Settings saved. Select Save and test to verify runner access.");
+    InvalidateRect(g_app.window, NULL, FALSE);
+    (void)window;
+}
+
 static LRESULT CALLBACK settings_proc(HWND window, UINT message,
                                       WPARAM wparam, LPARAM lparam)
 {
-    (void)lparam;
     switch (message) {
     case WM_CREATE: {
         RECT owner;
         GetWindowRect(g_app.window, &owner);
-        const int width = sx(520), height = sx(230);
+        const int width = sx(650), height = sx(490);
         SetWindowPos(window, HWND_TOP,
-                     owner.left + ((owner.right - owner.left) - width) / 2,
-                     owner.top + ((owner.bottom - owner.top) - height) / 2,
-                     width, height, SWP_SHOWWINDOW);
-        HWND title = CreateWindowW(L"STATIC", L"Runner Monitor settings",
-            WS_CHILD | WS_VISIBLE, sx(20), sx(18), sx(430), sx(30),
-            window, NULL, g_app.instance, NULL);
+            owner.left + ((owner.right - owner.left) - width) / 2,
+            owner.top + ((owner.bottom - owner.top) - height) / 2,
+            width, height, SWP_SHOWWINDOW);
+        HWND title = CreateWindowW(L"STATIC", L"Runner Monitor settings", WS_CHILD | WS_VISIBLE,
+            sx(20), sx(16), sx(600), sx(32), window, NULL, g_app.instance, NULL);
         SendMessageW(title, WM_SETFONT, (WPARAM)g_app.font_title, TRUE);
-        HWND label = CreateWindowW(L"STATIC", L"GitHub organisation",
-            WS_CHILD | WS_VISIBLE, sx(20), sx(62), sx(180), sx(24),
-            window, NULL, g_app.instance, NULL);
+        HWND label = CreateWindowW(L"STATIC", L"GitHub &organisation", WS_CHILD | WS_VISIBLE,
+            sx(20), sx(62), sx(600), sx(24), window, NULL, g_app.instance, NULL);
         SendMessageW(label, WM_SETFONT, (WPARAM)g_app.font, TRUE);
-        wchar_t organisation[128];
+        wchar_t organisation[128], token[RUNNER_GITHUB_TOKEN_CAPACITY];
         utf8_to_wide(g_app.config.organisation, organisation, 128U);
+        utf8_to_wide(g_app.config.github_token, token, RUNNER_GITHUB_TOKEN_CAPACITY);
         g_app.settings_org = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", organisation,
-            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            sx(20), sx(88), sx(460), sx(31), window,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+            sx(20), sx(88), sx(600), sx(31), window,
             (HMENU)(INT_PTR)ID_SETTINGS_ORG, g_app.instance, NULL);
         SendMessageW(g_app.settings_org, WM_SETFONT, (WPARAM)g_app.font, TRUE);
+        SendMessageW(g_app.settings_org, EM_LIMITTEXT, 127U, 0);
+        label = CreateWindowW(L"STATIC", L"GitHub &token", WS_CHILD | WS_VISIBLE,
+            sx(20), sx(131), sx(600), sx(24), window, NULL, g_app.instance, NULL);
+        SendMessageW(label, WM_SETFONT, (WPARAM)g_app.font, TRUE);
+        g_app.settings_token = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", token,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_PASSWORD | ES_AUTOHSCROLL,
+            sx(20), sx(157), sx(600), sx(31), window,
+            (HMENU)(INT_PTR)ID_SETTINGS_TOKEN, g_app.instance, NULL);
+        SecureZeroMemory(token, sizeof(token));
+        SendMessageW(g_app.settings_token, WM_SETFONT, (WPARAM)g_app.font, TRUE);
+        SendMessageW(g_app.settings_token, EM_LIMITTEXT, RUNNER_GITHUB_TOKEN_CAPACITY - 1U, 0);
         HWND hint = CreateWindowW(L"STATIC",
-            L"Other configuration fields are preserved exactly when this value is saved.",
-            WS_CHILD | WS_VISIBLE, sx(20), sx(124), sx(460), sx(22),
-            window, NULL, g_app.instance, NULL);
+            L"Token needs organisation self-hosted runner read access. For a classic token, use admin:org.\r\nThe token is saved in a private local file. Existing monitoring and appearance settings are preserved.",
+            WS_CHILD | WS_VISIBLE, sx(20), sx(201), sx(600), sx(65), window, NULL, g_app.instance, NULL);
         SendMessageW(hint, WM_SETFONT, (WPARAM)g_app.font_small, TRUE);
-        HWND save = CreateWindowW(L"BUTTON", L"Save", WS_CHILD | WS_VISIBLE,
-            sx(300), sx(158), sx(86), sx(32), window,
+        g_app.settings_status = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL,
+            sx(20), sx(275), sx(600), sx(110), window, NULL, g_app.instance, NULL);
+        SendMessageW(g_app.settings_status, WM_SETFONT, (WPARAM)g_app.font, TRUE);
+        settings_status(g_app.config_error[0] ? g_app.config_error
+            : g_app.provider_error[0] ? g_app.provider_error
+            : g_app.config.github_token[0] ? "Token saved. Select Save and test to verify runner access."
+            : "Save the organisation and GitHub token to connect. Existing installations need a token entered here once.");
+        HWND save = CreateWindowW(L"BUTTON", L"&Save", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            sx(230), sx(405), sx(95), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_SAVE, g_app.instance, NULL);
-        HWND cancel = CreateWindowW(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE,
-            sx(394), sx(158), sx(86), sx(32), window,
+        HWND test = CreateWindowW(L"BUTTON", L"Save and &test", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            sx(335), sx(405), sx(170), sx(32), window,
+            (HMENU)(INT_PTR)ID_SETTINGS_SAVE_TEST, g_app.instance, NULL);
+        HWND cancel = CreateWindowW(L"BUTTON", L"&Close", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            sx(515), sx(405), sx(105), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_CANCEL, g_app.instance, NULL);
         SendMessageW(save, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
+        SendMessageW(test, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
         SendMessageW(cancel, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
+        g_app.settings_dirty = false;
+        SetFocus(g_app.settings_org);
         return 0;
     }
     case WM_COMMAND:
-        if (LOWORD(wparam) == ID_SETTINGS_SAVE) {
-            wchar_t wide[128];
-            GetWindowTextW(g_app.settings_org, wide, 128);
-            RunnerConfig next = g_app.config;
-            if (!wide_to_utf8(wide, next.organisation, sizeof(next.organisation)) ||
-                !next.organisation[0]) {
-                MessageBoxW(window, L"Enter a valid GitHub organisation.", APP_TITLE,
-                            MB_OK | MB_ICONWARNING);
-                return 0;
-            }
-            char error[320];
-            if (!runner_config_validate(&next, error, sizeof(error))) {
-                wchar_t message[320];
-                utf8_to_wide(error, message, 320U);
-                MessageBoxW(window, message, APP_TITLE, MB_OK | MB_ICONWARNING);
-                return 0;
-            }
-            if (!runner_windows_config_save(&next, error, sizeof(error))) {
-                wchar_t message[320];
-                utf8_to_wide(error, message, 320U);
-                MessageBoxW(window, message, APP_TITLE, MB_OK | MB_ICONERROR);
-                return 0;
-            }
-            g_app.config = next;
-            g_app.config_error[0] = '\0';
-            KillTimer(g_app.window, TIMER_REFRESH);
-            SetTimer(g_app.window, TIMER_REFRESH,
-                     g_app.config.runner_poll_seconds * 1000U, NULL);
-            DestroyWindow(window);
-            refresh_begin();
+        if ((LOWORD(wparam) == ID_SETTINGS_ORG || LOWORD(wparam) == ID_SETTINGS_TOKEN) &&
+            HIWORD(wparam) == EN_CHANGE) {
+            g_app.settings_dirty = true;
+            g_app.config_generation++;
+            if (g_app.refresh_cancel) SetEvent(g_app.refresh_cancel);
+            settings_status("Unsaved changes. Save and test to check these settings.");
             return 0;
         }
-        if (LOWORD(wparam) == ID_SETTINGS_CANCEL) {
+        if (LOWORD(wparam) == ID_SETTINGS_SAVE || LOWORD(wparam) == ID_SETTINGS_SAVE_TEST) {
+            save_settings(window, LOWORD(wparam) == ID_SETTINGS_SAVE_TEST);
+            return 0;
+        }
+        if (LOWORD(wparam) == ID_SETTINGS_CANCEL || LOWORD(wparam) == IDCANCEL) {
             DestroyWindow(window);
             return 0;
         }
@@ -165,26 +236,24 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
     case WM_DESTROY:
         g_app.settings_window = NULL;
         g_app.settings_org = NULL;
+        g_app.settings_token = NULL;
+        g_app.settings_status = NULL;
+        g_app.settings_dirty = false;
         EnableWindow(g_app.window, TRUE);
         SetForegroundWindow(g_app.window);
         return 0;
-    default:
-        break;
+    default: break;
     }
     return DefWindowProcW(window, message, wparam, lparam);
 }
 
 static void open_settings(void)
 {
-    if (g_app.settings_window) {
-        SetForegroundWindow(g_app.settings_window);
-        return;
-    }
+    if (g_app.settings_window) { SetForegroundWindow(g_app.settings_window); return; }
     EnableWindow(g_app.window, FALSE);
-    g_app.settings_window = CreateWindowExW(
-        WS_EX_DLGMODALFRAME, SETTINGS_CLASS, L"Runner Monitor settings",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, sx(520), sx(230),
+    g_app.settings_window = CreateWindowExW(WS_EX_DLGMODALFRAME, SETTINGS_CLASS,
+        L"Runner Monitor settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+        CW_USEDEFAULT, CW_USEDEFAULT, sx(650), sx(490),
         g_app.window, NULL, g_app.instance, NULL);
     if (!g_app.settings_window) EnableWindow(g_app.window, TRUE);
 }

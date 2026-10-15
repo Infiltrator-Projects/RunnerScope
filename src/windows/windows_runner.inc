@@ -29,13 +29,14 @@ static void update_sessions(void)
         RunnerRow *row = &g_app.rows[i];
         RunnerSession *session = session_for(row->name, true);
         if (!session) continue;
+        if (g_app.rows_stale) session->state_since_ms = now;
         const bool running = strcmp(row->state, "RUNNING") == 0;
         if (running != session->running) {
             if (session->running && session->busy_started_ms != 0U)
                 session->busy_total_ms += now - session->busy_started_ms;
             if (running) {
                 session->busy_started_ms = now;
-                session->jobs++;
+                if (!g_app.rows_stale) session->jobs++;
             } else {
                 session->busy_started_ms = 0U;
             }
@@ -131,12 +132,12 @@ static void rebuild_table(void)
         if (!row_matches_filter(row)) continue;
         RunnerSession *session = session_for(row->name, false);
         wchar_t name[192], os[64], state[32], state_for[64] = L"—";
-        wchar_t jobs[32] = L"0", busy[32] = L"0.0%", labels[512];
+        wchar_t jobs[32] = L"—", busy[32] = L"—", labels[512];
         utf8_to_wide(row->name, name, 192U);
         utf8_to_wide(row->os, os, 64U);
-        utf8_to_wide(row->state, state, 32U);
+        utf8_to_wide(g_app.rows_stale ? "STALE" : row->state, state, 32U);
         utf8_to_wide(row->labels, labels, 512U);
-        if (session) {
+        if (session && !g_app.rows_stale) {
             format_duration(now - session->state_since_ms, state_for, 64U);
             _snwprintf_s(jobs, 32U, _TRUNCATE, L"%u", session->jobs);
             _snwprintf_s(busy, 32U, _TRUNCATE, L"%.1f%%", busy_fraction(session) * 100.0);
@@ -161,76 +162,85 @@ static void rebuild_table(void)
     }
 }
 
+static size_t split_runner_fields(char *line, char **fields, size_t capacity)
+{
+    size_t count = 0U;
+    for (;;) {
+        if (count == capacity) return capacity + 1U;
+        fields[count++] = line;
+        char *tab = strchr(line, '\t');
+        if (!tab) return count;
+        *tab = '\0';
+        line = tab + 1;
+    }
+}
+
+static bool refresh_http_get(const char *url, const char *token,
+    RunnerHttpResponse *response, char *error, size_t error_size, void *context)
+{
+    RefreshRequest *request = (RefreshRequest *)context;
+    if (WaitForSingleObject(request->cancel, 0U) == WAIT_OBJECT_0 ||
+        GetTickCount64() >= request->deadline) {
+        if (error && error_size)
+            (void)snprintf(error, error_size, "Runner refresh was cancelled or exceeded its 60-second deadline.");
+        return false;
+    }
+    /* Native Windows HTTP accepts an optional absolute monotonic deadline. */
+    return runner_http_get(url, token, response, error, error_size, &request->deadline);
+}
+
 static DWORD WINAPI refresh_worker(LPVOID parameter)
 {
     RefreshRequest *request = (RefreshRequest *)parameter;
+    HWND target = request->target;
     RefreshResult *result = (RefreshResult *)calloc(1U, sizeof(*result));
     if (!result) {
+        CloseHandle(request->cancel);
+        SecureZeroMemory(request, sizeof(*request));
         free(request);
-        return 0U;
-    }
-
-    wchar_t org[128];
-    utf8_to_wide(request->organisation, org, 128U);
-    wchar_t command[2048];
-    _snwprintf_s(command, 2048U, _TRUNCATE,
-        L"gh api \"/orgs/%ls/actions/runners?per_page=100\" --paginate "
-        L"--jq \".runners[] | [.name, .os, .status, (.busy|tostring), "
-        L"([.labels[].name] | join(\\\",\\\"))] | @tsv\"", org);
-
-    RunnerWindowsProcessResult process_result;
-    char process_error[320] = "";
-    const bool launched = runner_windows_process_capture(
-        command, GH_TIMEOUT_MS, &process_result, process_error,
-        sizeof(process_error));
-    char *output = launched ? process_result.output : NULL;
-    if (!launched || process_result.exit_code != 0U) {
-        (void)snprintf(result->error, sizeof(result->error),
-                       "%s%s%s",
-                       process_error[0] ? process_error : "GitHub request failed.",
-                       output && *output ? " " : "",
-                       output && *output ? output : "");
-        runner_windows_process_result_destroy(&process_result);
-        HWND target = request->target;
-        free(request);
-        if (!PostMessageW(target, WM_APP_REFRESH_DONE, 0, (LPARAM)result)) free(result);
-        return 0U;
-    }
-
-    size_t capacity = 32U;
-    result->rows = (RunnerRow *)calloc(capacity, sizeof(*result->rows));
-    if (!result->rows) {
-        runner_windows_process_result_destroy(&process_result);
-        HWND target = request->target;
-        free(request);
-        free(result);
         (void)PostMessageW(target, WM_APP_REFRESH_DONE, 0, 0);
         return 0U;
     }
-
+    result->generation = request->generation;
+    char endpoint[256];
+    (void)snprintf(endpoint, sizeof(endpoint), "/orgs/%s/actions/runners?per_page=100",
+                   request->organisation);
+    char *output = runner_github_fetch(endpoint, request->token, RUNNER_GITHUB_RUNNERS,
+        refresh_http_get, request, result->error, sizeof(result->error));
+    CloseHandle(request->cancel);
+    SecureZeroMemory(request, sizeof(*request));
+    free(request);
+    if (!output) goto done;
+    size_t capacity = 32U;
+    result->rows = (RunnerRow *)calloc(capacity, sizeof(*result->rows));
+    if (!result->rows) {
+        infiltratr_copy_string(result->error, sizeof(result->error), "Unable to allocate the GitHub runner snapshot.");
+        free(output);
+        goto done;
+    }
     char *context = NULL;
-    for (char *line = strtok_s(output, "\r\n", &context);
-         line;
+    for (char *line = strtok_s(output, "\r\n", &context); line;
          line = strtok_s(NULL, "\r\n", &context)) {
         if (!*line) continue;
+        char *fields[5];
+        const size_t count = split_runner_fields(line, fields, 5U);
+        if (count < 4U || count > 5U || !*fields[0] ||
+            (strcmp(fields[2], "online") != 0 && strcmp(fields[2], "offline") != 0) ||
+            (strcmp(fields[3], "true") != 0 && strcmp(fields[3], "false") != 0)) {
+            infiltratr_copy_string(result->error, sizeof(result->error), "GitHub returned an invalid runner snapshot.");
+            break;
+        }
         if (result->count == capacity) {
             const size_t next = capacity * 2U;
-            RunnerRow *grown = (RunnerRow *)realloc(result->rows,
-                                                     next * sizeof(*grown));
-            if (!grown) break;
+            RunnerRow *grown = (RunnerRow *)realloc(result->rows, next * sizeof(*grown));
+            if (!grown) {
+                infiltratr_copy_string(result->error, sizeof(result->error), "Unable to allocate the complete runner snapshot.");
+                break;
+            }
             ZeroMemory(grown + capacity, (next - capacity) * sizeof(*grown));
             result->rows = grown;
             capacity = next;
         }
-        char *fields[5] = {0};
-        char *field_context = NULL;
-        size_t field_count = 0U;
-        for (char *field = strtok_s(line, "\t", &field_context);
-             field && field_count < 5U;
-             field = strtok_s(NULL, "\t", &field_context))
-            fields[field_count++] = field;
-        if (field_count < 4U) continue;
-
         RunnerRow *row = &result->rows[result->count++];
         infiltratr_copy_string(row->name, sizeof(row->name), fields[0]);
         infiltratr_copy_string(row->os, sizeof(row->os), fields[1]);
@@ -238,12 +248,10 @@ static DWORD WINAPI refresh_worker(LPVOID parameter)
         const bool busy = strcmp(fields[3], "true") == 0;
         infiltratr_copy_string(row->state, sizeof(row->state),
                                !online ? "OFFLINE" : busy ? "RUNNING" : "IDLE");
-        if (field_count >= 5U)
-            infiltratr_copy_string(row->labels, sizeof(row->labels), fields[4]);
+        if (count == 5U) infiltratr_copy_string(row->labels, sizeof(row->labels), fields[4]);
     }
-    runner_windows_process_result_destroy(&process_result);
-    HWND target = request->target;
-    free(request);
+    free(output);
+done:
     if (!PostMessageW(target, WM_APP_REFRESH_DONE, 0, (LPARAM)result)) {
         free(result->rows);
         free(result);
@@ -251,24 +259,66 @@ static DWORD WINAPI refresh_worker(LPVOID parameter)
     return 0U;
 }
 
+static void mark_rows_stale(void)
+{
+    if (!g_app.rows_stale) {
+        const ULONGLONG now = GetTickCount64();
+        for (size_t i = 0U; i < g_app.session_count; ++i) {
+            RunnerSession *session = &g_app.sessions[i];
+            if (session->running && session->busy_started_ms)
+                session->busy_total_ms += now - session->busy_started_ms;
+            session->running = false;
+            session->busy_started_ms = 0U;
+        }
+    }
+    g_app.rows_stale = true;
+    rebuild_table();
+}
+
 static void refresh_begin(void)
 {
-    if (g_app.refreshing || !g_app.window) return;
-    if (!g_app.config.organisation[0]) {
+    if (g_app.refreshing || g_app.settings_dirty || g_app.shutting_down || !g_app.window) return;
+    if (!g_app.config.organisation[0] || !g_app.config.github_token[0]) {
+        infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error),
+                               "Open Settings and save the GitHub organisation and token to connect.");
+        mark_rows_stale();
         PostMessageW(g_app.window, WM_APP_OPEN_SETTINGS, 0, 0);
         return;
     }
     RefreshRequest *request = (RefreshRequest *)calloc(1U, sizeof(*request));
-    if (!request) return;
+    if (!request) {
+        mark_rows_stale();
+        infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error), "Unable to start the runner refresh.");
+        return;
+    }
     request->target = g_app.window;
-    infiltratr_copy_string(request->organisation, sizeof(request->organisation),
-                           g_app.config.organisation);
+    request->generation = g_app.config_generation;
+    request->deadline = GetTickCount64() + 60000U;
+    g_app.refresh_cancel = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_app.refresh_cancel || !DuplicateHandle(GetCurrentProcess(), g_app.refresh_cancel,
+        GetCurrentProcess(), &request->cancel, 0U, FALSE, DUPLICATE_SAME_ACCESS)) {
+        if (g_app.refresh_cancel) CloseHandle(g_app.refresh_cancel);
+        g_app.refresh_cancel = NULL;
+        free(request);
+        mark_rows_stale();
+        infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error), "Unable to start the runner refresh.");
+        return;
+    }
+    infiltratr_copy_string(request->organisation, sizeof(request->organisation), g_app.config.organisation);
+    infiltratr_copy_string(request->token, sizeof(request->token), g_app.config.github_token);
     g_app.refreshing = true;
     HANDLE thread = CreateThread(NULL, 0U, refresh_worker, request, 0U, NULL);
     if (thread) CloseHandle(thread);
     else {
+        CloseHandle(request->cancel);
+        CloseHandle(g_app.refresh_cancel);
+        g_app.refresh_cancel = NULL;
+        SecureZeroMemory(request, sizeof(*request));
         free(request);
         g_app.refreshing = false;
+        mark_rows_stale();
+        infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error), "Unable to start the runner refresh.");
+        settings_status(g_app.provider_error);
     }
     InvalidateRect(g_app.window, NULL, FALSE);
 }
@@ -276,24 +326,30 @@ static void refresh_begin(void)
 static void apply_refresh(RefreshResult *result)
 {
     g_app.refreshing = false;
-    if (!result) {
-        InvalidateRect(g_app.window, NULL, FALSE);
+    if (g_app.refresh_cancel) { CloseHandle(g_app.refresh_cancel); g_app.refresh_cancel = NULL; }
+    if (result && result->generation != g_app.config_generation) {
+        free(result->rows);
+        free(result);
+        if (!g_app.settings_dirty && g_app.config.github_token[0]) refresh_begin();
         return;
     }
-    if (result->error[0]) {
-        wchar_t message[640];
-        utf8_to_wide(result->error, message, 640U);
-        MessageBoxW(g_app.window, message, APP_TITLE, MB_OK | MB_ICONWARNING);
+    if (!result || result->error[0]) {
+        mark_rows_stale();
+        infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error),
+            result ? result->error : "Unable to load the runner snapshot.");
+        settings_status(g_app.provider_error);
     } else {
         free(g_app.rows);
         g_app.rows = result->rows;
         g_app.row_count = result->count;
         result->rows = NULL;
         update_sessions();
+        g_app.rows_stale = false;
+        g_app.provider_error[0] = '\0';
+        settings_status("Connected. Access to this organisation's runners was verified.");
         if (g_app.selected_row >= (int)g_app.row_count) g_app.selected_row = -1;
         rebuild_table();
     }
-    free(result->rows);
-    free(result);
+    if (result) { free(result->rows); free(result); }
     InvalidateRect(g_app.window, NULL, FALSE);
 }

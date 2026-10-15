@@ -1,3 +1,14 @@
+infiltrator-runner-monitor (1.3.9) unstable; urgency=medium
+
+  * Save organisation and access token in Settings with private durable JSON.
+  * Replace GitHub CLI with internal HTTPS and shared response/pagination logic.
+  * Share the configuration contract on both platforms and preserve preferences.
+  * Show failed observations as stale and discard superseded settings results.
+  * Use native systemd D-Bus APIs for Linux health and explicit restart.
+  * Add native configuration, API, storage and service regression coverage.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 15 Oct 2026 20:45:00 +1100
+
 infiltrator-runner-monitor (1.3.8) unstable; urgency=medium
 
   * Introduce one tested Runner Monitor configuration schema/validation contract.

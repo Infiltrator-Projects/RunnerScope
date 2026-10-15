@@ -47,9 +47,9 @@ Remaining:
 
 ## Controller hardening objective
 
-Issue #14 is a separate ownership cleanup, not a second implementation. The first extraction is complete on Windows: configuration schema semantics live in `runner_config`, durable Windows storage lives in `windows_config_store`, and bounded provider process execution lives in `windows_process`. Refresh workers consume immutable request snapshots rather than mutable UI-owned configuration.
+Both native applications now share the configuration schema and GitHub response provider. Windows durable storage and native HTTPS, Linux native HTTPS and systemd D-Bus operations are explicit platform adapters. Refresh workers use immutable organisation/token snapshots, discard superseded results and report failed data as stale.
 
-The remaining hardening work is to migrate Linux onto those same application contracts, extract Linux provider/persistence mechanics behind native adapters, surface Linux persisted-state failures consistently, and delete the superseded inline parser/process policy as each slice becomes authoritative.
+Remaining controller decomposition under issue #14 must preserve these authorities and the one shipping implementation. It must not reintroduce process-based providers or a second inline configuration parser.
 
 ## Version policy
 

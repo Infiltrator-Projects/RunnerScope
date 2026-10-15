@@ -4,6 +4,15 @@
 
 No unreleased changes.
 
+## 1.3.9 - 2026-10-15
+
+- Save organisation and a masked access token through Settings, preserving existing preferences across restarts and upgrades.
+- Replace GitHub CLI requests with internal HTTPS: libcurl on Linux and WinHTTP on Windows, sharing bounded JSON parsing, pagination and permission errors.
+- Use the same tested configuration contract on Linux and Windows and restrict token files to their owner.
+- Keep last-known observations visibly stale after failures and discard results from superseded settings.
+- Replace Linux systemctl/pkexec subprocesses with native systemd D-Bus observation and explicit restart; open diagnostics in an internal viewer.
+- Add configuration, API/pagination/error, private storage and native service regression coverage. Keep all work and publication on main.
+
 ## 1.3.8 - 2026-10-15
 
 - Introduce a toolkit-neutral Runner Monitor configuration contract with one authority for defaults, validation, parsing and serialisation.

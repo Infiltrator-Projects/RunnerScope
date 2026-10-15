@@ -7,11 +7,11 @@ static void prepare_item(const RunnerRow *row, WinItemStorage *storage,
     ZeroMemory(storage, sizeof(*storage));
     ZeroMemory(item, sizeof(*item));
     strcpy_s(storage->state_for, sizeof(storage->state_for), "—");
-    strcpy_s(storage->jobs, sizeof(storage->jobs), "0");
-    strcpy_s(storage->busy_pct, sizeof(storage->busy_pct), "0.0%");
+    strcpy_s(storage->jobs, sizeof(storage->jobs), g_app.rows_stale ? "—" : "0");
+    strcpy_s(storage->busy_pct, sizeof(storage->busy_pct), g_app.rows_stale ? "—" : "0.0%");
     double fraction = 0.0;
     RunnerSession *session = session_for(row->name, false);
-    if (session) {
+    if (session && !g_app.rows_stale) {
         wchar_t duration[64];
         format_duration(GetTickCount64() - session->state_since_ms, duration, 64U);
         (void)wide_to_utf8(duration, storage->state_for, sizeof(storage->state_for));
@@ -21,7 +21,7 @@ static void prepare_item(const RunnerRow *row, WinItemStorage *storage,
     }
     item->name = row->name;
     item->os = row->os;
-    item->state = row->state;
+    item->state = g_app.rows_stale ? "STALE" : row->state;
     item->repo = "—";
     item->job = "—";
     item->runtime = strcmp(row->state, "RUNNING") == 0 ? storage->state_for : "—";
@@ -55,7 +55,7 @@ static void draw_runner_card(HDC dc, const RunnerUiRunnerCardSpec *spec, RECT ca
     wchar_t name[192], os[64], state[64], labels[512];
     utf8_to_wide(item->name, name, 192U);
     utf8_to_wide(item->os, os, 64U);
-    utf8_to_wide(spec->state_label, state, 64U);
+    utf8_to_wide(g_app.rows_stale ? "● Stale" : spec->state_label, state, 64U);
     utf8_to_wide(item->labels, labels, 512U);
     RECT name_rect = {card.left + sx(66), card.top + sx(12), card.right - sx(12), card.top + sx(38)};
     draw_text_value(dc, name, name_rect, g_app.font_bold, rgb(g_app.palette.title_rgb),
@@ -256,6 +256,11 @@ static void draw_footer(HDC dc, RECT client)
         infiltratr_copy_string(status, sizeof(status), g_app.config_error);
     } else if (g_app.refreshing) {
         infiltratr_copy_string(status, sizeof(status), "Refreshing GitHub runner state…");
+    } else if (g_app.provider_error[0]) {
+        (void)snprintf(status, sizeof(status), "%s%s", g_app.provider_error,
+                      g_app.rows_stale ? " Last known runner data is stale." : "");
+    } else if (!g_app.config.github_token[0]) {
+        infiltratr_copy_string(status, sizeof(status), "Open Settings and save a GitHub token to connect.");
     } else if (!g_app.config.organisation[0]) {
         infiltratr_copy_string(status, sizeof(status), "Open Settings and enter the GitHub organisation.");
     } else {

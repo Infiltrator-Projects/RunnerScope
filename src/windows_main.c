@@ -21,8 +21,9 @@
 #include <infiltratr/design.h>
 
 #include "core/runner_config.h"
+#include "core/github.h"
+#include "platform/http.h"
 #include "platform/windows_config_store.h"
-#include "platform/windows_process.h"
 #include "ui/ui_contract.h"
 #include "ui/ui_renderer.h"
 #include "windows_resources.h"
@@ -31,7 +32,7 @@
  * The Win32 shell remains one translation unit so callback-local state is not
  * exported as a second application API. Cohesive implementation slices below
  * keep provider/state, presentation and controller mechanics navigable while
- * the independently testable configuration/process policies live in real
+ * the independently testable configuration/provider policies live in real
  * modules.
  */
 #include <stdbool.h>
@@ -58,7 +59,8 @@
 #define ID_SETTINGS_ORG 1101
 #define ID_SETTINGS_SAVE 1102
 #define ID_SETTINGS_CANCEL 1103
-#define GH_TIMEOUT_MS 30000U
+#define ID_SETTINGS_TOKEN 1104
+#define ID_SETTINGS_SAVE_TEST 1105
 
 typedef struct {
     char name[192];
@@ -85,11 +87,16 @@ typedef struct {
 typedef struct {
     HWND target;
     char organisation[128];
+    char token[RUNNER_GITHUB_TOKEN_CAPACITY];
+    ULONGLONG generation;
+    ULONGLONG deadline;
+    HANDLE cancel;
 } RefreshRequest;
 
 typedef struct {
     RunnerRow *rows;
     size_t count;
+    ULONGLONG generation;
     char error[640];
 } RefreshResult;
 
@@ -100,8 +107,16 @@ typedef struct {
     HWND list;
     HWND settings_window;
     HWND settings_org;
+    HWND settings_token;
+    HWND settings_status;
     RunnerConfig config;
     char config_error[320];
+    char provider_error[640];
+    ULONGLONG config_generation;
+    bool settings_dirty;
+    bool rows_stale;
+    bool shutting_down;
+    HANDLE refresh_cancel;
 
     RunnerRow *rows;
     size_t row_count;
@@ -150,6 +165,10 @@ typedef struct {
 
 static App g_app;
 
+static void rebuild_table(void);
+static void refresh_begin(void);
+static void settings_status(const char *message);
+
 #include "windows/windows_foundation.inc"
 #include "windows/windows_runner.inc"
 #include "windows/windows_layout.inc"
@@ -181,7 +200,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous,
         runner_config_defaults(&defaults);
         g_app.config = defaults;
     }
-    runner_windows_config_apply_environment(&g_app.config);
     (void)SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const HRESULT com_status = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 

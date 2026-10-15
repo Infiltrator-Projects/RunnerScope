@@ -18,4 +18,8 @@ Run the repository's normal build/test path and keep relevant CI green. Hardware
 
 ## Repository policy
 
-main is the working branch. Published tags/releases are immutable source identities.
+`main` is the only working and retained branch. Do not create feature, review or
+migration branches or pull requests as an intermediate workflow. Validate the
+finished change locally, commit it on `main`, and qualify/publish that exact
+revision through the repository's release pipeline. Published tags/releases are
+immutable source identities.

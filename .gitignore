@@ -8,4 +8,10 @@ state.json
 _diag/
 .DS_Store
 Thumbs.db
-build*/\ndist/\n
+build*/
+dist/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+debian/infiltrator-runner-monitor/

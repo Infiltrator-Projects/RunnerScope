@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define RUNNER_GITHUB_TOKEN_CAPACITY 1024U
+
 typedef enum {
     RUNNER_THEME_SYSTEM = 0,
     RUNNER_THEME_DAY = 1,
@@ -13,6 +15,7 @@ typedef enum {
 
 typedef struct {
     char organisation[128];
+    char github_token[RUNNER_GITHUB_TOKEN_CAPACITY];
     unsigned int expected_runners;
     unsigned int runner_poll_seconds;
     unsigned int activity_scan_seconds;

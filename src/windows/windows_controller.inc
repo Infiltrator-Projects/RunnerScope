@@ -31,7 +31,8 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
             MessageBoxW(window, text, L"Runner Monitor configuration",
                         MB_OK | MB_ICONWARNING);
         }
-        if (g_app.config.organisation[0] && !g_app.config_error[0]) refresh_begin();
+        g_app.rows_stale = true;
+        if (g_app.config.organisation[0] && g_app.config.github_token[0] && !g_app.config_error[0]) refresh_begin();
         else PostMessageW(window, WM_APP_OPEN_SETTINGS, 0, 0);
         return 0;
     }
@@ -71,7 +72,8 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         return 0;
     case WM_TIMER:
         if (wparam == TIMER_REFRESH) {
-            if (!g_app.refreshing && g_app.config.organisation[0] && !g_app.config_error[0])
+            if (!g_app.refreshing && !g_app.settings_dirty && g_app.config.organisation[0] &&
+                g_app.config.github_token[0] && !g_app.config_error[0])
                 refresh_begin();
             return 0;
         }
@@ -130,6 +132,11 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
     case WM_APP_REFRESH_DONE:
         apply_refresh((RefreshResult *)lparam);
         return 0;
+    case WM_CLOSE:
+        g_app.shutting_down = true;
+        if (g_app.refresh_cancel) SetEvent(g_app.refresh_cancel);
+        DestroyWindow(window);
+        return 0;
     case WM_CTLCOLORSTATIC: {
         HDC dc = (HDC)wparam;
         SetBkMode(dc, TRANSPARENT);
@@ -162,6 +169,13 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         return 0;
     }
     case WM_DESTROY:
+        g_app.shutting_down = true;
+        if (g_app.refresh_cancel) {
+            SetEvent(g_app.refresh_cancel);
+            CloseHandle(g_app.refresh_cancel);
+            g_app.refresh_cancel = NULL;
+        }
+        SecureZeroMemory(g_app.config.github_token, sizeof(g_app.config.github_token));
         KillTimer(window, TIMER_REFRESH);
         KillTimer(window, TIMER_PRESENT);
         unload_images();
@@ -194,7 +208,7 @@ static int self_test(void)
     RunnerConfig config;
     runner_config_defaults(&config);
     (void)snprintf(config.organisation, sizeof(config.organisation), "%s", "Infiltrator-Projects");
-    char json[1024], config_error[256];
+    char json[8192], config_error[256];
     size_t amount = 0U;
     if (!runner_config_write_json(&config, json, sizeof(json), &amount,
                                   config_error, sizeof(config_error)) || amount == 0U)
@@ -215,5 +229,23 @@ static int self_test(void)
     };
     for (size_t i = 0U; i < sizeof(required) / sizeof(required[0]); ++i)
         if (!resource_exists(required[i])) return 6;
+    char line[] = "runner\t\tonline\tfalse\t";
+    char *fields[5];
+    if (split_runner_fields(line, fields, 5U) != 5U || fields[1][0] || fields[4][0] ||
+        strcmp(fields[2], "online") != 0 || strcmp(fields[3], "false") != 0)
+        return 7;
+    char extra[] = "a\tb\tc\td\te\tf";
+    if (split_runner_fields(extra, fields, 5U) != 6U) return 8;
+    RunnerHttpResponse response;
+    char http_error_text[256];
+    if (runner_http_get("https://api.github.com.evil.invalid/", "offline_test_token",
+        &response, http_error_text, sizeof(http_error_text), NULL) ||
+        response.body || response.link || strstr(http_error_text, "offline_test_token"))
+        return 9;
+    if (runner_http_get("https://api.github.com/", "invalid\r\ntoken",
+        &response, http_error_text, sizeof(http_error_text), NULL)) return 10;
+    const ULONGLONG expired = 0U;
+    if (runner_http_get("https://api.github.com/", "offline_test_token",
+        &response, http_error_text, sizeof(http_error_text), (void *)&expired)) return 11;
     return 0;
 }

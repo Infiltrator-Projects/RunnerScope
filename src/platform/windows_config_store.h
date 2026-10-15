@@ -15,6 +15,6 @@ bool runner_windows_config_save(const RunnerConfig *config,
                                 char *error,
                                 size_t error_size);
 
-void runner_windows_config_apply_environment(RunnerConfig *config);
+bool runner_windows_config_path(char *output, size_t size);
 
 #endif

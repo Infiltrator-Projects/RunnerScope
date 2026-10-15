@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "core/runner_config.h"
+#include <infiltratr/escape.h>
 
 #include <ctype.h>
 #include <errno.h>
@@ -294,10 +295,21 @@ bool runner_config_validate(const RunnerConfig *config,
         set_error(error, error_size, "configuration is missing");
         return false;
     }
-    if (!valid_org(config->organisation)) {
+    if (!memchr(config->organisation, '\0', sizeof(config->organisation)) ||
+        !valid_org(config->organisation)) {
         set_error(error, error_size,
                   "organisation may contain only letters, digits, '.', '_' and '-'");
         return false;
+    }
+    if (!memchr(config->github_token, '\0', sizeof(config->github_token))) {
+        set_error(error, error_size, "GitHub token is too long; update it in Settings");
+        return false;
+    }
+    for (const unsigned char *p = (const unsigned char *)config->github_token; *p; ++p) {
+        if (*p <= 0x20U || *p >= 0x7fU) {
+            set_error(error, error_size, "GitHub token must use visible ASCII characters without whitespace; update it in Settings");
+            return false;
+        }
     }
     if (config->runner_poll_seconds < 3U) {
         set_error(error, error_size, "runner_poll_seconds must be at least 3");
@@ -338,6 +350,9 @@ bool runner_config_parse_json(const char *json, RunnerConfig *config,
     bool present = false;
     if (!read_string(json, "organisation", parsed.organisation,
                      sizeof(parsed.organisation), &present, error, error_size))
+        return false;
+    if (!read_string(json, "github_token", parsed.github_token,
+                     sizeof(parsed.github_token), &present, error, error_size))
         return false;
     if (!read_uint(json, "expected_runners", &parsed.expected_runners,
                    &present, error, error_size))
@@ -384,10 +399,17 @@ bool runner_config_write_json(const RunnerConfig *config,
     }
 
     const char *theme = runner_config_theme_key(config->theme_mode);
+    char escaped_token[RUNNER_GITHUB_TOKEN_CAPACITY * 6U];
+    if (!infiltratr_escape_json(config->github_token, escaped_token,
+                               sizeof(escaped_token), NULL)) {
+        set_error(error, error_size, "Unable to encode the GitHub token");
+        return false;
+    }
     const int amount = snprintf(
         output, output_size,
         "{\n"
         "  \"organisation\": \"%s\",\n"
+        "  \"github_token\": \"%s\",\n"
         "  \"expected_runners\": %u,\n"
         "  \"runner_poll_seconds\": %u,\n"
         "  \"activity_scan_seconds\": %u,\n"
@@ -396,6 +418,7 @@ bool runner_config_write_json(const RunnerConfig *config,
         "  \"theme_mode\": \"%s\"\n"
         "}\n",
         config->organisation,
+        escaped_token,
         config->expected_runners,
         config->runner_poll_seconds,
         config->activity_scan_seconds,

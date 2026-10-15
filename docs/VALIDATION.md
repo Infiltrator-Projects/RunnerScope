@@ -18,10 +18,16 @@ The toolkit-neutral configuration test runs on every platform and must prove:
 2. complete schema parsing;
 3. deterministic serialisation and parse/serialise round-tripping;
 4. duplicate known-key rejection;
-5. invalid organisation and interval rejection; and
-6. preservation of every unrelated field when only the organisation is changed.
+5. invalid organisation, token and interval rejection; and
+6. preservation of every unrelated field when organisation/token are changed, including legacy files with no token.
 
 The last point is a regression gate for the pre-1.3.8 Windows Settings defect that rewrote non-Windows settings with hard-coded defaults.
+
+## Internal provider and setup
+
+Offline GitHub tests cover all four response projections, malformed JSON/schema/UTF-8, trusted-origin Link pagination, cycles, page/byte limits, permission/rate-limit failures and all-or-nothing failure across pages. Diagnostics must not echo the supplied token or arbitrary transport error text.
+
+The installed GTK self-test uses isolated configuration and an injected offline transport. It checks masked token input, Settings validation and save/reload, private permissions, legacy migration, corrupt/NUL/oversized-file rejection, immutable credential snapshots, superseded-result rejection and stale runner/activity presentation. It must not access real credentials or restart services. Native service tests use response fixtures and cancelled operations.
 
 ## Linux qualification
 
@@ -29,10 +35,10 @@ The hosted Ubuntu job is both the Linux build gate and the package gate. It must
 
 1. check out the exact source revision and recursive Common gitlink;
 2. build the Debian package from that source;
-3. run the package build's full CTest suite, including the native self-test, configuration contract, shared UI-contract test and failure-semantics test;
+3. run the package build's full CTest suite, including the native self-test, configuration/API contracts, native service interpretation, shared UI-contract test and failure-semantics test;
 4. install the exact `.deb` that will be published;
 5. execute the installed native self-test and GTK UI self-test under Xvfb;
-6. verify ELF/native runtime identity and reject Python/Tk runtime dependencies;
+6. verify ELF/native runtime identity and reject Python/Tk and GitHub CLI runtime dependencies;
 7. verify the installed desktop entry, icons, bitmap artwork and Common-verified MB Corpo faces; and
 8. upload that exact qualified package as the release artifact.
 
@@ -44,8 +50,8 @@ The hosted Windows x64 job must:
 
 1. check out the exact source revision and recursive Common gitlink;
 2. configure and build the Release/x64 executable;
-3. run CTest against that build, including the native executable self-test, configuration contract, shared UI tests, Windows durable-config-store test and Windows bounded-process test;
-4. prove a short child process is captured successfully and an intentionally long child is terminated/classified as a timeout;
+3. run CTest against that build, including the native executable self-test, configuration contract, shared UI tests, shared GitHub protocol tests and Windows private durable-config-store test;
+4. prove token/configuration round-trips and owner-only ACL publication;
 5. prove Windows configuration save/load round-trips all fields and corrupt persisted configuration fails closed;
 6. verify the staged executable is AMD64 PE; and
 7. upload that same executable as the release artifact.
@@ -81,10 +87,10 @@ Debian's `debian/changelog` version must equal `VERSION`. The package build runs
 
 ## Current parity boundary
 
-Linux currently has the mature runner, active-job, history and local-service surfaces. Windows has the native fleet shell, organisation configuration and live runner-state monitoring; Active Jobs, History and Local Health provider parity remain follow-on work under the 1.3.x UI migration.
+Linux currently has the mature runner, active-job, history and local-service surfaces. Windows has the native fleet shell, organisation/token Settings and live runner-state monitoring; Active Jobs, History and Local Health provider parity remain follow-on work under the 1.3.x UI migration.
 
 A platform feature is complete only when its behaviour is present, its shared product semantics are represented once where applicable, and the native implementation is qualified. A build that merely compiles does not establish parity.
 
 ## Remaining architectural hardening
 
-Issue #2 remains the authority for completion of the shared declarative UI migration. Issue #14 now tracks the remaining Linux-side provider/configuration/persistence extraction and the eventual removal of the inline Linux schema/parser after that controller consumes the tested core contract. Windows configuration storage and bounded process execution are no longer inline controller policy.
+Issue #2 remains the authority for completion of the shared declarative UI migration. Both platforms now consume the shared configuration and GitHub provider contracts. Native HTTP, Windows storage and Linux systemd operations have explicit platform adapters. Further controller and history/persistence decomposition under issue #14 must preserve those authorities.

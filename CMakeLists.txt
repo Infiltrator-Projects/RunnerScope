@@ -62,10 +62,15 @@ add_subdirectory(infiltratr-common EXCLUDE_FROM_ALL)
 
 add_library(runnerscope_core STATIC
     src/core/runner_config.c
+    src/core/github.c
+    third_party/cjson/cJSON.c
 )
 target_include_directories(runnerscope_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+target_include_directories(runnerscope_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cjson)
+target_compile_definitions(runnerscope_core PRIVATE CJSON_HIDE_SYMBOLS CJSON_NESTING_LIMIT=128)
+target_link_libraries(runnerscope_core PUBLIC InfiltratrCommon::Common)
 if(MSVC)
     target_compile_options(runnerscope_core PRIVATE /W4 /utf-8)
 elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -130,12 +135,12 @@ if(WIN32)
 
     add_library(runnerscope_windows_platform STATIC
         src/platform/windows_config_store.c
-        src/platform/windows_process.c
+        src/platform/windows_http.c
     )
     target_include_directories(runnerscope_windows_platform PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_link_libraries(runnerscope_windows_platform PUBLIC runnerscope_core)
+    target_link_libraries(runnerscope_windows_platform PUBLIC runnerscope_core winhttp advapi32)
     if(MSVC)
         target_compile_options(runnerscope_windows_platform PRIVATE /W4 /utf-8)
     elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -159,7 +164,8 @@ if(WIN32)
         "2014 RCDATA \"${RUNNERSCOPE_SOURCE_RC}/assets/art/hero-health.png\"\n"
         "2101 RCDATA \"${RUNNERSCOPE_FONT_RC}/${INFILTRATR_MB_CORPO_BRAND_REGULAR_FILE}\"\n"
         "2102 RCDATA \"${RUNNERSCOPE_FONT_RC}/${INFILTRATR_MB_CORPO_UI_BOLD_FILE}\"\n"
-        "2103 RCDATA \"${RUNNERSCOPE_FONT_RC}/${INFILTRATR_MB_CORPO_UI_REGULAR_FILE}\"\n")
+        "2103 RCDATA \"${RUNNERSCOPE_FONT_RC}/${INFILTRATR_MB_CORPO_UI_REGULAR_FILE}\"\n"
+        "2201 RCDATA \"${RUNNERSCOPE_SOURCE_RC}/third_party/cjson/LICENSE\"\n")
 
     add_executable(runnerscope WIN32
         src/windows_main.c
@@ -203,12 +209,27 @@ if(WIN32)
 else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+    find_package(CURL 7.85 REQUIRED)
+    find_package(Threads REQUIRED)
+    target_link_libraries(runnerscope_core PUBLIC Threads::Threads)
+    add_library(runnerscope_linux_platform STATIC
+        src/platform/linux_http.c
+        src/platform/linux_services.c)
+    target_include_directories(runnerscope_linux_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(runnerscope_linux_platform PUBLIC
+        runnerscope_core PkgConfig::GTK3 CURL::libcurl Threads::Threads)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        target_compile_options(runnerscope_linux_platform PRIVATE
+            -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2
+            -Wconversion -Wsign-conversion)
+    endif()
 
     add_executable(runnerscope
         src/linux_main.c
     )
     target_link_libraries(runnerscope PRIVATE
         runnerscope_core
+        runnerscope_linux_platform
         runnerscope_ui_contract
         InfiltratrCommon::Common
         PkgConfig::GTK3
@@ -237,6 +258,9 @@ else()
         "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_BOLD_FILE}"
         "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_REGULAR_FILE}"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/fonts/truetype/runnerscope")
+    install(FILES third_party/cjson/LICENSE
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/infiltrator-runner-monitor"
+        RENAME cJSON-LICENSE)
 endif()
 
 target_compile_definitions(runnerscope PRIVATE
@@ -251,6 +275,10 @@ add_executable(runnerscope-config-test
 target_link_libraries(runnerscope-config-test PRIVATE runnerscope_core)
 add_test(NAME runnerscope-config-test COMMAND runnerscope-config-test)
 
+add_executable(runnerscope-github-test tests/github_test.c)
+target_link_libraries(runnerscope-github-test PRIVATE runnerscope_core)
+add_test(NAME runnerscope-github-test COMMAND runnerscope-github-test)
+
 add_executable(runnerscope-ui-contract-test
     tests/ui_contract_test.c
 )
@@ -264,15 +292,13 @@ target_link_libraries(runnerscope-ui-failure-semantics-test PRIVATE runnerscope_
 add_test(NAME runnerscope-ui-failure-semantics-test COMMAND runnerscope-ui-failure-semantics-test)
 
 if(WIN32)
-    add_executable(runnerscope-windows-process-test
-        tests/windows_process_test.c
-    )
-    target_link_libraries(runnerscope-windows-process-test PRIVATE runnerscope_windows_platform)
-    add_test(NAME runnerscope-windows-process-test COMMAND runnerscope-windows-process-test)
-
     add_executable(runnerscope-windows-config-store-test
         tests/windows_config_store_test.c
     )
     target_link_libraries(runnerscope-windows-config-store-test PRIVATE runnerscope_windows_platform)
     add_test(NAME runnerscope-windows-config-store-test COMMAND runnerscope-windows-config-store-test)
+else()
+    add_executable(runnerscope-linux-services-test tests/linux_services_test.c)
+    target_link_libraries(runnerscope-linux-services-test PRIVATE runnerscope_linux_platform)
+    add_test(NAME runnerscope-linux-services-test COMMAND runnerscope-linux-services-test)
 endif()

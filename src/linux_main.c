@@ -12,9 +12,13 @@
 
 #include "ui/ui_contract.h"
 #include "ui/ui_renderer.h"
+#include "core/runner_config.h"
+#include "core/github.h"
+#include "platform/linux_services.h"
 
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -109,15 +113,6 @@ typedef struct {
     double started_at;
 } JobSummary;
 
-typedef struct {
-    char organisation[128];
-    guint expected_runners;
-    guint runner_poll_seconds;
-    guint activity_scan_seconds;
-    guint repository_scan_limit;
-    guint local_health_seconds;
-    InfiltratrThemeMode theme_mode;
-} RunnerConfig;
 
 enum {
     RUNNER_COL_NAME,
@@ -177,6 +172,8 @@ typedef struct {
     GtkWidget *notebook;
     GtkWidget *filter_entry;
     GtkWidget *status_label;
+    GtkWidget *connection_bar;
+    GtkWidget *connection_label;
     GtkWidget *open_job_button;
     GtkWidget *open_diag_button;
     GtkWidget *restart_button;
@@ -197,7 +194,7 @@ typedef struct {
     gboolean navigation_syncing;
     gboolean compact_layout;
     gboolean theme_state_valid;
-    InfiltratrThemeMode theme_state_mode;
+    RunnerThemeMode theme_state_mode;
     gboolean theme_state_dark;
     GtkCssProvider *theme_provider;
 
@@ -219,6 +216,15 @@ typedef struct {
     GtkWidget *local_tree;
 
     RunnerConfig config;
+    char *config_error;
+    char *runner_error;
+    gboolean runner_data_stale;
+    gboolean activity_data_stale;
+    char *activity_error;
+    RunnerHttpGet fetch_transport;
+    void *fetch_context;
+    guint config_generation;
+    GCancellable *service_cancel;
     GHashTable *sessions;
     GHashTable *job_by_runner;
     GHashTable *runner_row_by_name;
@@ -256,12 +262,14 @@ typedef struct {
 
 typedef struct {
     RunnerScopeApp *app;
+    guint generation;
     GPtrArray *rows;
     char *error;
 } RunnerRefreshResult;
 
 typedef struct {
     RunnerScopeApp *app;
+    guint generation;
     GPtrArray *rows;
     guint local_active;
     guint hosted_active;
@@ -281,9 +289,20 @@ typedef struct {
     char *error;
 } RestartResult;
 
+typedef struct {
+    RunnerScopeApp *app;
+    RunnerConfig config;
+    guint generation;
+    RunnerHttpGet get;
+    void *context;
+    gint64 deadline;
+} ProviderRequest;
+
 static gboolean activity_apply_idle(gpointer data);
 static gboolean local_apply_idle(gpointer data);
 static void request_activity_refresh(RunnerScopeApp *app);
+static void request_runner_refresh(RunnerScopeApp *app);
+static void on_settings(GtkButton *button, gpointer user_data);
 static void on_export(GtkButton *button, gpointer user_data);
 static InfiltratrProjectInfo project_info(void);
 
@@ -389,154 +408,85 @@ static char *state_path(void)
     return g_build_filename(g_get_user_state_dir(), "runnerscope", "history.tsv", NULL);
 }
 
-static const char *json_value_start(const char *text, const char *key)
+static gboolean load_config(RunnerConfig *config, GError **error)
 {
-    if (!text || !key) return NULL;
-    char *needle = g_strdup_printf("\"%s\"", key);
-    const char *found = strstr(text, needle);
-    g_free(needle);
-    if (!found) return NULL;
-    found = strchr(found, ':');
-    if (!found) return NULL;
-    found++;
-    while (*found && g_ascii_isspace(*found)) found++;
-    return found;
-}
-
-static gboolean json_get_string(const char *text, const char *key,
-                                char *out, size_t out_size)
-{
-    const char *value = json_value_start(text, key);
-    if (!value || *value != '"' || out_size == 0U) return FALSE;
-    value++;
-    size_t used = 0U;
-    while (*value && *value != '"' && used + 1U < out_size) {
-        if (*value == '\\' && value[1] != '\0') {
-            value++;
-            if (*value == 'n') out[used++] = '\n';
-            else if (*value == 'r') out[used++] = '\r';
-            else if (*value == 't') out[used++] = '\t';
-            else out[used++] = *value;
-            value++;
-            continue;
-        }
-        out[used++] = *value++;
-    }
-    out[used] = '\0';
-    return *value == '"';
-}
-
-static gboolean json_get_uint(const char *text, const char *key, guint *out)
-{
-    const char *value = json_value_start(text, key);
-    if (!value || !out) return FALSE;
-    char *end = NULL;
-    errno = 0;
-    unsigned long parsed = strtoul(value, &end, 10);
-    if (errno != 0 || end == value || parsed > G_MAXUINT) return FALSE;
-    *out = (guint)parsed;
-    return TRUE;
-}
-
-static void config_defaults(RunnerConfig *config)
-{
-    memset(config, 0, sizeof(*config));
-    config->runner_poll_seconds = 3U;
-    config->activity_scan_seconds = 45U;
-    config->repository_scan_limit = 25U;
-    config->local_health_seconds = 15U;
-    config->theme_mode = INFILTRATR_THEME_SYSTEM;
-}
-
-static void load_config(RunnerConfig *config)
-{
-    config_defaults(config);
+    runner_config_defaults(config);
     char *path = config_path();
-    gchar *contents = NULL;
-    gsize length = 0U;
-    if (g_file_get_contents(path, &contents, &length, NULL) && length != 0U) {
-        (void)json_get_string(contents, "organisation",
-                              config->organisation, sizeof(config->organisation));
-        (void)json_get_uint(contents, "expected_runners", &config->expected_runners);
-        (void)json_get_uint(contents, "runner_poll_seconds", &config->runner_poll_seconds);
-        (void)json_get_uint(contents, "activity_scan_seconds", &config->activity_scan_seconds);
-        (void)json_get_uint(contents, "repository_scan_limit", &config->repository_scan_limit);
-        (void)json_get_uint(contents, "local_health_seconds", &config->local_health_seconds);
-        char theme[32] = "";
-        if (json_get_string(contents, "theme_mode", theme, sizeof(theme))) {
-            InfiltratrThemeMode parsed_mode = config->theme_mode;
-            if (infiltratr_theme_mode_parse(theme, &parsed_mode))
-                config->theme_mode = parsed_mode;
-        }
-    }
-    g_free(contents);
+    const int descriptor = open(path, O_RDONLY | O_CLOEXEC);
     g_free(path);
-
-    const char *env_org = g_getenv("GITHUB_RUNNER_ORG");
-    if (env_org && *env_org)
-        g_strlcpy(config->organisation, env_org, sizeof(config->organisation));
-
-    if (config->runner_poll_seconds < 3U) config->runner_poll_seconds = 3U;
-    if (config->activity_scan_seconds < 10U) config->activity_scan_seconds = 10U;
-    if (config->repository_scan_limit < 1U) config->repository_scan_limit = 1U;
-    if (config->local_health_seconds < 15U) config->local_health_seconds = 15U;
+    if (descriptor < 0) {
+        if (errno == ENOENT) return TRUE;
+        g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(errno),
+            "Unable to read saved settings: %s. The original file has been kept.", g_strerror(errno));
+        return FALSE;
+    }
+    char contents[65538];
+    size_t used = 0U;
+    gboolean okay = TRUE;
+    GStatBuf status;
+    if (fstat(descriptor, &status) != 0 || !S_ISREG(status.st_mode) || status.st_size > 65536) okay = FALSE;
+    while (okay && used < sizeof(contents) - 1U) {
+        const ssize_t count = read(descriptor, contents + used, sizeof(contents) - 1U - used);
+        if (count < 0 && errno == EINTR) continue;
+        if (count < 0) { okay = FALSE; break; }
+        if (count == 0) break;
+        used += (size_t)count;
+    }
+    (void)close(descriptor);
+    if (!okay || used > 65536U || memchr(contents, '\0', used)) {
+        g_set_error_literal(error, G_FILE_ERROR, G_FILE_ERROR_INVAL,
+            "Unable to read saved settings: expected a JSON file of at most 64 KiB without embedded NUL bytes. The original file has been kept.");
+        memset(contents, 0, sizeof(contents));
+        return FALSE;
+    }
+    contents[used] = '\0';
+    char detail[256] = "";
+    okay = runner_config_parse_json(contents, config, detail, sizeof(detail));
+    memset(contents, 0, sizeof(contents));
+    if (!okay) g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_INVAL,
+        "Unable to read saved settings: %s. The original file has been kept.", detail);
+    return okay;
 }
 
 static gboolean save_config(const RunnerConfig *config, GError **error)
 {
-    if (!config) return FALSE;
-    size_t escaped_size = 0U;
-    (void)infiltratr_escape_json(config->organisation, NULL, 0U, &escaped_size);
-    char *escaped = g_malloc0(escaped_size + 1U);
-    if (!infiltratr_escape_json(config->organisation, escaped,
-                                escaped_size + 1U, NULL)) {
-        g_set_error_literal(error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                            "Unable to escape organisation name");
-        g_free(escaped);
+    char json[8192];
+    char detail[256] = "";
+    size_t written = 0U;
+    if (!runner_config_write_json(config, json, sizeof(json), &written, detail, sizeof(detail))) {
+        g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_INVAL, "%s", detail);
         return FALSE;
     }
-
-    const char *mode = infiltratr_theme_mode_key(config->theme_mode);
-    char *json = g_strdup_printf(
-        "{\n"
-        "  \"organisation\": \"%s\",\n"
-        "  \"expected_runners\": %u,\n"
-        "  \"runner_poll_seconds\": %u,\n"
-        "  \"activity_scan_seconds\": %u,\n"
-        "  \"repository_scan_limit\": %u,\n"
-        "  \"local_health_seconds\": %u,\n"
-        "  \"theme_mode\": \"%s\"\n"
-        "}\n",
-        escaped, config->expected_runners, config->runner_poll_seconds,
-        config->activity_scan_seconds, config->repository_scan_limit,
-        config->local_health_seconds, mode ? mode : "system");
-    g_free(escaped);
-
     char *path = config_path();
     char *directory = g_path_get_dirname(path);
     if (g_mkdir_with_parents(directory, 0700) != 0) {
         g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(errno),
-                    "Unable to create %s: %s", directory, g_strerror(errno));
-        g_free(directory); g_free(path); g_free(json);
+            "Unable to create settings directory: %s", g_strerror(errno));
+        g_free(directory); g_free(path);
+        memset(json, 0, sizeof(json));
         return FALSE;
     }
     g_free(directory);
-
-    const InfiltratrAtomicFileMode file_mode =
-        access(path, F_OK) == 0
-            ? INFILTRATR_ATOMIC_FILE_PRESERVE_PERMISSIONS
-            : INFILTRATR_ATOMIC_FILE_PRIVATE;
-    const int failure = infiltratr_atomic_file_write_bytes(
-        path, file_mode, json, strlen(json));
-    g_free(json);
-    if (failure != 0) {
+    /* Always replace with a private file, including upgrades from old 0644 JSON. */
+    const int failure = infiltratr_atomic_file_write_bytes(path,
+        INFILTRATR_ATOMIC_FILE_PRIVATE, json, written);
+    memset(json, 0, sizeof(json));
+    g_free(path);
+    if (failure) {
         g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(failure),
-                    "Unable to save %s: %s", path, g_strerror(failure));
-        g_free(path);
+            "Unable to save settings: %s", g_strerror(failure));
         return FALSE;
     }
-    g_free(path);
     return TRUE;
+}
+
+static InfiltratrThemeMode common_theme_mode(RunnerThemeMode mode)
+{
+    switch (mode) {
+        case RUNNER_THEME_DAY: return INFILTRATR_THEME_DAY;
+        case RUNNER_THEME_NIGHT: return INFILTRATR_THEME_NIGHT;
+        default: return INFILTRATR_THEME_SYSTEM;
+    }
 }
 
 static gboolean system_dark_mode(void)
@@ -666,15 +616,15 @@ static void apply_theme(RunnerScopeApp *app)
 
     const gboolean system_dark = system_dark_mode();
     const gboolean night_theme =
-        app->config.theme_mode == INFILTRATR_THEME_NIGHT ||
-        (app->config.theme_mode == INFILTRATR_THEME_SYSTEM && system_dark);
+        app->config.theme_mode == RUNNER_THEME_NIGHT ||
+        (app->config.theme_mode == RUNNER_THEME_SYSTEM && system_dark);
     if (app->theme_state_valid &&
         app->theme_state_mode == app->config.theme_mode &&
         app->theme_state_dark == night_theme)
         return;
 
     const InfiltratrThemePalette *p =
-        infiltratr_theme_resolve(app->config.theme_mode, system_dark);
+        infiltratr_theme_resolve(common_theme_mode(app->config.theme_mode), system_dark);
     const InfiltratrTypography *type = infiltratr_typography();
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
     if (!p || !type || !metrics || !type->ui_family || !type->brand_family)
@@ -1066,47 +1016,28 @@ static void apply_theme(RunnerScopeApp *app)
     g_string_free(css, TRUE);
 }
 
-static char *run_command(char **argv, GError **error)
+static bool provider_http_get(const char *url, const char *token,
+    RunnerHttpResponse *response, char *error, size_t error_size, void *context)
 {
-    gchar *stdout_text = NULL;
-    gchar *stderr_text = NULL;
-    gint status = 0;
-    GError *spawn_error = NULL;
-    if (!g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
-                      &stdout_text, &stderr_text, &status, &spawn_error)) {
-        if (error)
-            g_propagate_error(error, spawn_error);
-        else
-            g_clear_error(&spawn_error);
-        g_free(stdout_text); g_free(stderr_text);
-        return NULL;
+    ProviderRequest *request = context;
+    if (g_atomic_int_get(&request->app->shutting_down) ||
+        g_get_monotonic_time() >= request->deadline) {
+        memset(response, 0, sizeof(*response));
+        g_strlcpy(error, "GitHub request cancelled or timed out. Try refreshing again.", error_size);
+        return false;
     }
-    GError *wait_error = NULL;
-    if (!g_spawn_check_wait_status(status, &wait_error)) {
-        if (stderr_text && *stderr_text) {
-            g_set_error(error, G_SPAWN_ERROR, G_SPAWN_ERROR_FAILED,
-                        "%s", g_strstrip(stderr_text));
-            g_clear_error(&wait_error);
-        } else if (error) {
-            g_propagate_error(error, wait_error);
-        } else {
-            g_clear_error(&wait_error);
-        }
-        g_free(stdout_text); g_free(stderr_text);
-        return NULL;
-    }
-    g_free(stderr_text);
-    return stdout_text;
+    return request->get(url, token, response, error, error_size, request->context);
 }
 
-static char *gh_api(const char *endpoint, const char *jq, GError **error)
+static char *github_api(const char *endpoint, ProviderRequest *request,
+    RunnerGithubProjection projection, GError **error)
 {
-    char *argv[] = {
-        (char *)"gh", (char *)"api",
-        (char *)"-H", (char *)"Accept: application/vnd.github+json",
-        (char *)endpoint, (char *)"--jq", (char *)jq, NULL
-    };
-    return run_command(argv, error);
+    char detail[512] = "";
+    char *output = runner_github_fetch(endpoint, request->config.github_token, projection,
+        provider_http_get, request, detail, sizeof(detail));
+    if (!output) g_set_error(error, G_IO_ERROR, G_IO_ERROR_FAILED,
+        "%s", *detail ? detail : "Unable to contact GitHub");
+    return output;
 }
 
 static GPtrArray *split_tsv_lines(const char *text)
@@ -1750,19 +1681,46 @@ static void on_runner_view_toggled(GtkToggleButton *button, gpointer user_data)
         show_runner_details(app, g_hash_table_lookup(app->runner_row_by_name, app->selected_runner_name));
 }
 
+static void update_connection_banner(RunnerScopeApp *app)
+{
+    if (!app->connection_label) return;
+    char *notice = NULL;
+    if (app->runner_data_stale) {
+        notice = g_strdup_printf("%s%s", app->runner_error ? app->runner_error :
+            app->config.github_token[0] ? "Checking GitHub runner access…" : "Add your GitHub token in Settings.",
+            app->runner_rows->len ? " Displayed runners are last known data." : " Runner status is unavailable.");
+    } else if (app->activity_data_stale && app->activity_error) {
+        notice = g_strdup_printf("%s Displayed activity is last known data.", app->activity_error);
+    }
+    if (notice) {
+        label_set_if_changed(app->connection_label, notice);
+        gtk_widget_show(app->connection_bar);
+        g_free(notice);
+    } else gtk_widget_hide(app->connection_bar);
+}
+
 static void update_workspace_context(RunnerScopeApp *app, gint page)
 {
     if (!app || page < 0 || page >= RUNNER_UI_PAGE_COUNT) return;
+    update_connection_banner(app);
 
     char metric_values[4][64] = {{0}};
     switch (page) {
         case RUNNER_UI_PAGE_RUNNERS:
+            if (app->runner_data_stale) {
+                for (guint i = 0U; i < 4U; ++i) g_strlcpy(metric_values[i], "—", sizeof(metric_values[i]));
+                break;
+            }
             g_snprintf(metric_values[0], sizeof(metric_values[0]), "%u", app->runners_total);
             g_snprintf(metric_values[1], sizeof(metric_values[1]), "%u", app->runners_running);
             g_snprintf(metric_values[2], sizeof(metric_values[2]), "%u", app->runners_idle);
             g_snprintf(metric_values[3], sizeof(metric_values[3]), "%u", app->runners_offline);
             break;
         case RUNNER_UI_PAGE_ACTIVE_JOBS:
+            if (app->activity_data_stale) {
+                for (guint i = 0U; i < 4U; ++i) g_strlcpy(metric_values[i], "—", sizeof(metric_values[i]));
+                break;
+            }
             g_snprintf(metric_values[0], sizeof(metric_values[0]), "%u", app->local_active);
             g_snprintf(metric_values[1], sizeof(metric_values[1]), "%u", app->hosted_active);
             g_snprintf(metric_values[2], sizeof(metric_values[2]), "%u", app->queued);
@@ -2087,8 +2045,25 @@ static gboolean runner_apply_idle(gpointer data)
         g_thread_unref(app->runner_thread);
         app->runner_thread = NULL;
     }
+    if (g_atomic_int_get(&app->shutting_down) || result->generation != app->config_generation) {
+        g_free(result->error);
+        if (result->rows) g_ptr_array_unref(result->rows);
+        g_atomic_int_set(&app->runner_refreshing, 0);
+        g_free(result);
+        if (!g_atomic_int_get(&app->shutting_down)) request_runner_refresh(app);
+        return G_SOURCE_REMOVE;
+    }
     if (result->error) {
-        label_set_if_changed(app->status_label, result->error);
+        app->runner_data_stale = TRUE;
+        g_free(app->runner_error);
+        app->runner_error = g_strdup(result->error);
+        char *notice = g_strdup_printf("%s%s", result->error,
+            app->runner_rows->len ? " Displayed runners are last known data." : " Runner status is unavailable.");
+        label_set_if_changed(app->connection_label, notice);
+        g_free(notice);
+        gtk_widget_show(app->connection_bar);
+        label_set_if_changed(app->status_label, "Runner data unavailable — check Settings");
+        update_workspace_context(app, gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
         g_free(result->error);
         if (result->rows) g_ptr_array_unref(result->rows);
         g_atomic_int_set(&app->runner_refreshing, 0);
@@ -2096,6 +2071,9 @@ static gboolean runner_apply_idle(gpointer data)
         return G_SOURCE_REMOVE;
     }
 
+    app->runner_data_stale = FALSE;
+    g_clear_pointer(&app->runner_error, g_free);
+    update_connection_banner(app);
     GPtrArray *next_rows = g_ptr_array_new_with_free_func(runner_row_free);
     guint total = 0U, running = 0U, idle = 0U, offline = 0U;
     gboolean history_changed = FALSE;
@@ -2217,18 +2195,18 @@ static gboolean runner_apply_idle(gpointer data)
 
 static gpointer runner_worker(gpointer data)
 {
-    RunnerScopeApp *app = data;
+    ProviderRequest *request = data;
+    RunnerScopeApp *app = request->app;
+    const RunnerConfig *config = &request->config;
     RunnerRefreshResult *result = g_new0(RunnerRefreshResult, 1U);
     result->app = app;
+    result->generation = request->generation;
     result->rows = g_ptr_array_new_with_free_func(raw_runner_free);
 
     char *endpoint = g_strdup_printf("/orgs/%s/actions/runners?per_page=100",
-                                     app->config.organisation);
-    const char *jq =
-        ".runners[] | [.name,.os,.status,(.busy|tostring),"
-        "([.labels[].name]|join(\",\"))] | @tsv";
+                                     config->organisation);
     GError *error = NULL;
-    char *output = gh_api(endpoint, jq, &error);
+    char *output = github_api(endpoint, request, RUNNER_GITHUB_RUNNERS, &error);
     g_free(endpoint);
     if (!output) {
         result->error = g_strdup_printf("Runner API error: %s",
@@ -2249,6 +2227,7 @@ static gpointer runner_worker(gpointer data)
         g_ptr_array_unref(lines);
         g_free(output);
     }
+    g_free(request);
     g_idle_add(runner_apply_idle, result);
     return NULL;
 }
@@ -2256,8 +2235,23 @@ static gpointer runner_worker(gpointer data)
 static void request_runner_refresh(RunnerScopeApp *app)
 {
     if (!app->config.organisation[0] || g_atomic_int_get(&app->shutting_down)) return;
+    if (!app->config.github_token[0]) {
+        app->runner_data_stale = TRUE;
+        label_set_if_changed(app->connection_label, "Add your GitHub token in Settings to view organisation runners.");
+        gtk_widget_show(app->connection_bar);
+        label_set_if_changed(app->status_label, "GitHub token required — open Settings");
+        update_workspace_context(app, gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
+        return;
+    }
     if (!g_atomic_int_compare_and_exchange(&app->runner_refreshing, 0, 1)) return;
-    app->runner_thread = g_thread_new("runnerscope-runners", runner_worker, app);
+    ProviderRequest *request = g_new0(ProviderRequest, 1U);
+    request->app = app;
+    request->config = app->config;
+    request->generation = app->config_generation;
+    request->get = app->fetch_transport;
+    request->context = app->fetch_context;
+    request->deadline = g_get_monotonic_time() + 60000000;
+    app->runner_thread = g_thread_new("runnerscope-runners", runner_worker, request);
 }
 
 static double parse_iso8601_epoch(const char *text)
@@ -2284,24 +2278,25 @@ static char *job_environment(const char *group, const char *labels)
 
 static gpointer activity_worker(gpointer data)
 {
-    RunnerScopeApp *app = data;
+    ProviderRequest *request = data;
+    RunnerScopeApp *app = request->app;
+    const RunnerConfig *config = &request->config;
     ActivityRefreshResult *result = g_new0(ActivityRefreshResult, 1U);
     result->app = app;
+    result->generation = request->generation;
     result->rows = g_ptr_array_new_with_free_func(activity_row_free);
 
     char *repo_endpoint = g_strdup_printf(
         "/orgs/%s/repos?type=all&sort=pushed&direction=desc&per_page=100",
-        app->config.organisation);
+        config->organisation);
     GError *error = NULL;
-    char *repo_output = gh_api(
-        repo_endpoint,
-        ".[] | select(.archived==false and .disabled==false) | .name",
-        &error);
+    char *repo_output = github_api(repo_endpoint, request, RUNNER_GITHUB_REPOSITORIES, &error);
     g_free(repo_endpoint);
     if (!repo_output) {
         result->error = g_strdup_printf("Activity scan error: %s",
             error ? error->message : "unable to list repositories");
         g_clear_error(&error);
+        g_free(request);
         g_idle_add(activity_apply_idle, result);
         return NULL;
     }
@@ -2309,45 +2304,42 @@ static gpointer activity_worker(gpointer data)
     char **repos = g_strsplit(repo_output, "\n", -1);
     g_free(repo_output);
     guint scanned = 0U;
-
-    for (guint r = 0U; repos[r] && scanned < app->config.repository_scan_limit; r++) {
+    for (guint r = 0U; repos[r] && scanned < config->repository_scan_limit; r++) {
+        if (g_atomic_int_get(&app->shutting_down) || g_get_monotonic_time() >= request->deadline) {
+            result->error = g_strdup("Activity scan cancelled or timed out. Try refreshing again.");
+            break;
+        }
         if (!*repos[r]) continue;
         scanned++;
         char *runs_endpoint = g_strdup_printf(
             "/repos/%s/%s/actions/runs?per_page=100&exclude_pull_requests=true",
-            app->config.organisation, repos[r]);
-        char *runs_output = gh_api(
-            runs_endpoint,
-            ".workflow_runs[] | select(.status==\"in_progress\" or .status==\"queued\") | "
-            "[(.id|tostring),(.name//.display_title//\"Workflow\"),(.event//\"—\"),"
-            "(.head_branch//\"—\"),(.run_started_at//.created_at//\"\"),"
-            "(.html_url//\"\"),.status] | @tsv",
-            &error);
+            config->organisation, repos[r]);
+        char *runs_output = github_api(runs_endpoint, request, RUNNER_GITHUB_RUNS, &error);
         g_free(runs_endpoint);
         if (!runs_output) {
+            result->error = g_strdup_printf("Activity scan failed: %s", error ? error->message : "unable to read workflow runs");
             g_clear_error(&error);
-            continue;
+            break;
         }
         GPtrArray *runs = split_tsv_lines(runs_output);
         g_free(runs_output);
 
         for (guint i = 0U; i < runs->len; i++) {
+            if (g_atomic_int_get(&app->shutting_down) || g_get_monotonic_time() >= request->deadline) {
+                result->error = g_strdup("Activity scan cancelled or timed out. Try refreshing again.");
+                break;
+            }
             char **run_fields = g_ptr_array_index(runs, i);
             const char *run_id = field(run_fields, 0U);
             char *jobs_endpoint = g_strdup_printf(
                 "/repos/%s/%s/actions/runs/%s/jobs?per_page=100&filter=latest",
-                app->config.organisation, repos[r], run_id);
-            char *jobs_output = gh_api(
-                jobs_endpoint,
-                ".jobs[] | [(.name//\"Job\"),.status,(.conclusion//\"\"),"
-                "(.runner_name//\"\"),(.runner_group_name//\"\"),"
-                "([.labels[]]|join(\",\")),(.started_at//\"\"),(.html_url//\"\"),"
-                "([.steps[] | select(.status==\"in_progress\") | .name][0] // \"—\")] | @tsv",
-                &error);
+                config->organisation, repos[r], run_id);
+            char *jobs_output = github_api(jobs_endpoint, request, RUNNER_GITHUB_JOBS, &error);
             g_free(jobs_endpoint);
             if (!jobs_output) {
+                result->error = g_strdup_printf("Activity scan failed: %s", error ? error->message : "unable to read jobs");
                 g_clear_error(&error);
-                continue;
+                break;
             }
             GPtrArray *jobs = split_tsv_lines(jobs_output);
             g_free(jobs_output);
@@ -2381,8 +2373,12 @@ static gpointer activity_worker(gpointer data)
             g_ptr_array_unref(jobs);
         }
         g_ptr_array_unref(runs);
+        if (result->error) break;
     }
+    if (!result->error && g_get_monotonic_time() >= request->deadline)
+        result->error = g_strdup("Activity scan timed out. Try refreshing again.");
     g_strfreev(repos);
+    g_free(request);
     g_idle_add(activity_apply_idle, result);
     return NULL;
 }
@@ -2395,8 +2391,22 @@ static gboolean activity_apply_idle(gpointer data)
         g_thread_unref(app->activity_thread);
         app->activity_thread = NULL;
     }
+    if (g_atomic_int_get(&app->shutting_down) || result->generation != app->config_generation) {
+        g_free(result->error);
+        if (result->rows) g_ptr_array_unref(result->rows);
+        g_atomic_int_set(&app->activity_refreshing, 0);
+        g_free(result);
+        if (!g_atomic_int_get(&app->shutting_down)) request_activity_refresh(app);
+        return G_SOURCE_REMOVE;
+    }
     if (result->error) {
-        label_set_if_changed(app->status_label, result->error);
+        app->activity_data_stale = TRUE;
+        g_free(app->activity_error);
+        app->activity_error = g_strdup(result->error);
+        update_connection_banner(app);
+        update_workspace_context(app, gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
+
+        if (!app->runner_data_stale) label_set_if_changed(app->status_label, result->error);
         g_free(result->error);
         if (result->rows) g_ptr_array_unref(result->rows);
         g_atomic_int_set(&app->activity_refreshing, 0);
@@ -2404,6 +2414,9 @@ static gboolean activity_apply_idle(gpointer data)
         return G_SOURCE_REMOVE;
     }
 
+    app->activity_data_stale = FALSE;
+    g_clear_pointer(&app->activity_error, g_free);
+    update_connection_banner(app);
     const gboolean rows_changed =
         !activity_rows_static_equal(app->activity_rows, result->rows);
 
@@ -2432,8 +2445,8 @@ static gboolean activity_apply_idle(gpointer data)
     app->queued = result->queued;
     const gint page =
         gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
-    if (rows_changed && page == 1) {
-        render_activity(app);
+    if (page == 1) {
+        if (rows_changed) render_activity(app);
         update_workspace_context(app, page);
     }
 
@@ -2445,8 +2458,56 @@ static gboolean activity_apply_idle(gpointer data)
 static void request_activity_refresh(RunnerScopeApp *app)
 {
     if (!app->config.organisation[0] || g_atomic_int_get(&app->shutting_down)) return;
+    if (!app->config.github_token[0]) return;
     if (!g_atomic_int_compare_and_exchange(&app->activity_refreshing, 0, 1)) return;
-    app->activity_thread = g_thread_new("runnerscope-activity", activity_worker, app);
+    ProviderRequest *request = g_new0(ProviderRequest, 1U);
+    request->app = app;
+    request->config = app->config;
+    request->generation = app->config_generation;
+    request->get = app->fetch_transport;
+    request->context = app->fetch_context;
+    request->deadline = g_get_monotonic_time() + 60000000;
+    app->activity_thread = g_thread_new("runnerscope-activity", activity_worker, request);
+}
+
+static void find_runner_diagnostics(LocalRow *row, const char *executable)
+{
+    if (!executable || !g_path_is_absolute(executable)) return;
+    char *root = g_path_get_dirname(executable);
+    char *base = g_path_get_basename(root);
+    if (g_ascii_strcasecmp(base, "bin") == 0) {
+        char *parent = g_path_get_dirname(root);
+        g_free(root); root = parent;
+    }
+    g_free(base);
+    g_free(row->path); row->path = g_strdup(root);
+    char *diag = g_build_filename(root, "_diag", NULL);
+    if (g_file_test(diag, G_FILE_TEST_IS_DIR)) {
+        g_free(row->diag_path); row->diag_path = g_strdup(diag);
+        GDir *directory = g_dir_open(diag, 0U, NULL);
+        const char *name = NULL;
+        time_t newest_time = 0;
+        char *newest_name = NULL;
+        guint examined = 0U;
+        while (directory && examined++ < 10000U && (name = g_dir_read_name(directory))) {
+            if (!g_str_has_prefix(name, "Runner_") && !g_str_has_prefix(name, "Worker_")) continue;
+            char *candidate = g_build_filename(diag, name, NULL);
+            GStatBuf stat_buffer;
+            if (g_stat(candidate, &stat_buffer) == 0 && S_ISREG(stat_buffer.st_mode) &&
+                stat_buffer.st_mtime > newest_time) {
+                newest_time = stat_buffer.st_mtime;
+                g_free(newest_name); newest_name = g_strdup(name);
+            }
+            g_free(candidate);
+        }
+        if (directory) g_dir_close(directory);
+        if (newest_name) {
+            g_free(row->diag); row->diag = newest_name;
+            g_free(row->diag_age);
+            row->diag_age = duration_text(MAX(0.0, (double)time(NULL) - (double)newest_time));
+        }
+    }
+    g_free(diag); g_free(root);
 }
 
 static gpointer local_worker(gpointer data)
@@ -2456,125 +2517,30 @@ static gpointer local_worker(gpointer data)
     result->app = app;
     result->rows = g_ptr_array_new_with_free_func(local_row_free);
     GError *error = NULL;
-
-    char *argv[] = {(char *)"systemctl", (char *)"list-units", (char *)"--all",
-        (char *)"--type=service", (char *)"--no-legend", (char *)"--plain",
-        (char *)"actions.runner.*", NULL};
-    char *output = run_command(argv, &error);
-    if (!output) {
+    GPtrArray *services = runner_linux_services_list(app->service_cancel, &error);
+    if (!services) {
         result->error = g_strdup_printf("Local service health error: %s",
-            error ? error->message : "systemctl unavailable");
+            error ? error->message : "system service manager unavailable");
         g_clear_error(&error);
-        g_idle_add(local_apply_idle, result);
-        return NULL;
-    }
-
-    char **lines = g_strsplit(output, "\n", -1);
-    g_free(output);
-    for (guint i = 0U; lines[i]; i++) {
-        if (!g_str_has_prefix(lines[i], "actions.runner.")) continue;
-        char **parts = g_strsplit_set(lines[i], " \t", 2);
-        const char *service = parts[0];
-        if (!service || !*service) { g_strfreev(parts); continue; }
-
-        char *show_argv[] = {(char *)"systemctl", (char *)"show", (char *)service,
-            (char *)"--no-pager", (char *)"-p", (char *)"Description",
-            (char *)"-p", (char *)"ActiveState", (char *)"-p", (char *)"MainPID",
-            (char *)"-p", (char *)"UnitFileState", (char *)"-p", (char *)"User",
-            (char *)"-p", (char *)"ExecStart", NULL};
-        char *show = run_command(show_argv, NULL);
-        LocalRow *row = g_new0(LocalRow, 1U);
-        row->service_name = g_strdup(service);
-        row->runner = g_strdup(service);
-        row->github_state = g_strdup("—");
-        row->service_state = g_strdup("UNKNOWN");
-        row->pid = g_strdup("—"); row->start_mode = g_strdup("—");
-        row->account = g_strdup("—"); row->diag = g_strdup("—");
-        row->diag_age = g_strdup("—"); row->path = g_strdup("—");
-        row->diag_path = g_strdup("");
-
-        if (show) {
-            char **props = g_strsplit(show, "\n", -1);
-            for (guint p = 0U; props[p]; p++) {
-                char *equals = strchr(props[p], '=');
-                if (!equals) continue;
-                *equals = '\0';
-                const char *key = props[p], *value = equals + 1;
-                if (strcmp(key, "Description") == 0 && *value) {
-                    g_free(row->runner); row->runner = g_strdup(value);
-                } else if (strcmp(key, "ActiveState") == 0) {
-                    g_free(row->service_state);
-                    if (strcmp(value, "active") == 0)
-                        row->service_state = g_strdup("RUNNING");
-                    else
-                        row->service_state = g_ascii_strup(value, -1);
-                } else if (strcmp(key, "MainPID") == 0 && strcmp(value, "0") != 0) {
-                    g_free(row->pid); row->pid = g_strdup(value);
-                } else if (strcmp(key, "UnitFileState") == 0 && *value) {
-                    g_free(row->start_mode); row->start_mode = g_strdup(value);
-                } else if (strcmp(key, "User") == 0 && *value) {
-                    g_free(row->account); row->account = g_strdup(value);
-                } else if (strcmp(key, "ExecStart") == 0 && *value) {
-                    const char *start = strstr(value, "path=");
-                    if (start) start += 5;
-                    else start = strchr(value, '/');
-                    if (start) {
-                        const char *end = start;
-                        while (*end && *end != ' ' && *end != ';' && *end != '}') end++;
-                        char *executable = g_strndup(start, (gsize)(end - start));
-                        char *root = g_path_get_dirname(executable);
-                        char *base = g_path_get_basename(root);
-                        if (g_ascii_strcasecmp(base, "bin") == 0) {
-                            char *parent = g_path_get_dirname(root);
-                            g_free(root);
-                            root = parent;
-                        }
-                        g_free(base);
-                        char *diag = g_build_filename(root, "_diag", NULL);
-                        g_free(row->path); row->path = g_strdup(root);
-                        if (g_file_test(diag, G_FILE_TEST_IS_DIR)) {
-                            g_free(row->diag_path);
-                            row->diag_path = g_strdup(diag);
-                            GDir *directory = g_dir_open(diag, 0U, NULL);
-                            const char *name = NULL;
-                            time_t newest_time = 0;
-                            char *newest_name = NULL;
-                            if (directory) {
-                                while ((name = g_dir_read_name(directory)) != NULL) {
-                                    if (!g_str_has_prefix(name, "Runner_") &&
-                                        !g_str_has_prefix(name, "Worker_"))
-                                        continue;
-                                    char *candidate = g_build_filename(diag, name, NULL);
-                                    GStatBuf stat_buffer;
-                                    if (g_stat(candidate, &stat_buffer) == 0 &&
-                                        stat_buffer.st_mtime > newest_time) {
-                                        newest_time = stat_buffer.st_mtime;
-                                        g_free(newest_name);
-                                        newest_name = g_strdup(name);
-                                    }
-                                    g_free(candidate);
-                                }
-                                g_dir_close(directory);
-                            }
-                            if (newest_name) {
-                                g_free(row->diag); row->diag = newest_name;
-                                g_free(row->diag_age);
-                                row->diag_age = duration_text(
-                                    MAX(0.0, (double)time(NULL) - (double)newest_time));
-                            }
-                        }
-                        g_free(diag); g_free(root); g_free(executable);
-                    } else {
-                        g_free(row->path); row->path = g_strdup(value);
-                    }
-                }
-            }
-            g_strfreev(props); g_free(show);
+    } else {
+        for (guint i = 0U; i < services->len && !g_atomic_int_get(&app->shutting_down); ++i) {
+            const RunnerLinuxService *service = g_ptr_array_index(services, i);
+            LocalRow *row = g_new0(LocalRow, 1U);
+            row->service_name = g_strdup(service->name);
+            row->runner = g_strdup(service->description);
+            row->github_state = g_strdup("—");
+            row->service_state = strcmp(service->active_state, "active") == 0
+                ? g_strdup("RUNNING") : g_ascii_strup(service->active_state, -1);
+            row->pid = service->pid ? g_strdup_printf("%u", service->pid) : g_strdup("—");
+            row->start_mode = g_strdup(service->unit_file_state);
+            row->account = g_strdup(service->user);
+            row->diag = g_strdup("—"); row->diag_age = g_strdup("—");
+            row->path = g_strdup("—"); row->diag_path = g_strdup("");
+            find_runner_diagnostics(row, service->executable);
+            g_ptr_array_add(result->rows, row);
         }
-        g_ptr_array_add(result->rows, row);
-        g_strfreev(parts);
+        g_ptr_array_unref(services);
     }
-    g_strfreev(lines);
     g_idle_add(local_apply_idle, result);
     return NULL;
 }
@@ -2587,8 +2553,15 @@ static gboolean local_apply_idle(gpointer data)
         g_thread_unref(app->local_thread);
         app->local_thread = NULL;
     }
+    if (g_atomic_int_get(&app->shutting_down)) {
+        g_free(result->error);
+        if (result->rows) g_ptr_array_unref(result->rows);
+        g_atomic_int_set(&app->local_refreshing, 0);
+        g_free(result);
+        return G_SOURCE_REMOVE;
+    }
     if (result->error) {
-        label_set_if_changed(app->status_label, result->error);
+        if (!app->runner_data_stale) label_set_if_changed(app->status_label, result->error);
         g_free(result->error);
         if (result->rows) g_ptr_array_unref(result->rows);
         g_atomic_int_set(&app->local_refreshing, 0);
@@ -2785,11 +2758,11 @@ static gboolean tick_timer_cb(gpointer data)
 
     const gint page =
         gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
-    if (page == 0) {
+    if (page == 0 && !app->runner_data_stale) {
         const double monotonic_now = now_monotonic();
         refresh_runner_clock_cells(
             app, monotonic_now, (double)time(NULL));
-    } else if (page == 1) {
+    } else if (page == 1 && !app->activity_data_stale) {
         refresh_activity_clock_cells(app, (double)time(NULL));
     } else if (page == 2) {
         update_workspace_context(app, page);
@@ -2838,12 +2811,16 @@ static void on_refresh(GtkButton *button, gpointer user_data)
     request_refresh_for_page(app, page);
 }
 
-static gboolean validate_org(const char *text)
+static gboolean entry_uint(GtkWidget *entry, unsigned int *value)
 {
-    if (!text || !*text) return FALSE;
-    for (const unsigned char *p = (const unsigned char *)text; *p; p++)
-        if (!(g_ascii_isalnum(*p) || *p == '-' || *p == '_' || *p == '.'))
-            return FALSE;
+    const char *text = gtk_entry_get_text(GTK_ENTRY(entry));
+    if (!*text) return FALSE;
+    for (const char *p = text; *p; ++p) if (!g_ascii_isdigit(*p)) return FALSE;
+    char *end = NULL;
+    errno = 0;
+    const guint64 parsed = g_ascii_strtoull(text, &end, 10);
+    if (errno || !end || *end || parsed > G_MAXUINT) return FALSE;
+    *value = (unsigned int)parsed;
     return TRUE;
 }
 
@@ -2853,96 +2830,115 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         first_run ? "Runner Monitor setup" : "Runner Monitor settings",
         app->window ? GTK_WINDOW(app->window) : NULL,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-        "_Cancel", GTK_RESPONSE_CANCEL, "_Save", GTK_RESPONSE_ACCEPT, NULL);
+        "_Cancel", GTK_RESPONSE_CANCEL, "_Save and test", GTK_RESPONSE_ACCEPT, NULL);
     GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
-    const guint compact_spacing = metrics ? metrics->compact_spacing : 6U;
-    const guint control_spacing = metrics ? metrics->control_spacing : 10U;
-    const guint content_padding = metrics ? metrics->content_padding : 16U;
     GtkWidget *grid = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(grid), compact_spacing);
-    gtk_grid_set_column_spacing(GTK_GRID(grid), control_spacing);
-    gtk_container_set_border_width(GTK_CONTAINER(grid), content_padding);
+    gtk_grid_set_row_spacing(GTK_GRID(grid), metrics ? metrics->compact_spacing : 6U);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), metrics ? metrics->control_spacing : 10U);
+    gtk_container_set_border_width(GTK_CONTAINER(grid), metrics ? metrics->content_padding : 16U);
     gtk_container_add(GTK_CONTAINER(area), grid);
-
-    const char *labels[] = {
-        "GitHub organisation", "Expected runners", "Runner refresh (seconds)",
-        "Activity scan (seconds)", "Repositories to scan", "Local health (seconds)",
-        "Theme"
-    };
-    GtkWidget *entries[6];
-    char numbers[5][32];
-    g_snprintf(numbers[0], sizeof(numbers[0]), "%u", app->config.expected_runners);
-    g_snprintf(numbers[1], sizeof(numbers[1]), "%u", app->config.runner_poll_seconds);
-    g_snprintf(numbers[2], sizeof(numbers[2]), "%u", app->config.activity_scan_seconds);
-    g_snprintf(numbers[3], sizeof(numbers[3]), "%u", app->config.repository_scan_limit);
-    g_snprintf(numbers[4], sizeof(numbers[4]), "%u", app->config.local_health_seconds);
-
-    for (guint i = 0U; i < 7U; i++) {
+    const char *labels[] = {"GitHub organisation", "GitHub token", "Expected runners",
+        "Runner refresh (seconds)", "Activity scan (seconds)", "Repositories to scan",
+        "Local health (seconds)", "Theme"};
+    GtkWidget *entries[7];
+    const unsigned int values[] = {app->config.expected_runners, app->config.runner_poll_seconds,
+        app->config.activity_scan_seconds, app->config.repository_scan_limit, app->config.local_health_seconds};
+    for (guint i = 0U; i < G_N_ELEMENTS(labels); ++i) {
         GtkWidget *label = gtk_label_new(labels[i]);
         gtk_widget_set_halign(label, GTK_ALIGN_START);
         gtk_grid_attach(GTK_GRID(grid), label, 0, (gint)i, 1, 1);
+        if (i < G_N_ELEMENTS(entries)) {
+            entries[i] = gtk_entry_new();
+            gtk_entry_set_max_length(GTK_ENTRY(entries[i]), i == 1U ? (gint)RUNNER_GITHUB_TOKEN_CAPACITY - 1 : i == 0U ? 127 : 10);
+            gtk_grid_attach(GTK_GRID(grid), entries[i], 1, (gint)i, 1, 1);
+        }
     }
-    entries[0] = gtk_entry_new();
     gtk_entry_set_text(GTK_ENTRY(entries[0]), app->config.organisation);
-    for (guint i = 1U; i < 6U; i++) {
-        entries[i] = gtk_entry_new();
-        gtk_entry_set_text(GTK_ENTRY(entries[i]), numbers[i - 1U]);
+    gtk_entry_set_visibility(GTK_ENTRY(entries[1]), FALSE);
+    gtk_entry_set_input_purpose(GTK_ENTRY(entries[1]), GTK_INPUT_PURPOSE_PASSWORD);
+    gtk_entry_set_text(GTK_ENTRY(entries[1]), app->config.github_token);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entries[1]), "Paste your GitHub token");
+    for (guint i = 2U; i < G_N_ELEMENTS(entries); ++i) {
+        char number[32]; g_snprintf(number, sizeof(number), "%u", values[i - 2U]);
+        gtk_entry_set_text(GTK_ENTRY(entries[i]), number);
     }
-    for (guint i = 0U; i < 6U; i++)
-        gtk_grid_attach(GTK_GRID(grid), entries[i], 1, (gint)i, 1, 1);
-
     GtkWidget *theme = gtk_combo_box_text_new();
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(theme), "system", "Follow system");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(theme), "day", "Day");
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(theme), "night", "Night");
     gtk_combo_box_set_active(GTK_COMBO_BOX(theme), (gint)app->config.theme_mode);
-    gtk_grid_attach(GTK_GRID(grid), theme, 1, 6, 1, 1);
-
-    GtkWidget *hint = gtk_label_new(
-        "Authentication stays in GitHub CLI (gh auth login). Runner Monitor never stores your token.");
+    gtk_grid_attach(GTK_GRID(grid), theme, 1, 7, 1, 1);
+    GtkWidget *hint = gtk_label_new("Use a token with organisation Self-hosted runners: Read permission.\nThe token is saved in your private settings file. Save and test checks runner access.");
+    gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(hint), 65);
     gtk_widget_set_halign(hint, GTK_ALIGN_START);
-    gtk_grid_attach(GTK_GRID(grid), hint, 0, 7, 2, 1);
-
+    gtk_grid_attach(GTK_GRID(grid), hint, 0, 8, 2, 1);
+    GtkWidget *error_label = gtk_label_new(app->config_error ? app->config_error : "");
+    gtk_label_set_line_wrap(GTK_LABEL(error_label), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(error_label), 65);
+    gtk_widget_set_halign(error_label, GTK_ALIGN_START);
+    gtk_grid_attach(GTK_GRID(grid), error_label, 0, 9, 2, 1);
+    g_object_set_data(G_OBJECT(dialog), "token-entry", entries[1]);
+    g_object_set_data(G_OBJECT(dialog), "organisation-entry", entries[0]);
+    g_object_set_data(G_OBJECT(dialog), "settings-error", error_label);
     gtk_widget_show_all(dialog);
     gboolean saved = FALSE;
     while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
-        const char *org = gtk_entry_get_text(GTK_ENTRY(entries[0]));
-        if (!validate_org(org)) {
-            GtkWidget *message = gtk_message_dialog_new(
-                GTK_WINDOW(dialog), GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
-                GTK_BUTTONS_OK, "Enter the GitHub organisation name only.");
-            gtk_dialog_run(GTK_DIALOG(message)); gtk_widget_destroy(message);
+        RunnerConfig candidate = app->config;
+        g_strlcpy(candidate.organisation, gtk_entry_get_text(GTK_ENTRY(entries[0])), sizeof(candidate.organisation));
+        g_strlcpy(candidate.github_token, gtk_entry_get_text(GTK_ENTRY(entries[1])), sizeof(candidate.github_token));
+        unsigned int *fields[] = {&candidate.expected_runners, &candidate.runner_poll_seconds,
+            &candidate.activity_scan_seconds, &candidate.repository_scan_limit, &candidate.local_health_seconds};
+        gboolean valid_numbers = TRUE;
+        for (guint i = 0U; i < G_N_ELEMENTS(fields); ++i)
+            if (!entry_uint(entries[i + 2U], fields[i])) valid_numbers = FALSE;
+        candidate.theme_mode = (RunnerThemeMode)gtk_combo_box_get_active(GTK_COMBO_BOX(theme));
+        char detail[256] = "";
+        if (!valid_numbers || !candidate.organisation[0] ||
+            !runner_config_validate(&candidate, detail, sizeof(detail)) || !candidate.github_token[0]) {
+            label_set_if_changed(error_label, !valid_numbers ? "Enter valid whole numbers for the polling settings."
+                : !candidate.organisation[0] ? "Enter your GitHub organisation name."
+                : !candidate.github_token[0] ? "Paste your GitHub token to test organisation runner access." : detail);
+            memset(candidate.github_token, 0, sizeof(candidate.github_token));
             continue;
         }
-        g_strlcpy(app->config.organisation, org, sizeof(app->config.organisation));
-        app->config.expected_runners = (guint)g_ascii_strtoull(
-            gtk_entry_get_text(GTK_ENTRY(entries[1])), NULL, 10);
-        app->config.runner_poll_seconds = MAX(3U, (guint)g_ascii_strtoull(
-            gtk_entry_get_text(GTK_ENTRY(entries[2])), NULL, 10));
-        app->config.activity_scan_seconds = MAX(10U, (guint)g_ascii_strtoull(
-            gtk_entry_get_text(GTK_ENTRY(entries[3])), NULL, 10));
-        app->config.repository_scan_limit = MAX(1U, (guint)g_ascii_strtoull(
-            gtk_entry_get_text(GTK_ENTRY(entries[4])), NULL, 10));
-        app->config.local_health_seconds = MAX(15U, (guint)g_ascii_strtoull(
-            gtk_entry_get_text(GTK_ENTRY(entries[5])), NULL, 10));
-        app->config.theme_mode = (InfiltratrThemeMode)gtk_combo_box_get_active(
-            GTK_COMBO_BOX(theme));
         GError *error = NULL;
-        if (!save_config(&app->config, &error)) {
-            GtkWidget *message = gtk_message_dialog_new(
-                GTK_WINDOW(dialog), GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR,
-                GTK_BUTTONS_OK, "%s", error ? error->message : "Unable to save settings");
-            gtk_dialog_run(GTK_DIALOG(message)); gtk_widget_destroy(message);
+        if (!save_config(&candidate, &error)) {
+            label_set_if_changed(error_label, error ? error->message : "Unable to save settings");
             g_clear_error(&error);
+            memset(candidate.github_token, 0, sizeof(candidate.github_token));
             continue;
+        }
+        const gboolean organisation_changed = strcmp(app->config.organisation, candidate.organisation) != 0;
+        app->config = candidate;
+        memset(candidate.github_token, 0, sizeof(candidate.github_token));
+        app->config_generation++;
+        app->runner_data_stale = TRUE;
+        app->activity_data_stale = TRUE;
+        g_clear_pointer(&app->activity_error, g_free);
+        g_clear_pointer(&app->runner_error, g_free);
+        g_clear_pointer(&app->config_error, g_free);
+        if (organisation_changed) {
+            g_hash_table_remove_all(app->sessions);
+            g_hash_table_remove_all(app->job_by_runner);
+            g_ptr_array_set_size(app->runner_rows, 0U);
+            g_ptr_array_set_size(app->activity_rows, 0U);
+            rebuild_runner_row_index(app); rebuild_activity_row_index(app);
+            if (app->runner_cards) render_runners(app);
+            if (app->activity_tree) render_activity(app);
+        }
+        if (app->connection_label) {
+            label_set_if_changed(app->connection_label, "Settings saved. Checking GitHub runner access…");
+            gtk_widget_show(app->connection_bar);
+            update_workspace_context(app, gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
         }
         saved = TRUE;
         break;
     }
+    gtk_entry_set_text(GTK_ENTRY(entries[1]), "");
     gtk_widget_destroy(dialog);
-    if (saved && app->window)
-        apply_theme(app);
+    if (saved && app->window) apply_theme(app);
     return saved;
 }
 
@@ -2971,7 +2967,7 @@ static void on_system_theme_changed(
     (void)object;
     (void)pspec;
     RunnerScopeApp *app = user_data;
-    if (app && app->config.theme_mode == INFILTRATR_THEME_SYSTEM)
+    if (app && app->config.theme_mode == RUNNER_THEME_SYSTEM)
         apply_theme(app);
 }
 
@@ -3086,18 +3082,115 @@ static void on_open_job(GtkButton *button, gpointer user_data)
     g_free(url);
 }
 
+typedef struct {
+    gint references;
+    GtkWidget *dialog;
+    GtkTextBuffer *buffer;
+    GInputStream *stream;
+    GCancellable *cancel;
+    char *data;
+} DiagnosticViewer;
+
+#define DIAGNOSTIC_LIMIT (2U * 1024U * 1024U)
+
+static void diagnostic_viewer_free(gpointer data)
+{
+    DiagnosticViewer *viewer = data;
+    if (!g_atomic_int_dec_and_test(&viewer->references)) return;
+    g_clear_object(&viewer->buffer); g_clear_object(&viewer->stream);
+    g_clear_object(&viewer->cancel); g_free(viewer->data); g_free(viewer);
+}
+
+static void diagnostic_destroyed(GtkWidget *dialog, gpointer data)
+{
+    (void)dialog;
+    DiagnosticViewer *viewer = data;
+    viewer->dialog = NULL;
+    g_cancellable_cancel(viewer->cancel);
+}
+
+static void diagnostic_response(GtkDialog *dialog, gint response, gpointer data)
+{
+    (void)response; (void)data;
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+}
+
+static void diagnostic_read_complete(GObject *source, GAsyncResult *result, gpointer data)
+{
+    DiagnosticViewer *viewer = data;
+    GError *error = NULL;
+    gsize length = 0U;
+    const gboolean okay = g_input_stream_read_all_finish(G_INPUT_STREAM(source), result, &length, &error);
+    if (viewer->dialog) {
+        if (!okay) gtk_text_buffer_set_text(viewer->buffer,
+            error ? error->message : "Unable to read diagnostic", -1);
+        else {
+            char *valid = g_utf8_make_valid(viewer->data, (gssize)MIN(length, DIAGNOSTIC_LIMIT));
+            gtk_text_buffer_set_text(viewer->buffer, valid, -1);
+            if (length > DIAGNOSTIC_LIMIT) {
+                GtkTextIter end;
+                gtk_text_buffer_get_end_iter(viewer->buffer, &end);
+                gtk_text_buffer_insert(viewer->buffer, &end, "\n\nShowing the first 2 MiB of this diagnostic.", -1);
+            }
+            g_free(valid);
+        }
+    }
+    g_clear_error(&error);
+    diagnostic_viewer_free(viewer);
+}
+
+static void diagnostic_open_complete(GObject *source, GAsyncResult *result, gpointer data)
+{
+    DiagnosticViewer *viewer = data;
+    GError *error = NULL;
+    viewer->stream = G_INPUT_STREAM(g_file_read_finish(G_FILE(source), result, &error));
+    if (!viewer->stream) {
+        if (viewer->dialog) gtk_text_buffer_set_text(viewer->buffer,
+            error ? error->message : "Unable to open diagnostic", -1);
+        g_clear_error(&error);
+        diagnostic_viewer_free(viewer);
+        return;
+    }
+    viewer->data = g_malloc(DIAGNOSTIC_LIMIT + 1U);
+    g_input_stream_read_all_async(viewer->stream, viewer->data, DIAGNOSTIC_LIMIT + 1U,
+        G_PRIORITY_DEFAULT, viewer->cancel, diagnostic_read_complete, viewer);
+}
+
 static void on_open_diag(GtkButton *button, gpointer user_data)
 {
     (void)button;
     RunnerScopeApp *app = user_data;
-    char *path = NULL;
-    if (!selected_string(app->local_tree, LOCAL_COL_DIAG_PATH, &path)) return;
-    char *uri = g_filename_to_uri(path, NULL, NULL);
-    if (uri) {
-        gtk_show_uri_on_window(GTK_WINDOW(app->window), uri, GDK_CURRENT_TIME, NULL);
-        g_free(uri);
+    char *directory = NULL, *name = NULL;
+    if (!selected_string(app->local_tree, LOCAL_COL_DIAG_PATH, &directory)) return;
+    if (!selected_string(app->local_tree, LOCAL_COL_DIAG, &name) || strcmp(name, "—") == 0) {
+        g_free(directory); g_free(name);
+        label_set_if_changed(app->status_label, "No diagnostic file is available for this runner.");
+        return;
     }
-    g_free(path);
+    char *path = g_build_filename(directory, name, NULL);
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(name, GTK_WINDOW(app->window),
+        GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 900, 600);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    GtkWidget *text = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(text), FALSE);
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(text), TRUE);
+    gtk_container_add(GTK_CONTAINER(scroll), text);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), scroll, TRUE, TRUE, 0);
+    DiagnosticViewer *viewer = g_new0(DiagnosticViewer, 1U);
+    viewer->references = 2;
+    viewer->dialog = dialog;
+    viewer->buffer = g_object_ref(gtk_text_view_get_buffer(GTK_TEXT_VIEW(text)));
+    viewer->cancel = g_cancellable_new();
+    gtk_text_buffer_set_text(viewer->buffer, "Loading diagnostic…", -1);
+    g_object_set_data_full(G_OBJECT(dialog), "diagnostic-viewer", viewer, diagnostic_viewer_free);
+    g_signal_connect(dialog, "destroy", G_CALLBACK(diagnostic_destroyed), viewer);
+    g_signal_connect(dialog, "response", G_CALLBACK(diagnostic_response), NULL);
+    gtk_widget_show_all(dialog);
+    GFile *file = g_file_new_for_path(path);
+    g_file_read_async(file, G_PRIORITY_DEFAULT, viewer->cancel, diagnostic_open_complete, viewer);
+    g_object_unref(file);
+    g_free(path); g_free(directory); g_free(name);
 }
 
 static gboolean restart_apply_idle(gpointer data)
@@ -3110,13 +3203,17 @@ static gboolean restart_apply_idle(gpointer data)
         app->restart_thread = NULL;
     }
 
+    if (g_atomic_int_get(&app->shutting_down)) {
+        g_free(result->service); g_free(result->error); g_free(result);
+        return G_SOURCE_REMOVE;
+    }
     if (result->error) {
         char *message = g_strdup_printf(
             "Runner restart failed: %s", result->error);
         label_set_if_changed(app->status_label, message);
         g_free(message);
     } else {
-        label_set_if_changed(app->status_label, "Runner service restarted.");
+        label_set_if_changed(app->status_label, "Runner service restart requested.");
         request_local_refresh(app);
     }
 
@@ -3140,27 +3237,11 @@ static gboolean restart_apply_idle(gpointer data)
 static gpointer restart_worker(gpointer data)
 {
     RestartResult *result = data;
-    char *argv[] = {
-        (char *)"pkexec", (char *)"systemctl", (char *)"restart",
-        result->service, NULL
-    };
     GError *error = NULL;
-    char *output = run_command(argv, &error);
-    if (!output) {
-        result->error = g_strdup(
-            error && error->message ? error->message : "unknown error");
+    if (!runner_linux_service_restart(result->service, result->app->service_cancel, &error)) {
+        result->error = g_strdup(error ? error->message : "Unable to restart runner service");
         g_clear_error(&error);
-    } else {
-        g_free(output);
     }
-
-    if (g_atomic_int_get(&result->app->shutting_down)) {
-        g_free(result->service);
-        g_free(result->error);
-        g_free(result);
-        return NULL;
-    }
-
     g_idle_add(restart_apply_idle, result);
     return NULL;
 }
@@ -3823,6 +3904,14 @@ static bool gtk_renderer_end_navigation(void *context)
     return context != NULL;
 }
 
+static void on_main_destroy(GtkWidget *widget, gpointer user_data)
+{
+    (void)widget;
+    RunnerScopeApp *app = user_data;
+    g_atomic_int_set(&app->shutting_down, 1);
+    g_cancellable_cancel(app->service_cancel);
+}
+
 static void build_ui(RunnerScopeApp *app)
 {
     const InfiltratrDesignMetrics *metrics = infiltratr_design_metrics();
@@ -3831,6 +3920,7 @@ static void build_ui(RunnerScopeApp *app)
     const guint screen_padding = metrics ? metrics->screen_padding : 20U;
 
     app->window = gtk_application_window_new(app->application);
+    g_signal_connect(app->window, "destroy", G_CALLBACK(on_main_destroy), app);
     enforce_required_typography(app->window);
     gtk_window_set_title(GTK_WINDOW(app->window), runner_ui_product_title());
     gtk_window_set_default_size(GTK_WINDOW(app->window), 1280, 800);
@@ -3958,6 +4048,20 @@ static void build_ui(RunnerScopeApp *app)
         GTK_BOX(workspace_toolbar), app->filter_entry, FALSE, FALSE, 0);
     gtk_box_pack_start(
         GTK_BOX(workspace), workspace_toolbar, FALSE, FALSE, 0);
+
+    app->connection_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
+    gtk_widget_set_no_show_all(app->connection_bar, TRUE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(app->connection_bar), "selection-card");
+    app->connection_label = gtk_label_new("Add your GitHub token in Settings to view organisation runners.");
+    gtk_label_set_line_wrap(GTK_LABEL(app->connection_label), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(app->connection_label), 0.0F);
+    gtk_widget_set_hexpand(app->connection_label, TRUE);
+    gtk_box_pack_start(GTK_BOX(app->connection_bar), app->connection_label, TRUE, TRUE, 0);
+    GtkWidget *connection_settings = gtk_button_new_with_label("Settings");
+    g_signal_connect(connection_settings, "clicked", G_CALLBACK(on_settings), app);
+    gtk_box_pack_end(GTK_BOX(app->connection_bar), connection_settings, FALSE, FALSE, 0);
+    gtk_widget_show(app->connection_label); gtk_widget_show(connection_settings);
+    gtk_box_pack_start(GTK_BOX(workspace), app->connection_bar, FALSE, FALSE, 0);
 
     app->notebook = gtk_notebook_new();
     gtk_notebook_set_show_tabs(GTK_NOTEBOOK(app->notebook), FALSE);
@@ -4263,7 +4367,7 @@ static void activate(GtkApplication *application, gpointer user_data)
         gtk_window_present(GTK_WINDOW(app->window));
         return;
     }
-    if (!app->config.organisation[0]) {
+    if (!app->config.organisation[0] || !app->config.github_token[0]) {
         /* A temporary hidden parent lets first-run setup remain native GTK. */
         app->window = gtk_application_window_new(application);
         gtk_widget_hide(app->window);
@@ -4292,7 +4396,17 @@ static void activate(GtkApplication *application, gpointer user_data)
 static void app_init(RunnerScopeApp *app)
 {
     memset(app, 0, sizeof(*app));
-    load_config(&app->config);
+    GError *config_error = NULL;
+    if (!load_config(&app->config, &config_error)) {
+        app->config_error = g_strdup(config_error ? config_error->message : "Unable to load settings");
+        g_clear_error(&config_error);
+        runner_config_defaults(&app->config);
+    }
+    app->runner_data_stale = TRUE;
+    app->activity_data_stale = TRUE;
+    app->fetch_transport = runner_http_get;
+    app->config_generation = 1U;
+    app->service_cancel = g_cancellable_new();
     app->sessions = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, session_free);
     app->job_by_runner = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, job_summary_free);
     app->runner_row_by_name = g_hash_table_new(g_str_hash, g_str_equal);
@@ -4309,6 +4423,7 @@ static void app_init(RunnerScopeApp *app)
 static void app_destroy(RunnerScopeApp *app)
 {
     g_atomic_int_set(&app->shutting_down, 1);
+    g_cancellable_cancel(app->service_cancel);
     if (app->runner_timer) g_source_remove(app->runner_timer);
     if (app->activity_timer) g_source_remove(app->activity_timer);
     if (app->local_timer) g_source_remove(app->local_timer);
@@ -4340,6 +4455,7 @@ static void app_destroy(RunnerScopeApp *app)
         g_thread_join(app->restart_thread);
         app->restart_thread = NULL;
     }
+    while (g_main_context_pending(NULL)) g_main_context_iteration(NULL, FALSE);
     if (app->theme_provider) {
         GdkScreen *screen = gdk_screen_get_default();
         if (screen) {
@@ -4354,6 +4470,11 @@ static void app_destroy(RunnerScopeApp *app)
     g_hash_table_unref(app->runner_card_by_name);
     g_clear_object(&app->runner_card_art);
     g_free(app->selected_runner_name);
+    g_free(app->config_error);
+    g_free(app->runner_error);
+    g_free(app->activity_error);
+    memset(app->config.github_token, 0, sizeof(app->config.github_token));
+    g_clear_object(&app->service_cancel);
     g_hash_table_unref(app->activity_row_by_url);
     g_ptr_array_unref(app->runner_rows);
     g_ptr_array_unref(app->activity_rows);
@@ -4361,10 +4482,205 @@ static void app_destroy(RunnerScopeApp *app)
     g_ptr_array_unref(app->local_rows);
 }
 
-/* Exercise the installed graphical shell without provider or service calls. */
+typedef struct {
+    GMutex mutex;
+    GCond condition;
+    guint calls;
+    guint failure;
+    gboolean block_first;
+    gboolean entered;
+    gboolean released;
+    char first_token[RUNNER_GITHUB_TOKEN_CAPACITY];
+    char last_token[RUNNER_GITHUB_TOKEN_CAPACITY];
+} UiTestTransport;
+
+static bool ui_test_http_get(const char *url, const char *token,
+    RunnerHttpResponse *response, char *error, size_t error_size, void *context)
+{
+    (void)error; (void)error_size;
+    UiTestTransport *fixture = context;
+    g_mutex_lock(&fixture->mutex);
+    fixture->calls++;
+    if (fixture->calls == 1U) g_strlcpy(fixture->first_token, token, sizeof(fixture->first_token));
+    g_strlcpy(fixture->last_token, token, sizeof(fixture->last_token));
+    if (fixture->block_first && fixture->calls == 1U) {
+        fixture->entered = TRUE;
+        g_cond_signal(&fixture->condition);
+        while (!fixture->released) g_cond_wait(&fixture->condition, &fixture->mutex);
+    }
+    g_mutex_unlock(&fixture->mutex);
+    response->status = 200U;
+    response->link = NULL;
+    if (strstr(url, "/actions/runners")) {
+        const char *name = strstr(url, "/NewOrg/") ? "FreshRunner" : "OldRunner";
+        response->body = g_strdup_printf("{\"runners\":[{\"name\":\"%s\",\"os\":\"Linux\",\"status\":\"online\",\"busy\":false,\"labels\":[{\"name\":\"self-hosted\"}]}]}", name);
+    } else if (strstr(url, "/repos?")) {
+        response->body = g_strdup("[{\"name\":\"FixtureRepo\",\"archived\":false,\"disabled\":false}]");
+    } else if (strstr(url, "/jobs?")) {
+        response->status = fixture->failure == 2U ? 403U : 200U;
+        response->body = g_strdup(response->status == 403U ? "{\"message\":\"Job access denied\"}" : "{\"jobs\":[]}");
+    } else {
+        response->status = fixture->failure == 1U ? 403U : 200U;
+        response->body = g_strdup(response->status == 403U ? "{\"message\":\"Workflow access denied\"}" :
+            "{\"workflow_runs\":[{\"id\":123,\"name\":\"Build\",\"status\":\"in_progress\",\"event\":\"push\",\"head_branch\":\"main\"}]}");
+    }
+    return true;
+}
+
+static void ui_test_wait_refresh(RunnerScopeApp *app, gboolean activity)
+{
+    const gint64 deadline = g_get_monotonic_time() + 5000000;
+    while (g_atomic_int_get(activity ? &app->activity_refreshing : &app->runner_refreshing) &&
+        g_get_monotonic_time() < deadline) {
+        while (g_main_context_iteration(NULL, FALSE)) {}
+        g_usleep(1000U);
+    }
+    g_assert_cmpint(g_atomic_int_get(activity ? &app->activity_refreshing : &app->runner_refreshing), ==, 0);
+}
+
+static gboolean ui_test_settings_response(gpointer data)
+{
+    guint *attempt = data;
+    GList *windows = gtk_window_list_toplevels();
+    gboolean found = FALSE;
+    for (GList *item = windows; item; item = item->next) {
+        GtkWidget *entry = g_object_get_data(G_OBJECT(item->data), "token-entry");
+        if (!entry) continue;
+        g_assert_false(gtk_entry_get_visibility(GTK_ENTRY(entry)));
+        g_assert_cmpint(gtk_entry_get_input_purpose(GTK_ENTRY(entry)), ==, GTK_INPUT_PURPOSE_PASSWORD);
+        gtk_entry_set_text(GTK_ENTRY(entry), "offline-settings-fixture");
+        GtkWidget *organisation = g_object_get_data(G_OBJECT(item->data), "organisation-entry");
+        if (*attempt == 0U) gtk_entry_set_text(GTK_ENTRY(organisation), "");
+        else {
+            GtkWidget *message = g_object_get_data(G_OBJECT(item->data), "settings-error");
+            g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(message)), "organisation"));
+            gtk_entry_set_text(GTK_ENTRY(organisation), "FixtureOrg");
+        }
+        (*attempt)++;
+        gtk_dialog_response(GTK_DIALOG(item->data), GTK_RESPONSE_ACCEPT);
+        found = TRUE;
+        break;
+    }
+    g_list_free(windows);
+    g_assert_true(found);
+    return *attempt == 1U ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
+}
+
+static void ui_test_provider_failures(RunnerScopeApp *app)
+{
+    UiTestTransport fixture = {0};
+    g_mutex_init(&fixture.mutex); g_cond_init(&fixture.condition);
+    app->fetch_transport = ui_test_http_get;
+    app->fetch_context = &fixture;
+    g_strlcpy(app->config.organisation, "OldOrg", sizeof(app->config.organisation));
+    g_strlcpy(app->config.github_token, "offline-old-token", sizeof(app->config.github_token));
+    fixture.block_first = TRUE;
+    request_runner_refresh(app);
+    g_mutex_lock(&fixture.mutex);
+    const gint64 deadline = g_get_monotonic_time() + 5000000;
+    while (!fixture.entered)
+        g_assert_true(g_cond_wait_until(&fixture.condition, &fixture.mutex, deadline));
+    g_strlcpy(app->config.organisation, "NewOrg", sizeof(app->config.organisation));
+    g_strlcpy(app->config.github_token, "offline-new-token", sizeof(app->config.github_token));
+    app->config_generation++;
+    fixture.released = TRUE;
+    g_cond_signal(&fixture.condition);
+    g_mutex_unlock(&fixture.mutex);
+    ui_test_wait_refresh(app, FALSE);
+    g_assert_cmpuint(fixture.calls, ==, 2U);
+    g_assert_cmpstr(fixture.first_token, ==, "offline-old-token");
+    g_assert_cmpstr(fixture.last_token, ==, "offline-new-token");
+    g_assert_cmpuint(app->runner_rows->len, ==, 1U);
+    g_assert_cmpstr(((RunnerRow *)g_ptr_array_index(app->runner_rows, 0U))->name, ==, "FreshRunner");
+    g_assert_false(app->runner_data_stale);
+
+    ActivityRow *previous = g_new0(ActivityRow, 1U);
+    previous->environment = g_strdup("LOCAL"); previous->repo = g_strdup("FixtureRepo");
+    previous->workflow = g_strdup("Build"); previous->job = g_strdup("Last known job");
+    previous->step = g_strdup("Compile"); previous->status = g_strdup("IN_PROGRESS");
+    previous->runner = g_strdup("FreshRunner"); previous->runtime = g_strdup("frozen runtime");
+    previous->event = g_strdup("push"); previous->branch = g_strdup("main");
+    previous->url = g_strdup("https://github.com/FixtureOrg/FixtureRepo/actions/runs/1");
+    g_ptr_array_add(app->activity_rows, previous);
+    for (guint failure = 1U; failure <= 2U; ++failure) {
+        fixture.failure = failure;
+        app->activity_data_stale = FALSE;
+        request_activity_refresh(app);
+        ui_test_wait_refresh(app, TRUE);
+        g_assert_true(app->activity_data_stale);
+        g_assert_cmpuint(app->activity_rows->len, ==, 1U);
+        g_assert_true(previous == g_ptr_array_index(app->activity_rows, 0U));
+        g_assert_true(gtk_widget_get_visible(app->connection_bar));
+        g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(app->connection_label)), "Actions: Read"));
+        update_workspace_context(app, RUNNER_UI_PAGE_ACTIVE_JOBS);
+        g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(app->workspace_metric_value[0])), ==, "—");
+        g_assert_false(app->runner_data_stale);
+    }
+    RunnerRow *runner = g_ptr_array_index(app->runner_rows, 0U);
+    g_free(runner->state_for); runner->state_for = g_strdup("frozen state duration");
+    RunnerRefreshResult *failure = g_new0(RunnerRefreshResult, 1U);
+    failure->app = app; failure->generation = app->config_generation;
+    failure->error = g_strdup("Fixture runner access denied (HTTP 403)");
+    g_atomic_int_set(&app->runner_refreshing, 1);
+    runner_apply_idle(failure);
+    tick_timer_cb(app);
+    g_assert_true(app->runner_data_stale);
+    g_assert_cmpstr(runner->state_for, ==, "frozen state duration");
+    g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(app->workspace_metric_value[0])), ==, "—");
+    g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(app->connection_label)), "last known"));
+    app->fetch_transport = runner_http_get; app->fetch_context = NULL;
+    g_cond_clear(&fixture.condition); g_mutex_clear(&fixture.mutex);
+}
+
+/* Exercise the installed graphical shell using isolated settings and an offline
+ * transport. No user token, account, service or network operation is accessed. */
 static int ui_self_test(int *argc, char ***argv)
 {
+    GError *error = NULL;
+    char *directory = g_dir_make_tmp("runnerscope-ui-test-XXXXXX", &error);
+    g_assert_no_error(error);
+    char *config_directory = g_build_filename(directory, "config", NULL);
+    char *state_directory = g_build_filename(directory, "state", NULL);
+    g_setenv("XDG_CONFIG_HOME", config_directory, TRUE);
+    g_setenv("XDG_STATE_HOME", state_directory, TRUE);
     if (!gtk_init_check(argc, argv)) return 1;
+    RunnerConfig fixture_config;
+    runner_config_defaults(&fixture_config);
+    g_strlcpy(fixture_config.organisation, "FixtureOrg", sizeof(fixture_config.organisation));
+    g_strlcpy(fixture_config.github_token, "offline-config-fixture", sizeof(fixture_config.github_token));
+    fixture_config.expected_runners = 15U;
+    g_assert_true(save_config(&fixture_config, &error));
+    g_assert_no_error(error);
+    char *path = config_path();
+    g_assert_cmpint(g_chmod(path, 0644), ==, 0);
+    g_assert_true(save_config(&fixture_config, &error));
+    GStatBuf status;
+    g_assert_cmpint(g_stat(path, &status), ==, 0);
+    g_assert_cmpuint(status.st_mode & 0777U, ==, 0600U);
+    RunnerConfig reloaded;
+    g_assert_true(load_config(&reloaded, &error));
+    g_assert_cmpstr(reloaded.github_token, ==, fixture_config.github_token);
+    g_assert_cmpuint(reloaded.expected_runners, ==, 15U);
+    g_assert_true(g_file_set_contents(path, "{bad settings", -1, &error));
+    g_assert_false(load_config(&reloaded, &error));
+    g_assert_nonnull(error);
+    g_clear_error(&error);
+    char *preserved = NULL;
+    g_assert_true(g_file_get_contents(path, &preserved, NULL, &error));
+    g_assert_cmpstr(preserved, ==, "{bad settings"); g_free(preserved);
+    static const char embedded_nul[] = "{\"organisation\":\"FixtureOrg\"}\0trailing data";
+    g_assert_true(g_file_set_contents(path, embedded_nul, (gssize)sizeof(embedded_nul) - 1, &error));
+    g_assert_false(load_config(&reloaded, &error));
+    g_assert_nonnull(error); g_clear_error(&error);
+    char *oversized = g_malloc0(65538U);
+    memset(oversized, ' ', 65537U);
+    g_assert_true(g_file_set_contents(path, oversized, 65537, &error));
+    g_assert_false(load_config(&reloaded, &error));
+    g_assert_nonnull(error); g_clear_error(&error); g_free(oversized);
+    g_assert_true(g_file_set_contents(path, "{\"organisation\":\"FixtureOrg\"}", -1, &error));
+    g_assert_true(load_config(&reloaded, &error));
+    g_assert_cmpstr(reloaded.github_token, ==, "");
+    g_assert_true(save_config(&fixture_config, &error));
     RunnerScopeApp app;
     app_init(&app);
     app.application = gtk_application_new("net.ssmith.runnerscope.ui-test", G_APPLICATION_NON_UNIQUE);
@@ -4434,10 +4750,28 @@ static int ui_self_test(int *argc, char ***argv)
     g_assert_false(g_hash_table_contains(app.runner_card_by_name, "Fixture-0"));
     g_assert_false(gtk_widget_get_visible(app.selection_card));
     g_assert_cmpint(gtk_tree_model_iter_n_children(GTK_TREE_MODEL(app.runner_store), NULL), ==, 2);
+    guint settings_attempts = 0U;
+    g_idle_add(ui_test_settings_response, &settings_attempts);
+    g_assert_true(settings_dialog(&app, FALSE));
+    g_assert_true(load_config(&reloaded, &error));
+    g_assert_cmpstr(reloaded.github_token, ==, "offline-settings-fixture");
+    g_assert_cmpuint(reloaded.expected_runners, ==, 15U);
+    g_assert_cmpuint(app.config_generation, ==, 2U);
+    ui_test_provider_failures(&app);
     gtk_widget_destroy(app.window);
     g_object_unref(app.application);
     app_destroy(&app);
-    puts("Runner cards UI contract passed: state, utilisation, details, filtering, reuse, selection and table.");
+    char *history = state_path();
+    (void)g_unlink(history);
+    char *history_directory = g_path_get_dirname(history);
+    (void)g_rmdir(history_directory);
+    (void)g_unlink(path);
+    char *settings_directory = g_path_get_dirname(path);
+    (void)g_rmdir(settings_directory);
+    (void)g_rmdir(config_directory); (void)g_rmdir(state_directory); (void)g_rmdir(directory);
+    g_free(history_directory); g_free(settings_directory); g_free(history); g_free(path);
+    g_free(config_directory); g_free(state_directory); g_free(directory);
+    puts("Runner UI passed: cards, masked token, private settings save/reload, corrupt-file preservation, configuration snapshots, stale generations and provider failures.");
     return 0;
 }
 
