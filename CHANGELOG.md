@@ -4,6 +4,17 @@
 
 No unreleased changes.
 
+## 1.3.6 - 2026-10-15
+
+- Advance the exact repository gitlink to released Infiltratr Common 1.19.42 and remove the duplicated Common version/commit literals from CMake and README.
+- Derive Common checkout validation from the gitlink itself so dependency identity has one authority.
+- Collapse Linux qualification into the clean Debian build/install path and run the full CTest suite from `dh_auto_test`, including the shared UI contracts.
+- Collapse Windows qualification into one hosted x64 build so the executable that passes runtime tests is the executable staged for release.
+- Replace the separate commit-message-gated release workflow with same-run publication from qualified artifacts and enforce VERSION/tag/main consistency.
+- Pin artifact upload/download actions to immutable commits and remove redundant font-cache maintainer scripts in favour of standard fontconfig triggers.
+- Make invalid shared UI page/platform inputs fail closed instead of silently projecting a plausible default and add a dedicated failure-semantics CTest.
+- Record the remaining provider/configuration/persistence/process ownership debt separately in issue #14 rather than introducing another implementation path.
+
 ## 1.3.5 - 2026-10-06
 
 - Move runner-card state/presentation and selected-runner detail composition through the shared native-renderer seam.
@@ -148,7 +159,6 @@ No unreleased changes.
 - Release completed worker references without waiting on the GTK main thread.
 - Keep the exact latest Infiltratr Common 1.19.38 / 7070c5812b50821fd7580101cb2289a3184f6b2c pin.
 
-
 ## 1.2.28 - 2026-10-03
 
 - Align the Linux shell with the current Infiltrator OS titlebar, navigation, semantic palette and Common design metrics.
@@ -198,7 +208,6 @@ No unreleased changes.
 - Give native Linux notebook tabs the same 6 px compact corner radius as the surrounding publisher chrome.
 - Preserve runner monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
 
-
 ## 1.2.12 - 2026-09-25
 
 - Align all native Linux buttons with the suite-wide 30 px desktop control height instead of limiting that height to footer actions.
@@ -220,7 +229,6 @@ No unreleased changes.
 - Align the native Linux product title with the 18 px publisher titlebar scale.
 - Preserve monitoring behaviour, platform architecture, dependencies and Common APIs unchanged.
 
-
 ## 1.2.8 - 2026-09-24
 
 - Align native Linux generic button corners with the suite-wide 6 px compact control radius.
@@ -240,7 +248,6 @@ No unreleased changes.
 
 - Bring the native Linux product heading onto the 28 px publisher desktop title scale.
 - Preserve monitoring behaviour, provider access, layout structure, dependencies and Common APIs.
-
 
 ## 1.2.4 - 2026-09-24
 
@@ -279,7 +286,6 @@ No unreleased changes.
 - Show the linked Common version directly in native application footers.
 - Keep the stricter `src/native2/` first-party work as an incremental dependency-minimisation track rather than allowing it to displace the native product.
 - Add native Linux/Windows CI and package guards that reject a return to Python/Tk shipping artifacts.
-
 
 ## 1.1.13 - 2026-09-21
 
@@ -349,7 +355,6 @@ No unreleased changes.
 - Renamed the application from RunnerScope to Runner Monitor.
 - Kept the existing `runnerscope` package, executable, configuration paths and desktop WM class for upgrade compatibility.
 - Kept all runner monitoring, job resolution, history and local-service functions unchanged.
-
 
 ## 1.0.3
 

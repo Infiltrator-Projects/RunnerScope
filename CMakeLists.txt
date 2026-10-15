@@ -15,35 +15,52 @@ if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
+# The repository gitlink is the sole exact identity of Common.  Do not mirror
+# its version or commit in CMake: duplicated literals turn one dependency pin
+# into several independently editable authorities.
 set(RUNNERSCOPE_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/infiltratr-common")
-set(RUNNERSCOPE_COMMON_EXPECTED_VERSION "1.19.38")
-set(RUNNERSCOPE_COMMON_EXPECTED_COMMIT "7070c5812b50821fd7580101cb2289a3184f6b2c")
-if(NOT EXISTS "${RUNNERSCOPE_COMMON_DIR}/VERSION")
-    message(FATAL_ERROR "Infiltratr Common is missing. Run: git submodule update --init --recursive")
+if(NOT EXISTS "${RUNNERSCOPE_COMMON_DIR}/VERSION" OR
+   NOT EXISTS "${RUNNERSCOPE_COMMON_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR
+        "Infiltratr Common is missing. Run: git submodule update --init --recursive")
 endif()
+
 file(READ "${RUNNERSCOPE_COMMON_DIR}/VERSION" RUNNERSCOPE_COMMON_VERSION)
 string(STRIP "${RUNNERSCOPE_COMMON_VERSION}" RUNNERSCOPE_COMMON_VERSION)
-if(NOT RUNNERSCOPE_COMMON_VERSION STREQUAL RUNNERSCOPE_COMMON_EXPECTED_VERSION)
-    message(FATAL_ERROR
-        "Runner Monitor requires Common ${RUNNERSCOPE_COMMON_EXPECTED_VERSION}; "
-        "found ${RUNNERSCOPE_COMMON_VERSION}")
+if(RUNNERSCOPE_COMMON_VERSION STREQUAL "")
+    message(FATAL_ERROR "Infiltratr Common VERSION is empty")
 endif()
+
+# When configuring from a Git checkout, fail closed if the populated submodule
+# is not the commit recorded by this source revision.  This derives the
+# expectation from the gitlink itself rather than another hand-maintained pin.
 find_package(Git QUIET)
-if(GIT_FOUND AND EXISTS "${RUNNERSCOPE_COMMON_DIR}/.git")
+if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git" AND
+   EXISTS "${RUNNERSCOPE_COMMON_DIR}/.git")
     execute_process(
-        COMMAND "${GIT_EXECUTABLE}" -C "${RUNNERSCOPE_COMMON_DIR}" rev-parse HEAD
-        RESULT_VARIABLE RUNNERSCOPE_COMMON_GIT_RESULT
-        OUTPUT_VARIABLE RUNNERSCOPE_COMMON_COMMIT
+        COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_CURRENT_SOURCE_DIR}"
+                rev-parse "HEAD:infiltratr-common"
+        RESULT_VARIABLE RUNNERSCOPE_COMMON_EXPECTED_RESULT
+        OUTPUT_VARIABLE RUNNERSCOPE_COMMON_EXPECTED_COMMIT
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET)
-    if(NOT RUNNERSCOPE_COMMON_GIT_RESULT EQUAL 0 OR
-       NOT RUNNERSCOPE_COMMON_COMMIT STREQUAL RUNNERSCOPE_COMMON_EXPECTED_COMMIT)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${RUNNERSCOPE_COMMON_DIR}" rev-parse HEAD
+        RESULT_VARIABLE RUNNERSCOPE_COMMON_ACTUAL_RESULT
+        OUTPUT_VARIABLE RUNNERSCOPE_COMMON_ACTUAL_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if(NOT RUNNERSCOPE_COMMON_EXPECTED_RESULT EQUAL 0 OR
+       NOT RUNNERSCOPE_COMMON_ACTUAL_RESULT EQUAL 0 OR
+       RUNNERSCOPE_COMMON_EXPECTED_COMMIT STREQUAL "" OR
+       NOT RUNNERSCOPE_COMMON_ACTUAL_COMMIT STREQUAL RUNNERSCOPE_COMMON_EXPECTED_COMMIT)
         message(FATAL_ERROR
-            "Runner Monitor requires Common commit "
-            "${RUNNERSCOPE_COMMON_EXPECTED_COMMIT}; found "
-            "${RUNNERSCOPE_COMMON_COMMIT}")
+            "Infiltratr Common checkout does not match this revision's gitlink: "
+            "expected ${RUNNERSCOPE_COMMON_EXPECTED_COMMIT}, "
+            "found ${RUNNERSCOPE_COMMON_ACTUAL_COMMIT}")
     endif()
 endif()
+message(STATUS "Runner Monitor Common: ${RUNNERSCOPE_COMMON_VERSION}")
 
 set(INFILTRATR_COMMON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(INFILTRATR_COMMON_BUILD_SHARED OFF CACHE BOOL "" FORCE)
@@ -205,3 +222,9 @@ add_executable(runnerscope-ui-contract-test
 )
 target_link_libraries(runnerscope-ui-contract-test PRIVATE runnerscope_ui_contract)
 add_test(NAME runnerscope-ui-contract-test COMMAND runnerscope-ui-contract-test)
+
+add_executable(runnerscope-ui-failure-semantics-test
+    tests/ui_failure_semantics_test.c
+)
+target_link_libraries(runnerscope-ui-failure-semantics-test PRIVATE runnerscope_ui_contract)
+add_test(NAME runnerscope-ui-failure-semantics-test COMMAND runnerscope-ui-failure-semantics-test)

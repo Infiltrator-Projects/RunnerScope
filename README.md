@@ -2,15 +2,15 @@
 
 **Project copyright:** © 1993-2026 Shannon Smith
 
-Runner Monitor is a native C desktop monitor for GitHub Actions self-hosted runners. The shipping application is compiled on both supported platforms and links directly against the repository-pinned Infiltratr Common 1.19.38 library.
+Runner Monitor is a native C desktop monitor for GitHub Actions self-hosted runners. The shipping application is compiled on both supported platforms and links directly against the exact Infiltratr Common revision recorded by the repository gitlink.
 
-There is no Python or Tk/Tkinter runtime in the 1.2 native product line.
+There is no Python or Tk/Tkinter runtime in the current native product line.
 
 ## Native architecture
 
 - Linux: C11 + GTK 3 desktop shell, built as the ELF executable `/usr/bin/runnerscope`.
 - Windows: C11 + native Win32 shell, built as `Runner-Monitor-Windows-v<version>.exe`.
-- Shared dependency: Infiltratr Common 1.19.38 at `7070c5812b50821fd7580101cb2289a3184f6b2c`.
+- Shared dependency: the exact `infiltratr-common` gitlink recorded by this Runner Monitor revision.
 - Common owns the product-neutral palette, typography/metrics contract, formatting and other shared primitives.
 - Runner Monitor owns runner/provider semantics, local-service behaviour and application policy.
 - The current provider credential/API boundary is the authenticated GitHub CLI (`gh`); there is one shipping implementation per platform rather than a parallel experimental product path.
@@ -91,6 +91,8 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
+
+CMake verifies that a populated Common submodule matches the gitlink recorded by the Runner Monitor revision; there is no second hand-maintained Common commit/version pin in the build definition.
 
 On Windows, configure with the Visual Studio generator and build the Release configuration.
 

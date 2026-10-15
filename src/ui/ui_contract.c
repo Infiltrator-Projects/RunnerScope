@@ -93,6 +93,12 @@ static const RunnerUiComponentSpec k_components[] = {
     {"shell.footer.status", "shell.footer", RUNNER_UI_COMPONENT_STATUS}
 };
 
+static bool platform_valid(RunnerUiPlatform platform)
+{
+    return platform == RUNNER_UI_PLATFORM_LINUX ||
+           platform == RUNNER_UI_PLATFORM_WINDOWS;
+}
+
 const char *runner_ui_product_title(void)
 {
     return "Runner Monitor";
@@ -106,14 +112,14 @@ const char *runner_ui_product_family(void)
 const RunnerUiPageSpec *runner_ui_page(RunnerUiPageId id)
 {
     if ((int)id < 0 || id >= RUNNER_UI_PAGE_COUNT)
-        return &k_pages[RUNNER_UI_PAGE_RUNNERS];
+        return NULL;
     return &k_pages[id];
 }
 
 const char *runner_ui_page_nav_label(const RunnerUiPageSpec *page,
                                      RunnerUiPlatform platform)
 {
-    if (!page) page = &k_pages[RUNNER_UI_PAGE_RUNNERS];
+    if (!page || !platform_valid(platform)) return NULL;
     if (page->id != RUNNER_UI_PAGE_LOCAL_HEALTH)
         return page->nav_label;
     return platform == RUNNER_UI_PLATFORM_WINDOWS
@@ -123,7 +129,7 @@ const char *runner_ui_page_nav_label(const RunnerUiPageSpec *page,
 const char *runner_ui_page_title(const RunnerUiPageSpec *page,
                                  RunnerUiPlatform platform)
 {
-    if (!page) page = &k_pages[RUNNER_UI_PAGE_RUNNERS];
+    if (!page || !platform_valid(platform)) return NULL;
     if (page->id != RUNNER_UI_PAGE_LOCAL_HEALTH)
         return page->title;
     return platform == RUNNER_UI_PLATFORM_WINDOWS

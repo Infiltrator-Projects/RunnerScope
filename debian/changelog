@@ -1,3 +1,19 @@
+infiltrator-runner-monitor (1.3.6) unstable; urgency=medium
+
+  * Advance the exact Common gitlink to released Infiltratr Common 1.19.42 and
+    remove duplicate Common version/commit authorities from the build/docs.
+  * Qualify Linux through one clean Debian build/install path and run the full
+    CTest suite from dh_auto_test.
+  * Qualify and publish the same hosted Windows x64 executable instead of
+    testing a separate rebuild from the release artifact.
+  * Publish from the same CI run, enforce VERSION/tag/main consistency and
+    remove commit-message-gated cross-workflow release choreography.
+  * Pin artifact actions, remove redundant font-cache maintainer scripts and
+    make invalid shared UI page/platform inputs fail closed with regression
+    coverage.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Thu, 15 Oct 2026 14:40:00 +1100
+
 infiltrator-runner-monitor (1.3.5) unstable; urgency=medium
 
   * Move runner-card presentation and selected-runner detail composition behind

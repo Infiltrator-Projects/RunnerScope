@@ -24,6 +24,12 @@ static const RunnerUiChromeActionSpec k_footer_actions[] = {
     {RUNNER_UI_CHROME_REFRESH, "Refresh now", "Refresh the active workspace now.", true}
 };
 
+static bool platform_valid(RunnerUiPlatform platform)
+{
+    return platform == RUNNER_UI_PLATFORM_LINUX ||
+           platform == RUNNER_UI_PLATFORM_WINDOWS;
+}
+
 bool runner_ui_render_header(const RunnerUiRenderer *renderer)
 {
     if (!renderer || !renderer->begin_header || !renderer->header_action ||
@@ -50,7 +56,7 @@ bool runner_ui_render_navigation(const RunnerUiRenderer *renderer,
 {
     if (!renderer || !renderer->begin_navigation ||
         !renderer->navigation_separator || !renderer->navigation_item ||
-        !renderer->end_navigation)
+        !renderer->end_navigation || !platform_valid(platform))
         return false;
     if ((int)selected_page < 0 || selected_page >= RUNNER_UI_PAGE_COUNT)
         return false;
@@ -61,13 +67,16 @@ bool runner_ui_render_navigation(const RunnerUiRenderer *renderer,
 
     for (int i = 0; i < RUNNER_UI_PAGE_COUNT; ++i) {
         const RunnerUiPageSpec *page = runner_ui_page((RunnerUiPageId)i);
+        if (!page) return false;
+        const char *platform_label = runner_ui_page_nav_label(page, platform);
+        if (!platform_label || !platform_label[0]) return false;
         if (page->separator_before &&
             !renderer->navigation_separator(renderer->context, page))
             return false;
         if (!renderer->navigation_item(
                 renderer->context,
                 page,
-                runner_ui_page_nav_label(page, platform),
+                platform_label,
                 page->id == selected_page))
             return false;
     }
@@ -83,14 +92,14 @@ bool runner_ui_render_workspace_summary(
     if (!renderer || !renderer->begin_workspace_summary ||
         !renderer->workspace_metric || !renderer->end_workspace_summary ||
         !state || (int)state->page < 0 || state->page >= RUNNER_UI_PAGE_COUNT ||
-        (platform != RUNNER_UI_PLATFORM_LINUX &&
-         platform != RUNNER_UI_PLATFORM_WINDOWS))
+        !platform_valid(platform))
         return false;
 
     for (size_t i = 0U; i < 4U; ++i)
         if (!state->metric_values[i]) return false;
 
     const RunnerUiPageSpec *page = runner_ui_page(state->page);
+    if (!page) return false;
     const char *platform_title = runner_ui_page_title(page, platform);
     if (!platform_title || !platform_title[0]) return false;
     if (!renderer->begin_workspace_summary(
@@ -105,7 +114,6 @@ bool runner_ui_render_workspace_summary(
 
     return renderer->end_workspace_summary(renderer->context);
 }
-
 
 static const char *runner_ui_text(const char *value)
 {
