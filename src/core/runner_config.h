@@ -30,6 +30,9 @@ bool runner_config_validate(const RunnerConfig *config,
                             char *error,
                             size_t error_size);
 
+/* Older native theme display names are accepted case-insensitively. Legacy
+ * timer values such as 2.0 are accepted only when the fraction is all zero;
+ * counts remain JSON integers. Failed parsing leaves the destination intact. */
 bool runner_config_parse_json(const char *json,
                               RunnerConfig *config,
                               char *error,

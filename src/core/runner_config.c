@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "core/runner_config.h"
+#include <infiltratr/design.h>
 #include <infiltratr/escape.h>
 
 #include <ctype.h>
@@ -233,12 +234,17 @@ static bool read_string(const char *json, const char *key,
 
 static bool read_uint(const char *json, const char *key,
                       unsigned int *output, bool *present,
+                      bool legacy_decimal,
                       char *error, size_t error_size)
 {
     const char *cursor = value_start(json, key, present, error, error_size);
     if (!present || !*present) return true;
     if (!cursor || *cursor == '-' || !isdigit((unsigned char)*cursor)) {
         set_error(error, error_size, "configuration integer value is malformed");
+        return false;
+    }
+    if (*cursor == '0' && isdigit((unsigned char)cursor[1])) {
+        set_error(error, error_size, "configuration integer has a leading zero");
         return false;
     }
 
@@ -248,6 +254,23 @@ static bool read_uint(const char *json, const char *key,
     if (errno != 0 || end == cursor || parsed > UINT_MAX) {
         set_error(error, error_size, "configuration integer value is out of range");
         return false;
+    }
+    /* Earlier JSON writers stored timer defaults as 2.0/45.0/10.0. Accept
+     * their exact integer values without a floating conversion: even a tiny
+     * nonzero fraction near UINT_MAX must not be rounded into an integer. */
+    if (legacy_decimal && *end == '.') {
+        end++;
+        if (!isdigit((unsigned char)*end)) {
+            set_error(error, error_size, "configuration interval fraction is malformed");
+            return false;
+        }
+        while (isdigit((unsigned char)*end)) {
+            if (*end != '0') {
+                set_error(error, error_size, "configuration intervals must contain whole seconds");
+                return false;
+            }
+            end++;
+        }
     }
     end = (char *)skip_space(end);
     if (!delimiter(*end)) {
@@ -311,8 +334,11 @@ bool runner_config_validate(const RunnerConfig *config,
             return false;
         }
     }
-    if (config->runner_poll_seconds < 3U) {
-        set_error(error, error_size, "runner_poll_seconds must be at least 3");
+    /* The first native releases supported runner polls from one second and
+     * local-health polls from five. Keep those saved values valid; defaults
+     * for newly created settings remain deliberately separate from limits. */
+    if (config->runner_poll_seconds < 1U) {
+        set_error(error, error_size, "runner_poll_seconds must be at least 1");
         return false;
     }
     if (config->activity_scan_seconds < 10U) {
@@ -323,8 +349,8 @@ bool runner_config_validate(const RunnerConfig *config,
         set_error(error, error_size, "repository_scan_limit must be at least 1");
         return false;
     }
-    if (config->local_health_seconds < 15U) {
-        set_error(error, error_size, "local_health_seconds must be at least 15");
+    if (config->local_health_seconds < 5U) {
+        set_error(error, error_size, "local_health_seconds must be at least 5");
         return false;
     }
     if (!runner_config_theme_key(config->theme_mode)) {
@@ -355,31 +381,38 @@ bool runner_config_parse_json(const char *json, RunnerConfig *config,
                      sizeof(parsed.github_token), &present, error, error_size))
         return false;
     if (!read_uint(json, "expected_runners", &parsed.expected_runners,
-                   &present, error, error_size))
+                   &present, false, error, error_size))
         return false;
     if (!read_uint(json, "runner_poll_seconds", &parsed.runner_poll_seconds,
-                   &present, error, error_size))
+                   &present, true, error, error_size))
         return false;
     if (!read_uint(json, "activity_scan_seconds", &parsed.activity_scan_seconds,
-                   &present, error, error_size))
+                   &present, true, error, error_size))
         return false;
     if (!read_uint(json, "repository_scan_limit", &parsed.repository_scan_limit,
-                   &present, error, error_size))
+                   &present, false, error, error_size))
         return false;
     if (!read_uint(json, "local_health_seconds", &parsed.local_health_seconds,
-                   &present, error, error_size))
+                   &present, true, error, error_size))
         return false;
 
     char theme[24] = "system";
     if (!read_string(json, "theme_mode", theme, sizeof(theme),
                      &present, error, error_size))
         return false;
-    if (strcmp(theme, "system") == 0) parsed.theme_mode = RUNNER_THEME_SYSTEM;
-    else if (strcmp(theme, "day") == 0) parsed.theme_mode = RUNNER_THEME_DAY;
-    else if (strcmp(theme, "night") == 0) parsed.theme_mode = RUNNER_THEME_NIGHT;
-    else {
+    InfiltratrThemeMode common_mode;
+    /* Native versions that persisted Common's display name wrote System,
+     * Day or Night. Reuse Common's case-insensitive parser for both old names
+     * and current lowercase keys; serialization still emits canonical keys. */
+    if (!infiltratr_theme_mode_parse(theme, &common_mode)) {
         set_error(error, error_size, "theme_mode must be system, day or night");
         return false;
+    }
+    switch (common_mode) {
+    case INFILTRATR_THEME_SYSTEM: parsed.theme_mode = RUNNER_THEME_SYSTEM; break;
+    case INFILTRATR_THEME_DAY: parsed.theme_mode = RUNNER_THEME_DAY; break;
+    case INFILTRATR_THEME_NIGHT: parsed.theme_mode = RUNNER_THEME_NIGHT; break;
+    default: return false;
     }
 
     if (!runner_config_validate(&parsed, error, error_size)) return false;

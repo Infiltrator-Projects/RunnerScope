@@ -2855,6 +2855,7 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         }
     }
     gtk_entry_set_text(GTK_ENTRY(entries[0]), app->config.organisation);
+    gtk_widget_set_tooltip_text(entries[0], "Your saved GitHub organisation is filled in automatically. Keep it unless you want to monitor another organisation.");
     gtk_entry_set_visibility(GTK_ENTRY(entries[1]), FALSE);
     gtk_entry_set_input_purpose(GTK_ENTRY(entries[1]), GTK_INPUT_PURPOSE_PASSWORD);
     gtk_entry_set_text(GTK_ENTRY(entries[1]), app->config.github_token);
@@ -2869,19 +2870,33 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
     gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(theme), "night", "Night");
     gtk_combo_box_set_active(GTK_COMBO_BOX(theme), (gint)app->config.theme_mode);
     gtk_grid_attach(GTK_GRID(grid), theme, 1, 7, 1, 1);
-    GtkWidget *hint = gtk_label_new("Use a token with organisation Self-hosted runners: Read permission.\nThe token is saved in your private settings file. Save and test checks runner access.");
+    GtkWidget *hint = gtk_label_new(
+        "Create a personal access token on GitHub, then paste it above.\n"
+        "Select your organisation as Resource owner.\n"
+        "Organisation permissions: Self-hosted runners: Read.\n"
+        "Repository permissions: Actions: Read for monitored repositories.\n"
+        "The token is saved in your private settings file.\n"
+        "Save and test checks runner access.");
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_label_set_max_width_chars(GTK_LABEL(hint), 65);
+    gtk_label_set_xalign(GTK_LABEL(hint), 0.0F);
     gtk_widget_set_halign(hint, GTK_ALIGN_START);
     gtk_grid_attach(GTK_GRID(grid), hint, 0, 8, 2, 1);
+    GtkWidget *create_token = gtk_link_button_new_with_label(
+        "https://github.com/settings/personal-access-tokens/new", "Create token on GitHub");
+    gtk_widget_set_halign(create_token, GTK_ALIGN_START);
+    gtk_widget_set_tooltip_text(create_token, "Open GitHub's personal access token settings in your browser.");
+    gtk_grid_attach(GTK_GRID(grid), create_token, 0, 9, 2, 1);
     GtkWidget *error_label = gtk_label_new(app->config_error ? app->config_error : "");
     gtk_label_set_line_wrap(GTK_LABEL(error_label), TRUE);
     gtk_label_set_max_width_chars(GTK_LABEL(error_label), 65);
     gtk_widget_set_halign(error_label, GTK_ALIGN_START);
-    gtk_grid_attach(GTK_GRID(grid), error_label, 0, 9, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), error_label, 0, 10, 2, 1);
     g_object_set_data(G_OBJECT(dialog), "token-entry", entries[1]);
     g_object_set_data(G_OBJECT(dialog), "organisation-entry", entries[0]);
     g_object_set_data(G_OBJECT(dialog), "settings-error", error_label);
+    g_object_set_data(G_OBJECT(dialog), "token-help", hint);
+    g_object_set_data(G_OBJECT(dialog), "create-token-link", create_token);
     gtk_widget_show_all(dialog);
     gboolean saved = FALSE;
     while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
@@ -4538,9 +4553,14 @@ static void ui_test_wait_refresh(RunnerScopeApp *app, gboolean activity)
     g_assert_cmpint(g_atomic_int_get(activity ? &app->activity_refreshing : &app->runner_refreshing), ==, 0);
 }
 
+typedef struct {
+    guint attempts;
+    const RunnerConfig *expected;
+} UiTestSettings;
+
 static gboolean ui_test_settings_response(gpointer data)
 {
-    guint *attempt = data;
+    UiTestSettings *test = data;
     GList *windows = gtk_window_list_toplevels();
     gboolean found = FALSE;
     for (GList *item = windows; item; item = item->next) {
@@ -4550,20 +4570,40 @@ static gboolean ui_test_settings_response(gpointer data)
         g_assert_cmpint(gtk_entry_get_input_purpose(GTK_ENTRY(entry)), ==, GTK_INPUT_PURPOSE_PASSWORD);
         gtk_entry_set_text(GTK_ENTRY(entry), "offline-settings-fixture");
         GtkWidget *organisation = g_object_get_data(G_OBJECT(item->data), "organisation-entry");
-        if (*attempt == 0U) gtk_entry_set_text(GTK_ENTRY(organisation), "");
+        if (test->attempts == 0U) {
+            g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(organisation)), ==, test->expected->organisation);
+            GtkWidget *grid = gtk_widget_get_parent(entry);
+            const unsigned int values[] = {test->expected->expected_runners, test->expected->runner_poll_seconds,
+                test->expected->activity_scan_seconds, test->expected->repository_scan_limit, test->expected->local_health_seconds};
+            for (guint i = 0U; i < G_N_ELEMENTS(values); ++i) {
+                GtkWidget *number_entry = gtk_grid_get_child_at(GTK_GRID(grid), 1, (gint)i + 2);
+                unsigned int value = 0U;
+                g_assert_true(entry_uint(number_entry, &value));
+                g_assert_cmpuint(value, ==, values[i]);
+            }
+            GtkWidget *theme = gtk_grid_get_child_at(GTK_GRID(grid), 1, 7);
+            g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(theme)), ==, (gint)test->expected->theme_mode);
+            GtkWidget *help = g_object_get_data(G_OBJECT(item->data), "token-help");
+            g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(help)), "Self-hosted runners: Read"));
+            g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(help)), "Actions: Read"));
+            GtkWidget *link = g_object_get_data(G_OBJECT(item->data), "create-token-link");
+            g_assert_cmpstr(gtk_link_button_get_uri(GTK_LINK_BUTTON(link)), ==,
+                "https://github.com/settings/personal-access-tokens/new");
+            gtk_entry_set_text(GTK_ENTRY(organisation), "");
+        }
         else {
             GtkWidget *message = g_object_get_data(G_OBJECT(item->data), "settings-error");
             g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(message)), "organisation"));
-            gtk_entry_set_text(GTK_ENTRY(organisation), "FixtureOrg");
+            gtk_entry_set_text(GTK_ENTRY(organisation), test->expected->organisation);
         }
-        (*attempt)++;
+        test->attempts++;
         gtk_dialog_response(GTK_DIALOG(item->data), GTK_RESPONSE_ACCEPT);
         found = TRUE;
         break;
     }
     g_list_free(windows);
     g_assert_true(found);
-    return *attempt == 1U ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
+    return test->attempts == 1U ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
 }
 
 static void ui_test_provider_failures(RunnerScopeApp *app)
@@ -4680,9 +4720,40 @@ static int ui_self_test(int *argc, char ***argv)
     g_assert_true(g_file_set_contents(path, "{\"organisation\":\"FixtureOrg\"}", -1, &error));
     g_assert_true(load_config(&reloaded, &error));
     g_assert_cmpstr(reloaded.github_token, ==, "");
-    g_assert_true(save_config(&fixture_config, &error));
+    /* Exact configuration written by the previous native Linux application.
+     * Reading it must preserve the observation cadence and must not publish a
+     * replacement before the user explicitly saves a token. */
+    static const char legacy_config[] =
+        "{\n"
+        "  \"organisation\": \"Infiltrator-Projects\",\n"
+        "  \"expected_runners\": 15,\n"
+        "  \"runner_poll_seconds\": 2,\n"
+        "  \"activity_scan_seconds\": 45,\n"
+        "  \"repository_scan_limit\": 25,\n"
+        "  \"local_health_seconds\": 10,\n"
+        "  \"theme_mode\": \"System\"\n"
+        "}\n";
+    g_assert_true(g_file_set_contents(path, legacy_config, -1, &error));
+    g_assert_true(load_config(&reloaded, &error));
+    g_assert_no_error(error);
+    g_assert_cmpstr(reloaded.organisation, ==, "Infiltrator-Projects");
+    g_assert_cmpstr(reloaded.github_token, ==, "");
+    g_assert_cmpuint(reloaded.expected_runners, ==, 15U);
+    g_assert_cmpuint(reloaded.runner_poll_seconds, ==, 2U);
+    g_assert_cmpuint(reloaded.activity_scan_seconds, ==, 45U);
+    g_assert_cmpuint(reloaded.repository_scan_limit, ==, 25U);
+    g_assert_cmpuint(reloaded.local_health_seconds, ==, 10U);
+    g_assert_cmpint(reloaded.theme_mode, ==, RUNNER_THEME_SYSTEM);
+    g_assert_true(g_file_get_contents(path, &preserved, NULL, &error));
+    g_assert_cmpstr(preserved, ==, legacy_config); g_free(preserved);
     RunnerScopeApp app;
     app_init(&app);
+    g_assert_null(app.config_error);
+    g_assert_cmpstr(app.config.organisation, ==, "Infiltrator-Projects");
+    g_assert_cmpuint(app.config.runner_poll_seconds, ==, 2U);
+    g_assert_cmpuint(app.config.local_health_seconds, ==, 10U);
+    g_assert_true(g_file_get_contents(path, &preserved, NULL, &error));
+    g_assert_cmpstr(preserved, ==, legacy_config); g_free(preserved);
     app.application = gtk_application_new("net.ssmith.runnerscope.ui-test", G_APPLICATION_NON_UNIQUE);
     if (!g_application_register(G_APPLICATION(app.application), NULL, NULL)) return 2;
     build_ui(&app);
@@ -4750,12 +4821,18 @@ static int ui_self_test(int *argc, char ***argv)
     g_assert_false(g_hash_table_contains(app.runner_card_by_name, "Fixture-0"));
     g_assert_false(gtk_widget_get_visible(app.selection_card));
     g_assert_cmpint(gtk_tree_model_iter_n_children(GTK_TREE_MODEL(app.runner_store), NULL), ==, 2);
-    guint settings_attempts = 0U;
-    g_idle_add(ui_test_settings_response, &settings_attempts);
-    g_assert_true(settings_dialog(&app, FALSE));
+    UiTestSettings settings_test = {0U, &reloaded};
+    g_idle_add(ui_test_settings_response, &settings_test);
+    g_assert_true(settings_dialog(&app, TRUE));
     g_assert_true(load_config(&reloaded, &error));
     g_assert_cmpstr(reloaded.github_token, ==, "offline-settings-fixture");
+    g_assert_cmpstr(reloaded.organisation, ==, "Infiltrator-Projects");
     g_assert_cmpuint(reloaded.expected_runners, ==, 15U);
+    g_assert_cmpuint(reloaded.runner_poll_seconds, ==, 2U);
+    g_assert_cmpuint(reloaded.activity_scan_seconds, ==, 45U);
+    g_assert_cmpuint(reloaded.repository_scan_limit, ==, 25U);
+    g_assert_cmpuint(reloaded.local_health_seconds, ==, 10U);
+    g_assert_cmpint(reloaded.theme_mode, ==, RUNNER_THEME_SYSTEM);
     g_assert_cmpuint(app.config_generation, ==, 2U);
     ui_test_provider_failures(&app);
     gtk_widget_destroy(app.window);

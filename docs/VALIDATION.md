@@ -19,7 +19,7 @@ The toolkit-neutral configuration test runs on every platform and must prove:
 3. deterministic serialisation and parse/serialise round-tripping;
 4. duplicate known-key rejection;
 5. invalid organisation, token and interval rejection; and
-6. preservation of every unrelated field when organisation/token are changed, including legacy files with no token.
+6. preservation of every unrelated field when organisation/token are changed, including legacy files with no token, title-case theme names, historical 2-second runner/10-second health intervals, and whole-second decimal timer values.
 
 The last point is a regression gate for the pre-1.3.8 Windows Settings defect that rewrote non-Windows settings with hard-coded defaults.
 

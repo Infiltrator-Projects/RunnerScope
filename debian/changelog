@@ -1,3 +1,13 @@
+infiltrator-runner-monitor (1.3.10) unstable; urgency=medium
+
+  * Restore legacy theme and refresh interval compatibility without resetting
+    saved organisation, expected runner count or other preferences.
+  * Accept whole-second timer values written with a decimal suffix.
+  * Clarify access token creation and read permissions in Settings.
+  * Cover the failing historical settings format with regression tests.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Fri, 16 Oct 2026 01:10:00 +1100
+
 infiltrator-runner-monitor (1.3.9) unstable; urgency=medium
 
   * Save organisation and access token in Settings with private durable JSON.

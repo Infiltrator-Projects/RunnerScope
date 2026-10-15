@@ -1,5 +1,6 @@
 {
   "organisation": "your-github-organisation",
+  "github_token": "",
   "expected_runners": 0,
   "runner_poll_seconds": 3,
   "activity_scan_seconds": 45,

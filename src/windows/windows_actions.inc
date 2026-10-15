@@ -139,7 +139,7 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
     case WM_CREATE: {
         RECT owner;
         GetWindowRect(g_app.window, &owner);
-        const int width = sx(650), height = sx(490);
+        const int width = sx(650), height = sx(520);
         SetWindowPos(window, HWND_TOP,
             owner.left + ((owner.right - owner.left) - width) / 2,
             owner.top + ((owner.bottom - owner.top) - height) / 2,
@@ -170,25 +170,28 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         SendMessageW(g_app.settings_token, WM_SETFONT, (WPARAM)g_app.font, TRUE);
         SendMessageW(g_app.settings_token, EM_LIMITTEXT, RUNNER_GITHUB_TOKEN_CAPACITY - 1U, 0);
         HWND hint = CreateWindowW(L"STATIC",
-            L"Token needs organisation self-hosted runner read access. For a classic token, use admin:org.\r\nThe token is saved in a private local file. Existing monitoring and appearance settings are preserved.",
-            WS_CHILD | WS_VISIBLE, sx(20), sx(201), sx(600), sx(65), window, NULL, g_app.instance, NULL);
+            L"Paste a GitHub personal access token (not your password).\r\n"
+            L"Create one: GitHub Settings > Developer settings > Personal access tokens.\r\n"
+            L"Fine-grained: choose your organisation and Self-hosted runners: Read. Classic: admin:org.\r\n"
+            L"Paste the generated token here, then select Save and test. It is saved in a private local file.",
+            WS_CHILD | WS_VISIBLE, sx(20), sx(201), sx(600), sx(94), window, NULL, g_app.instance, NULL);
         SendMessageW(hint, WM_SETFONT, (WPARAM)g_app.font_small, TRUE);
         g_app.settings_status = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL,
-            sx(20), sx(275), sx(600), sx(110), window, NULL, g_app.instance, NULL);
+            sx(20), sx(305), sx(600), sx(110), window, NULL, g_app.instance, NULL);
         SendMessageW(g_app.settings_status, WM_SETFONT, (WPARAM)g_app.font, TRUE);
         settings_status(g_app.config_error[0] ? g_app.config_error
             : g_app.provider_error[0] ? g_app.provider_error
             : g_app.config.github_token[0] ? "Token saved. Select Save and test to verify runner access."
             : "Save the organisation and GitHub token to connect. Existing installations need a token entered here once.");
         HWND save = CreateWindowW(L"BUTTON", L"&Save", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            sx(230), sx(405), sx(95), sx(32), window,
+            sx(230), sx(435), sx(95), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_SAVE, g_app.instance, NULL);
         HWND test = CreateWindowW(L"BUTTON", L"Save and &test", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            sx(335), sx(405), sx(170), sx(32), window,
+            sx(335), sx(435), sx(170), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_SAVE_TEST, g_app.instance, NULL);
         HWND cancel = CreateWindowW(L"BUTTON", L"&Close", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            sx(515), sx(405), sx(105), sx(32), window,
+            sx(515), sx(435), sx(105), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_CANCEL, g_app.instance, NULL);
         SendMessageW(save, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
         SendMessageW(test, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
@@ -253,7 +256,7 @@ static void open_settings(void)
     EnableWindow(g_app.window, FALSE);
     g_app.settings_window = CreateWindowExW(WS_EX_DLGMODALFRAME, SETTINGS_CLASS,
         L"Runner Monitor settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, sx(650), sx(490),
+        CW_USEDEFAULT, CW_USEDEFAULT, sx(650), sx(520),
         g_app.window, NULL, g_app.instance, NULL);
     if (!g_app.settings_window) EnableWindow(g_app.window, TRUE);
 }

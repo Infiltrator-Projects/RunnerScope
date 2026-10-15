@@ -49,7 +49,7 @@ The native Windows application currently provides the C/Common Win32 monitor she
 
 Windows requires 64-bit Windows with WinHTTP. Linux requires GTK 3, libcurl and trusted CA certificates. Local Linux service health uses systemd's native D-Bus interface; an explicit restart uses its interactive authorization support.
 
-Runner Monitor has no command-line helper requirement. Set the organisation and access token in **Settings**, then choose **Save and test**. The token must permit reading the organisation's self-hosted runners; Linux activity discovery also needs access to the relevant repositories and Actions jobs. Permission failures explain which setting needs attention. See GitHub's [organisation runner permissions](https://docs.github.com/en/rest/actions/self-hosted-runners#list-self-hosted-runners-for-an-organization) for token requirements.
+Runner Monitor has no command-line helper requirement. Existing organisation and monitoring preferences load automatically. Enter the access token in **Settings**, then choose **Save and test**. To create a token, open [GitHub personal access tokens](https://github.com/settings/personal-access-tokens/new), select your organisation as Resource owner, choose repository access, and grant organisation **Self-hosted runners: Read** and repository **Actions: Read**. Copy the generated token into Runner Monitor. The token must permit reading the organisation's self-hosted runners; Linux activity discovery also needs access to the relevant repositories and Actions jobs. Permission failures explain which setting needs attention. See GitHub's [organisation runner permissions](https://docs.github.com/en/rest/actions/self-hosted-runners#list-self-hosted-runners-for-an-organization) for token requirements.
 
 ## Install and run
 
@@ -69,7 +69,7 @@ The native applications retain the stable RunnerScope configuration identity so 
 - Windows: `%APPDATA%\RunnerScope\config.json`
 - Linux: `$XDG_CONFIG_HOME/runnerscope/config.json`, or `~/.config/runnerscope/config.json`
 
-The shared configuration contract covers `organisation`, `github_token`, expected runner count, runner/activity/local-health polling intervals, repository scan limit and theme mode. Settings preserves unrelated fields. Older configuration without a token opens for setup; corrupt or unreadable configuration is reported. Saved settings survive application restarts and upgrades.
+The shared configuration contract covers `organisation`, `github_token`, expected runner count, runner/activity/local-health polling intervals, repository scan limit and theme mode. Settings preserves unrelated fields. Older configuration without a token opens for setup; corrupt or unreadable configuration is reported. Saved settings survive application restarts and upgrades. Legacy `System`/`Day`/`Night` names are accepted through Common's case-insensitive theme parser. Historical whole-second timer values, including decimal spellings such as `2.0`, retain their values; fresh-install defaults stay unchanged.
 
 ## Build
 

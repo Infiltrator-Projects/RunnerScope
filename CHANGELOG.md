@@ -4,6 +4,13 @@
 
 No unreleased changes.
 
+## 1.3.10 - 2026-10-16
+
+- Restore settings compatibility with saved System/Day/Night theme names and historical runner/local-health refresh intervals, preserving organisation and expected runner count during upgrades.
+- Accept historical whole-second timer numbers written with a decimal suffix without changing their values.
+- Explain where to create the GitHub access token and which read permissions it needs directly in Settings.
+- Add regression coverage using the legacy settings format that failed to load in 1.3.9.
+
 ## 1.3.9 - 2026-10-15
 
 - Save organisation and a masked access token through Settings, preserving existing preferences across restarts and upgrades.
