@@ -306,6 +306,18 @@ static bool read_uint(const char *json, const char *key,
     return true;
 }
 
+static bool valid_client_id(const char *text)
+{
+    for (const unsigned char *p = (const unsigned char *)text; *p; ++p) {
+        if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+              (*p >= '0' && *p <= '9') || *p == '.' || *p == '_' || *p == '-')) return false;
+    }
+    const char *prefixes[] = {"ghp_", "gho_", "ghu_", "ghr_", "ghs_", "github_pat_"};
+    for (size_t i = 0U; i < sizeof(prefixes) / sizeof(prefixes[0]); ++i)
+        if (strncmp(text, prefixes[i], strlen(prefixes[i])) == 0) return false;
+    return true;
+}
+
 static bool valid_org(const char *text)
 {
     if (!text) return false;
@@ -359,6 +371,11 @@ bool runner_config_validate(const RunnerConfig *config,
             return false;
         }
     }
+    if (!memchr(config->github_client_id, '\0', sizeof(config->github_client_id)) ||
+        !valid_client_id(config->github_client_id)) {
+        set_error(error, error_size, "Enter the public Client ID from the GitHub OAuth app page, using letters, digits, '.', '_' or '-'.");
+        return false;
+    }
     /* The first native releases supported runner polls from one second and
      * local-health polls from five. Keep those saved values valid; defaults
      * for newly created settings remain deliberately separate from limits. */
@@ -404,6 +421,9 @@ bool runner_config_parse_json(const char *json, RunnerConfig *config,
         return false;
     if (!read_string(json, "github_token", parsed.github_token,
                      sizeof(parsed.github_token), &present, error, error_size))
+        return false;
+    if (!read_string(json, "github_client_id", parsed.github_client_id,
+                     sizeof(parsed.github_client_id), &present, error, error_size))
         return false;
     if (!read_uint(json, "expected_runners", &parsed.expected_runners,
                    &present, false, error, error_size))
@@ -468,6 +488,7 @@ bool runner_config_write_json(const RunnerConfig *config,
         "{\n"
         "  \"organisation\": \"%s\",\n"
         "  \"github_token\": \"%s\",\n"
+        "  \"github_client_id\": \"%s\",\n"
         "  \"expected_runners\": %u,\n"
         "  \"runner_poll_seconds\": %u,\n"
         "  \"activity_scan_seconds\": %u,\n"
@@ -477,6 +498,7 @@ bool runner_config_write_json(const RunnerConfig *config,
         "}\n",
         config->organisation,
         escaped_token,
+        config->github_client_id,
         config->expected_runners,
         config->runner_poll_seconds,
         config->activity_scan_seconds,

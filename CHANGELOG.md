@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.13
+
+- Replace manual token entry with native GitHub browser sign-in on Windows and Linux.
+- Preserve existing settings and sessions; cancelled sign-in cannot overwrite the saved account.
+- Test authorization codes, server polling intervals, slow-down, expiry and safe error handling.
+- Add complete GitHub setup inside Settings, including exact registration fields, an Open Registration link and a saved public Client ID.
+- Open setup automatically when no project Client ID is supplied; configured builds go directly to browser sign-in.
+
 ## Unreleased
 
 No unreleased changes.

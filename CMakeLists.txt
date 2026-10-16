@@ -63,8 +63,28 @@ add_subdirectory(infiltratr-common EXCLUDE_FROM_ALL)
 add_library(runnerscope_core STATIC
     src/core/runner_config.c
     src/core/github.c
+    src/core/github_auth.c
+    src/core/github_setup.c
     third_party/cjson/cJSON.c
 )
+# Optional public project registration, never a secret. A configured build
+# signs in directly; other builds offer complete native setup in Settings.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/packaging/github-oauth-client-id.txt" RUNNERSCOPE_DEFAULT_CLIENT_ID)
+string(STRIP "${RUNNERSCOPE_DEFAULT_CLIENT_ID}" RUNNERSCOPE_DEFAULT_CLIENT_ID)
+set(RUNNERSCOPE_GITHUB_CLIENT_ID "${RUNNERSCOPE_DEFAULT_CLIENT_ID}" CACHE STRING "Runner Monitor public GitHub OAuth client ID")
+if(RUNNERSCOPE_GITHUB_CLIENT_ID STREQUAL "")
+    set(RUNNERSCOPE_GITHUB_CLIENT_ID "${RUNNERSCOPE_DEFAULT_CLIENT_ID}")
+endif()
+string(LENGTH "${RUNNERSCOPE_GITHUB_CLIENT_ID}" RUNNERSCOPE_CLIENT_ID_LENGTH)
+if(RUNNERSCOPE_CLIENT_ID_LENGTH GREATER_EQUAL 128)
+    message(FATAL_ERROR "GitHub OAuth client ID exceeds the supported length")
+endif()
+if(NOT RUNNERSCOPE_GITHUB_CLIENT_ID MATCHES "^[A-Za-z0-9_.-]*$")
+    message(FATAL_ERROR "Invalid GitHub OAuth client ID")
+endif()
+target_compile_definitions(runnerscope_core PRIVATE
+    RUNNERSCOPE_GITHUB_CLIENT_ID="${RUNNERSCOPE_GITHUB_CLIENT_ID}")
+
 target_include_directories(runnerscope_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -174,6 +194,8 @@ if(WIN32)
         src/windows/windows_runner.inc
         src/windows/windows_layout.inc
         src/windows/windows_presentation.inc
+        src/windows/windows_auth.inc
+        src/windows/windows_github_setup.inc
         src/windows/windows_actions.inc
         src/windows/windows_controller.inc
         "${RUNNERSCOPE_WINDOWS_RC}"
@@ -226,6 +248,7 @@ else()
 
     add_executable(runnerscope
         src/linux_main.c
+        src/linux_auth.inc
     )
     target_link_libraries(runnerscope PRIVATE
         runnerscope_core
@@ -302,3 +325,15 @@ else()
     target_link_libraries(runnerscope-linux-services-test PRIVATE runnerscope_linux_platform)
     add_test(NAME runnerscope-linux-services-test COMMAND runnerscope-linux-services-test)
 endif()
+
+add_executable(runnerscope-github-auth-test tests/github_auth_test.c)
+target_link_libraries(runnerscope-github-auth-test PRIVATE runnerscope_core)
+add_test(NAME runnerscope-github-auth-test COMMAND runnerscope-github-auth-test)
+
+add_executable(runnerscope-http-policy-test tests/http_policy_test.c)
+if(WIN32)
+    target_link_libraries(runnerscope-http-policy-test PRIVATE runnerscope_windows_platform)
+else()
+    target_link_libraries(runnerscope-http-policy-test PRIVATE runnerscope_linux_platform)
+endif()
+add_test(NAME runnerscope-http-policy-test COMMAND runnerscope-http-policy-test)

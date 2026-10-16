@@ -27,7 +27,7 @@ The last point is a regression gate for the pre-1.3.8 Windows Settings defect th
 
 Offline GitHub tests cover all four response projections, malformed JSON/schema/UTF-8, trusted-origin Link pagination, cycles, page/byte limits, permission/rate-limit failures and all-or-nothing failure across pages. Diagnostics must not echo the supplied token or arbitrary transport error text.
 
-The installed GTK self-test uses isolated configuration and an injected offline transport. It checks masked token input, Settings validation and save/reload, private permissions, legacy migration, corrupt/NUL/oversized-file rejection, immutable credential snapshots, superseded-result rejection and stale runner/activity presentation. It must not access real credentials or restart services. Native service tests use response fixtures and cancelled operations.
+The installed GTK self-test uses isolated configuration and an injected offline transport. It checks native browser sign-in and cancellation, Settings validation and save/reload, private permissions, legacy migration, corrupt/NUL/oversized-file rejection, immutable credential snapshots, superseded-result rejection and stale runner/activity presentation. It must not access real credentials or restart services. Native service tests use response fixtures and cancelled operations.
 
 ## Linux qualification
 
@@ -98,3 +98,7 @@ Issue #2 remains the authority for completion of the shared declarative UI migra
 ## Configuration number grammar
 
 The shared parser recognises JSON numeric syntax as ASCII and performs exact integer policy checks separately. It never uses desktop-locale floating conversion to validate the document. Regression fixtures cover legacy decimal timer migration, unknown finite JSON numbers, malformed/C-only numeric forms and unchanged caller state on rejection. Available German/French numeric locales exercise the full migration fixture; a test environment without those locales reports that limitation explicitly.
+
+## Native browser sign-in
+
+The shared OAuth test exercises device-code parsing, requested permissions, polling intervals, server slow-down, expiry, denial, malformed responses, endpoint errors and credential cleanup. The GTK installed UI test signs in using the real asynchronous controller with an offline transport, then reloads the saved session and preserved legacy preferences. Production authorization still requires the project OAuth registration and an interactive account approval; offline tests do not claim to validate those external steps.

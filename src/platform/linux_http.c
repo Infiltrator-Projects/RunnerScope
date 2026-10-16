@@ -84,7 +84,7 @@ static bool append_header(struct curl_slist **headers, const char *value)
     return true;
 }
 
-bool runner_http_get(const char *url, const char *token,
+static bool http_request(const char *url, const char *token, const char *form,
     RunnerHttpResponse *response, char *error, size_t error_size, void *context)
 {
     (void)context;
@@ -93,7 +93,8 @@ bool runner_http_get(const char *url, const char *token,
     if (error && error_size) error[0] = '\0';
     /* This provider never forwards a bearer token to another origin, even if
      * an API redirect or pagination header attempts to change authority. */
-    const char *origin = "https://api.github.com/";
+    const bool oauth = form != NULL;
+    const char *origin = oauth ? "https://github.com/" : "https://api.github.com/";
     if (!url || strncmp(url, origin, strlen(origin)) != 0 || strlen(url) > 4096U ||
         strchr(url, '\r') || strchr(url, '\n')) {
         set_error(error, error_size, "GitHub request address is invalid.");
@@ -123,9 +124,11 @@ bool runner_http_get(const char *url, const char *token,
     struct curl_slist *headers = NULL;
     char authorization[1056];
     (void)snprintf(authorization, sizeof(authorization), "Authorization: Bearer %s", token);
-    bool configured = append_header(&headers, "Accept: application/vnd.github+json") &&
+    bool configured = oauth ? (append_header(&headers, "Accept: application/json") &&
+        append_header(&headers, "Content-Type: application/x-www-form-urlencoded")) :
+        (append_header(&headers, "Accept: application/vnd.github+json") &&
         append_header(&headers, "X-GitHub-Api-Version: 2022-11-28") &&
-        (!*token || append_header(&headers, authorization));
+        (!*token || append_header(&headers, authorization)));
     memset(authorization, 0, sizeof(authorization));
     Capture capture = {response, 0U, 0U, false};
     /* Every transfer owns its easy handle. Global initialization is the only
@@ -133,7 +136,11 @@ bool runner_http_get(const char *url, const char *token,
 #define SET_OPTION(option, value) \
     do { if (curl_easy_setopt(client, (option), (value)) != CURLE_OK) configured = false; } while (0)
     SET_OPTION(CURLOPT_URL, url);
-    SET_OPTION(CURLOPT_HTTPGET, 1L);
+    if (form) {
+        SET_OPTION(CURLOPT_POST, 1L);
+        SET_OPTION(CURLOPT_POSTFIELDS, form);
+        SET_OPTION(CURLOPT_POSTFIELDSIZE, (long)strlen(form));
+    } else SET_OPTION(CURLOPT_HTTPGET, 1L);
     SET_OPTION(CURLOPT_HTTPHEADER, headers);
     SET_OPTION(CURLOPT_USERAGENT, "Runner-Monitor");
     SET_OPTION(CURLOPT_PROTOCOLS_STR, "https");
@@ -177,4 +184,30 @@ bool runner_http_get(const char *url, const char *token,
         return false;
     }
     return true;
+}
+
+
+bool runner_http_get(const char *url, const char *token,
+    RunnerHttpResponse *response, char *error, size_t error_size, void *context)
+{
+    return http_request(url, token, NULL, response, error, error_size, context);
+}
+
+bool runner_http_post_oauth(const char *path, const char *form,
+    RunnerHttpResponse *response, char *error, size_t error_size, void *context)
+{
+    if (response) memset(response, 0, sizeof(*response));
+    if (!path || (strcmp(path, "/login/device/code") != 0 &&
+        strcmp(path, "/login/oauth/access_token") != 0) || !form || strlen(form) > 4096U) {
+        set_error(error, error_size, "Invalid GitHub sign-in request.");
+        return false;
+    }
+    for (const unsigned char *p = (const unsigned char *)form; *p; ++p)
+        if (*p < 33U || *p > 126U) {
+            set_error(error, error_size, "Invalid GitHub sign-in request.");
+            return false;
+        }
+    char url[128];
+    (void)snprintf(url, sizeof(url), "https://github.com%s", path);
+    return http_request(url, NULL, form, response, error, error_size, context);
 }
