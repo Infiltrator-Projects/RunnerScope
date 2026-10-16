@@ -15,6 +15,11 @@ const char *runner_github_auth_client_id(void)
     return RUNNERSCOPE_GITHUB_CLIENT_ID;
 }
 
+const char *runner_github_auth_client_for_config(const RunnerConfig *config)
+{
+    return config && config->github_client_id[0] ? config->github_client_id : runner_github_auth_client_id();
+}
+
 void runner_github_auth_clear(RunnerGithubAuth *auth)
 {
     if (!auth) return;

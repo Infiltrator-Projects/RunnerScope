@@ -29,6 +29,25 @@ static RunnerAuthPhase step(RunnerGithubAuth *auth, uint64_t now, Fixture *f)
 
 int main(void)
 {
+    RunnerConfig config, restored;
+    runner_config_defaults(&config);
+    CHECK(strcmp(runner_github_auth_client_for_config(&config), runner_github_auth_client_id()) == 0);
+    snprintf(config.github_client_id, sizeof(config.github_client_id), "%s", "Iv1.fixture-client");
+    CHECK(strcmp(runner_github_auth_client_for_config(&config), "Iv1.fixture-client") == 0);
+    char encoded[8192], detail[320];
+    CHECK(runner_config_write_json(&config, encoded, sizeof(encoded), NULL, detail, sizeof(detail)));
+    CHECK(runner_config_parse_json(encoded, &restored, detail, sizeof(detail)));
+    CHECK(strcmp(restored.github_client_id, config.github_client_id) == 0);
+    const char *bad_clients[] = {"ghp_private", "github_pat_private", "bad client", "https://github.com"};
+    for (size_t i = 0U; i < sizeof(bad_clients) / sizeof(bad_clients[0]); ++i) {
+        snprintf(config.github_client_id, sizeof(config.github_client_id), "%s", bad_clients[i]);
+        CHECK(!runner_config_validate(&config, detail, sizeof(detail)) && strstr(detail, "Client ID"));
+    }
+    const char *guide = runner_github_setup_instructions();
+    const char *required[] = {"https://github.com/settings/applications/new", "Application name: Runner Monitor",
+        "Homepage URL: https://github.com/Infiltrator-Projects/RunnerScope", "Authorization callback URL: http://127.0.0.1/",
+        "Enable Device Flow", "Register application", "Client ID", "Save and sign in"};
+    for (size_t i = 0U; i < sizeof(required) / sizeof(required[0]); ++i) CHECK(strstr(guide, required[i]));
     RunnerGithubAuth auth = {0};
     Fixture f = {code_json, 200U, 0U, false, false};
     CHECK(runner_github_auth_step(&auth, "", 0U, post, &f) == RUNNER_AUTH_FAILED);

@@ -64,10 +64,11 @@ add_library(runnerscope_core STATIC
     src/core/runner_config.c
     src/core/github.c
     src/core/github_auth.c
+    src/core/github_setup.c
     third_party/cjson/cJSON.c
 )
-# Public project registration, never a secret. Packagers set this once; end
-# users sign in through GitHub and never enter a personal token or client ID.
+# Optional public project registration, never a secret. A configured build
+# signs in directly; other builds offer complete native setup in Settings.
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/packaging/github-oauth-client-id.txt" RUNNERSCOPE_DEFAULT_CLIENT_ID)
 string(STRIP "${RUNNERSCOPE_DEFAULT_CLIENT_ID}" RUNNERSCOPE_DEFAULT_CLIENT_ID)
 set(RUNNERSCOPE_GITHUB_CLIENT_ID "${RUNNERSCOPE_DEFAULT_CLIENT_ID}" CACHE STRING "Runner Monitor public GitHub OAuth client ID")
@@ -193,6 +194,8 @@ if(WIN32)
         src/windows/windows_runner.inc
         src/windows/windows_layout.inc
         src/windows/windows_presentation.inc
+        src/windows/windows_auth.inc
+        src/windows/windows_github_setup.inc
         src/windows/windows_actions.inc
         src/windows/windows_controller.inc
         "${RUNNERSCOPE_WINDOWS_RC}"
@@ -245,6 +248,7 @@ else()
 
     add_executable(runnerscope
         src/linux_main.c
+        src/linux_auth.inc
     )
     target_link_libraries(runnerscope PRIVATE
         runnerscope_core

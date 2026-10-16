@@ -4,6 +4,7 @@ typedef struct {
     HWND target;
     ULONGLONG generation;
     RunnerGithubAuth auth;
+    char client_id[128];
 } AuthResult;
 
 static void auth_result_destroy(AuthResult *result)
@@ -16,7 +17,7 @@ static void auth_result_destroy(AuthResult *result)
 static DWORD WINAPI auth_worker(LPVOID data)
 {
     AuthResult *result = (AuthResult *)data;
-    runner_github_auth_step(&result->auth, runner_github_auth_client_id(),
+    runner_github_auth_step(&result->auth, result->client_id,
         GetTickCount64(), runner_http_post_oauth, NULL);
     if (!PostMessageW(result->target, WM_APP_AUTH_DONE, 0, (LPARAM)result))
         auth_result_destroy(result);
@@ -47,6 +48,8 @@ static void auth_tick(void)
     result->target = g_app.window;
     result->generation = g_app.auth_generation;
     result->auth = g_app.auth;
+    infiltratr_copy_string(result->client_id, sizeof(result->client_id),
+        runner_github_auth_client_for_config(&g_app.config));
     g_app.auth_thread = CreateThread(NULL, 0U, auth_worker, result, 0U, NULL);
     if (!g_app.auth_thread) {
         auth_result_destroy(result);
@@ -91,6 +94,7 @@ static void auth_start(void)
     }
     save_settings(g_app.settings_window, false);
     if (g_app.settings_dirty || g_app.config_error[0] || !g_app.config.organisation[0]) return;
+    if (!runner_github_auth_client_for_config(&g_app.config)[0]) { open_github_setup(); return; }
     auth_cancel();
     g_app.auth_active = true;
     settings_status("Connecting to GitHub for browser sign-in…");

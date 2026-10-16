@@ -15,13 +15,15 @@ typedef struct {
     RunnerHttpPost post;
     void *post_context;
     const char *client_id;
+    char client_id_storage[128];
+    RunnerScopeApp *app;
 } GithubSignIn;
 
 typedef struct {
     RunnerGithubAuth auth;
     RunnerHttpPost post;
     void *context;
-    const char *client_id;
+    char client_id[128];
     guint generation;
 } GithubSignInWork;
 
@@ -130,7 +132,7 @@ static gboolean github_sign_in_tick(gpointer data)
     work->auth = sign_in->auth;
     work->post = sign_in->post;
     work->context = sign_in->post_context;
-    work->client_id = sign_in->client_id;
+    g_strlcpy(work->client_id, sign_in->client_id, sizeof(work->client_id));
     work->generation = sign_in->generation;
     sign_in->busy = TRUE;
     g_atomic_int_inc(&sign_in->references);
@@ -141,6 +143,89 @@ static gboolean github_sign_in_tick(gpointer data)
     return G_SOURCE_CONTINUE;
 }
 
+static gboolean github_setup_dialog(GithubSignIn *sign_in)
+{
+    if (!sign_in->app) return FALSE;
+    github_sign_in_cancel(sign_in);
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("GitHub sign-in setup",
+        GTK_WINDOW(sign_in->dialog), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        "_Cancel", GTK_RESPONSE_CANCEL, "_Save and sign in", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 680, 650);
+    GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(area), 16U);
+    gtk_box_set_spacing(GTK_BOX(area), 10);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_vexpand(scroll, TRUE);
+    GtkWidget *guide = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(guide), FALSE);
+    gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(guide), FALSE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(guide), GTK_WRAP_WORD_CHAR);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(guide)), runner_github_setup_instructions(), -1);
+    gtk_container_add(GTK_CONTAINER(scroll), guide);
+    gtk_box_pack_start(GTK_BOX(area), scroll, TRUE, TRUE, 0U);
+    GtkWidget *open = gtk_link_button_new_with_label("https://github.com/settings/applications/new",
+        "Open GitHub registration");
+    gtk_widget_set_halign(open, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(area), open, FALSE, FALSE, 0U);
+    GtkWidget *label = gtk_label_new("Public Client ID");
+    gtk_widget_set_halign(label, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(area), label, FALSE, FALSE, 0U);
+    GtkWidget *entry = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(entry), 127);
+    gtk_entry_set_text(GTK_ENTRY(entry), runner_github_auth_client_for_config(&sign_in->app->config));
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "Client ID from the GitHub OAuth app page");
+    gtk_box_pack_start(GTK_BOX(area), entry, FALSE, FALSE, 0U);
+    GtkWidget *error_label = gtk_label_new("");
+    gtk_label_set_line_wrap(GTK_LABEL(error_label), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(error_label), 0.0F);
+    gtk_label_set_max_width_chars(GTK_LABEL(error_label), 65);
+    gtk_box_pack_start(GTK_BOX(area), error_label, FALSE, FALSE, 0U);
+    g_object_set_data(G_OBJECT(dialog), "github-client-entry", entry);
+    g_object_set_data(G_OBJECT(dialog), "github-setup-error", error_label);
+    g_object_set_data(G_OBJECT(dialog), "github-setup-guide", guide);
+    g_object_set_data(G_OBJECT(dialog), "github-setup-link", open);
+    gtk_widget_show_all(dialog);
+    gboolean saved = FALSE;
+    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        RunnerConfig candidate = sign_in->app->config;
+        g_strlcpy(candidate.github_client_id, gtk_entry_get_text(GTK_ENTRY(entry)), sizeof(candidate.github_client_id));
+        char detail[640] = "";
+        if (!candidate.github_client_id[0] || !runner_config_validate(&candidate, detail, sizeof(detail))) {
+            gtk_label_set_text(GTK_LABEL(error_label), detail[0] ? detail :
+                "Paste the public Client ID shown after registering the OAuth app.");
+            memset(candidate.github_token, 0, sizeof(candidate.github_token));
+            continue;
+        }
+        const gboolean changed = strcmp(candidate.github_client_id,
+            runner_github_auth_client_for_config(&sign_in->app->config)) != 0;
+        if (changed) memset(candidate.github_token, 0, sizeof(candidate.github_token));
+        GError *error = NULL;
+        if (!save_config(&candidate, &error)) {
+            gtk_label_set_text(GTK_LABEL(error_label), error ? error->message : "Unable to save GitHub setup.");
+            g_clear_error(&error);
+            memset(candidate.github_token, 0, sizeof(candidate.github_token));
+            continue;
+        }
+        memset(sign_in->app->config.github_token, 0, sizeof(sign_in->app->config.github_token));
+        sign_in->app->config = candidate;
+        memset(candidate.github_token, 0, sizeof(candidate.github_token));
+        sign_in->app->config_generation++;
+        g_clear_pointer(&sign_in->app->config_error, g_free);
+        if (changed) {
+            sign_in->app->runner_data_stale = TRUE;
+            sign_in->app->activity_data_stale = TRUE;
+        }
+        g_strlcpy(sign_in->client_id_storage, runner_github_auth_client_for_config(&sign_in->app->config),
+            sizeof(sign_in->client_id_storage));
+        sign_in->client_id = sign_in->client_id_storage;
+        saved = TRUE;
+        break;
+    }
+    gtk_widget_destroy(dialog);
+    return saved;
+}
+
 static void github_sign_in_start(GtkButton *button, gpointer data)
 {
     (void)button;
@@ -149,11 +234,18 @@ static void github_sign_in_start(GtkButton *button, gpointer data)
         gtk_label_set_text(GTK_LABEL(sign_in->status), "The previous sign-in request is finishing. Try again shortly.");
         return;
     }
+    if (!sign_in->client_id[0] && !github_setup_dialog(sign_in)) return;
     github_sign_in_cancel(sign_in);
     sign_in->active = TRUE;
     gtk_label_set_text(GTK_LABEL(sign_in->status), "Connecting to GitHub for browser sign-in…");
     sign_in->timer = g_timeout_add(250U, github_sign_in_tick, sign_in);
     (void)github_sign_in_tick(sign_in);
+}
+
+static void github_setup_clicked(GtkButton *button, gpointer data)
+{
+    GithubSignIn *sign_in = data;
+    if (github_setup_dialog(sign_in)) github_sign_in_start(button, sign_in);
 }
 
 static GithubSignIn *github_sign_in_create(GtkWidget *dialog, GtkWidget *grid, GtkWidget *status)
@@ -186,6 +278,11 @@ static GithubSignIn *github_sign_in_create(GtkWidget *dialog, GtkWidget *grid, G
     gtk_box_pack_start(GTK_BOX(box), actions, FALSE, FALSE, 0U);
     gtk_box_pack_start(GTK_BOX(box), sign_in->code, FALSE, FALSE, 0U);
     gtk_grid_attach(GTK_GRID(grid), box, 1, 1, 1, 1);
+    GtkWidget *setup = gtk_button_new_with_label("GitHub setup and instructions…");
+    gtk_widget_set_halign(setup, GTK_ALIGN_START);
+    g_signal_connect(setup, "clicked", G_CALLBACK(github_setup_clicked), sign_in);
+    gtk_grid_attach(GTK_GRID(grid), setup, 0, 9, 2, 1);
+    g_object_set_data(G_OBJECT(dialog), "github-setup-button", setup);
     g_object_set_data(G_OBJECT(dialog), "github-sign-in", sign_in);
     g_object_set_data(G_OBJECT(dialog), "github-sign-in-button", start);
     return sign_in;

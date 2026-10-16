@@ -184,6 +184,10 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
             : g_app.provider_error[0] ? g_app.provider_error
             : g_app.config.github_token[0] ? "Signed in. Select Save and test to verify runner access."
             : "Select Sign in with GitHub to connect.");
+        HWND setup = CreateWindowW(L"BUTTON", L"GitHub &setup…", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            sx(20), sx(435), sx(195), sx(32), window,
+            (HMENU)(INT_PTR)ID_AUTH_SETUP, g_app.instance, NULL);
+        SendMessageW(setup, WM_SETFONT, (WPARAM)g_app.font, TRUE);
         HWND save = CreateWindowW(L"BUTTON", L"&Save", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
             sx(230), sx(435), sx(95), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_SAVE, g_app.instance, NULL);
@@ -201,6 +205,7 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         return 0;
     }
     case WM_COMMAND:
+        if (LOWORD(wparam) == ID_AUTH_SETUP) { open_github_setup(); return 0; }
         if (LOWORD(wparam) == ID_AUTH_START) { auth_start(); return 0; }
         if (LOWORD(wparam) == ID_AUTH_COPY) { auth_copy_code(); return 0; }
         if (LOWORD(wparam) == ID_AUTH_OPEN) { auth_open_browser(); return 0; }
@@ -242,6 +247,7 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         return 1;
     }
     case WM_DESTROY:
+        if (g_app.setup_window) DestroyWindow(g_app.setup_window);
         auth_cancel();
         g_app.settings_window = NULL;
         g_app.settings_org = NULL;

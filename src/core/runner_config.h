@@ -16,6 +16,7 @@ typedef enum {
 typedef struct {
     char organisation[128];
     char github_token[RUNNER_GITHUB_TOKEN_CAPACITY];
+    char github_client_id[128];
     unsigned int expected_runners;
     unsigned int runner_poll_seconds;
     unsigned int activity_scan_seconds;

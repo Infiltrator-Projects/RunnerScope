@@ -29,6 +29,8 @@ typedef struct {
  * The caller owns the clock, worker lifetime and cancellation; this state
  * machine enforces GitHub's polling interval and local code expiry. */
 const char *runner_github_auth_client_id(void);
+const char *runner_github_auth_client_for_config(const RunnerConfig *config);
+const char *runner_github_setup_instructions(void);
 void runner_github_auth_clear(RunnerGithubAuth *auth);
 RunnerAuthPhase runner_github_auth_step(RunnerGithubAuth *auth,
     const char *client_id, uint64_t now_ms, RunnerHttpPost post, void *context);

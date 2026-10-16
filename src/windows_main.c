@@ -50,6 +50,13 @@
 
 #define APP_CLASS L"InfiltratrRunnerMonitor"
 #define SETTINGS_CLASS L"InfiltratrRunnerMonitorSettings"
+#define SETUP_CLASS L"InfiltratrRunnerMonitorGithubSetup"
+#define ID_AUTH_SETUP 1114
+#define ID_SETUP_CLIENT 1120
+#define ID_SETUP_OPEN 1121
+#define ID_SETUP_SAVE 1122
+#define ID_SETUP_GUIDE 1123
+#define ID_SETUP_LABEL 1124
 #define APP_TITLE L"Runner Monitor"
 #define WM_APP_REFRESH_DONE (WM_APP + 1)
 #define WM_APP_OPEN_SETTINGS (WM_APP + 2)
@@ -116,6 +123,9 @@ typedef struct {
     HWND settings_org;
     HWND settings_code;
     HWND settings_status;
+    HWND setup_window;
+    HWND setup_client;
+    HWND setup_status;
     RunnerGithubAuth auth;
     HANDLE auth_thread;
     ULONGLONG auth_generation;
@@ -185,7 +195,9 @@ static void settings_status(const char *message);
 #include "windows/windows_layout.inc"
 #include "windows/windows_presentation.inc"
 static void save_settings(HWND window, bool test_access);
+static void open_github_setup(void);
 #include "windows/windows_auth.inc"
+#include "windows/windows_github_setup.inc"
 #include "windows/windows_actions.inc"
 #include "windows/windows_controller.inc"
 
@@ -239,6 +251,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous,
     settings_wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
     settings_wc.lpszClassName = SETTINGS_CLASS;
     if (!RegisterClassExW(&settings_wc)) return 1;
+    settings_wc.lpfnWndProc = github_setup_proc;
+    settings_wc.lpszClassName = SETUP_CLASS;
+    if (!RegisterClassExW(&settings_wc)) return 1;
 
     g_app.window = CreateWindowExW(
         WS_EX_APPWINDOW, APP_CLASS, APP_TITLE,
@@ -252,6 +267,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous,
 
     MSG message;
     while (GetMessageW(&message, NULL, 0U, 0U) > 0) {
+        if (g_app.setup_window && IsDialogMessageW(g_app.setup_window, &message)) continue;
         if (g_app.settings_window && IsDialogMessageW(g_app.settings_window, &message))
             continue;
         TranslateMessage(&message);

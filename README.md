@@ -49,7 +49,7 @@ The native Windows application currently provides the C/Common Win32 monitor she
 
 Windows requires 64-bit Windows with WinHTTP. Linux requires GTK 3, libcurl and trusted CA certificates. Local Linux service health uses systemd's native D-Bus interface; an explicit restart uses its interactive authorization support.
 
-Runner Monitor has no command-line helper requirement. Existing organisation and monitoring preferences load automatically. Open **Settings**, enter your organisation, and choose **Sign in with GitHub**. Your browser opens GitHub; enter the one-time code displayed by Runner Monitor and approve access. The application connects automatically and remembers the resulting session. No personal access token needs to be created or pasted. The native provider checks organisation runner access after sign-in and explains any membership, SSO or permission restrictions.
+Runner Monitor has no command-line helper requirement. Existing organisation and monitoring preferences load automatically. Open **Settings**, enter your organisation, and choose **Sign in with GitHub**. Your browser opens GitHub; enter the one-time code displayed by Runner Monitor and approve access. The application connects automatically and remembers the resulting session. No personal access token needs to be created or pasted. If the project Client ID is not already configured, **GitHub setup** opens with every registration field, a direct registration link and a **Public Client ID** field. Complete the setup there and choose **Save and sign in**; the application saves it across upgrades. The native provider checks organisation runner access after sign-in and explains any membership, SSO or permission restrictions.
 
 ## Install and run
 
@@ -86,7 +86,7 @@ On Windows, configure with the Visual Studio generator and build the Release con
 
 ## Privacy and credentials
 
-The session returned by GitHub is saved in the existing per-user JSON configuration file. Linux restricts the file to its owner; Windows restricts its ACL to the current user and SYSTEM. Credentials never appear in URLs, diagnostics or the Settings controls. Cancelling sign-in preserves any previous saved account. Expired or revoked sessions ask for browser sign-in again. The project owner configures the public OAuth client once; see [OAuth registration](docs/OAUTH.md).
+The session returned by GitHub is saved in the existing per-user JSON configuration file. Linux restricts the file to its owner; Windows restricts its ACL to the current user and SYSTEM. Credentials never appear in URLs, diagnostics or the Settings controls. Cancelling sign-in preserves any previous saved account. Expired or revoked sessions ask for browser sign-in again. A supplied project OAuth client skips registration setup. Otherwise Settings provides a complete setup page and saves the public Client ID locally; see [OAuth registration](docs/OAUTH.md).
 
 cJSON 1.7.19 is bundled under its MIT licence; source identity and hashes are recorded in `third_party/cjson/README.md`. Linux packages carry the licence and Windows embeds it in the executable.
 
