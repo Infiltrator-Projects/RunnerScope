@@ -2,7 +2,7 @@
 
 ## Product architecture
 
-Runner Monitor is a native C application on every supported desktop platform.
+RunnerScope is a native C application on every supported desktop platform.
 
 - `src/linux_main.c` is the shipping Linux desktop application.
 - `src/windows_main.c` is the shipping Windows desktop application.
@@ -20,7 +20,7 @@ The previous Python compatibility shell and native helper bridge were removed af
 
 ## Provider boundary
 
-Runner Monitor calls GitHub directly using the access token saved through Settings. GitHub remains authoritative for runner/workflow facts; Runner Monitor owns correlation, timing, history, presentation and local-service policy. There are no child-process provider or service adapters.
+RunnerScope calls GitHub directly using the access token saved through Settings. GitHub remains authoritative for runner/workflow facts; RunnerScope owns correlation, timing, history, presentation and local-service policy. There are no child-process provider or service adapters.
 
 The shared provider validates JSON and projects runners, repositories, runs and jobs into the existing controller format. Pagination only accepts HTTPS links to `api.github.com`, has page/byte bounds and discards the complete fetch if any page fails. Native transports verify certificates, refuse redirects, bound response size and timeout, and omit credentials from diagnostics. cJSON is bundled at an exact recorded source revision.
 
@@ -36,7 +36,7 @@ GitHub device authorization supplies the session internally; Settings displays o
 
 Common is consumed directly, not through a helper process. It provides product-neutral primitives such as theme/design contracts, formatting, timing and safe output helpers.
 
-The `infiltratr-common` gitlink is the single exact dependency authority. CMake may verify that the populated submodule equals that gitlink, but it must not maintain a second expected Common version or commit literal. Runner-specific semantics remain in Runner Monitor.
+The `infiltratr-common` gitlink is the single exact dependency authority. CMake may verify that the populated submodule equals that gitlink, but it must not maintain a second expected Common version or commit literal. Runner-specific semantics remain in RunnerScope.
 
 ## Platform presentation
 
@@ -60,7 +60,7 @@ Unavailable, unknown, invalid and failed observations remain distinct. Provider 
 
 ## Persistence
 
-Configuration/history are user data and must remain migration-compatible across native releases. The stable RunnerScope storage identity is retained for upgrade continuity even though the user-facing product name is Runner Monitor.
+Configuration/history are user data and must remain migration-compatible across native releases. The stable RunnerScope storage identity is retained for upgrade continuity even though the user-facing product name is RunnerScope.
 
 Windows configuration publication writes a complete validated document to a temporary file, flushes it, and replaces the prior file atomically. Read, parse and publication errors are surfaced rather than silently replaced.
 
@@ -68,7 +68,7 @@ Linux configuration storage and history retain the stable paths and use Common d
 
 ## Build and release ownership
 
-`main` is the only retained and working branch. `VERSION` owns the Runner Monitor version. The Common gitlink owns the Common revision. The single CI workflow owns qualification and release publication.
+`main` is the only retained and working branch. `VERSION` owns the RunnerScope version. The Common gitlink owns the Common revision. The single CI workflow owns qualification and release publication.
 
 Linux packages and Windows executables are published only when the exact artifact uploaded for release has passed the platform's runtime/contract qualification. Release publication is not selected by commit-message convention and does not rebuild the product in a second workflow.
 

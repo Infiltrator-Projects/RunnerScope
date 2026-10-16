@@ -51,7 +51,7 @@
 
 #define APP_CLASS L"InfiltratrRunnerMonitor"
 #define SETTINGS_CLASS L"InfiltratrRunnerMonitorSettings"
-#define APP_TITLE L"Runner Monitor"
+#define APP_TITLE L"RunnerScope"
 #define WM_APP_REFRESH_DONE (WM_APP + 1)
 #define WM_APP_OPEN_SETTINGS (WM_APP + 2)
 #define WM_APP_AUTH_DONE (WM_APP + 3)

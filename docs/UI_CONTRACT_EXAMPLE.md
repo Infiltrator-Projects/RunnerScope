@@ -1,6 +1,6 @@
 # Shared UI Contract Example
 
-This file is illustrative. It is not the final API and does not commit Runner Monitor to a particular macro or builder syntax.
+This file is illustrative. It is not the final API and does not commit RunnerScope to a particular macro or builder syntax.
 
 The application should be able to express product structure once in toolkit-neutral C, for example:
 
@@ -9,7 +9,7 @@ UiNode *runnerscope_build_ui(AppModel *model)
 {
     return ui_window("runner-monitor",
         ui_shell(
-            ui_header("Runner Monitor", "Infiltrator OS"),
+            ui_header("RunnerScope", "Infiltrator OS"),
             ui_nav(
                 ui_nav_item("runners", "Runners", ART_NAV_RUNNERS),
                 ui_nav_item("active", "Active jobs", ART_NAV_ACTIVE),

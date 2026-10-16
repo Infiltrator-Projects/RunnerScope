@@ -1,10 +1,10 @@
 # Validation
 
-Runner Monitor validation is a current contract, not a release-by-release diary. Historical release detail belongs in `CHANGELOG.md` and Git; this document defines what must be true now before `main` is considered releasable.
+RunnerScope validation is a current contract, not a release-by-release diary. Historical release detail belongs in `CHANGELOG.md` and Git; this document defines what must be true now before `main` is considered releasable.
 
 ## Source and dependency identity
 
-- `VERSION` is the Runner Monitor release identity.
+- `VERSION` is the RunnerScope release identity.
 - The `infiltratr-common` gitlink is the sole exact Common identity. CMake derives the expected Common commit from that gitlink when configuring from Git and rejects a populated submodule at any other commit.
 - CI independently verifies that the checked-out Common commit equals the parent repository gitlink.
 - The build does not carry a second expected Common version/commit literal.

@@ -2,8 +2,8 @@
 
 ## Current foundation — 1.3.8
 
-- native C/GTK Linux Runner Monitor is the shipping Linux application;
-- native C/Win32 Windows Runner Monitor is built, runtime-qualified and released as an EXE;
+- native C/GTK Linux RunnerScope is the shipping Linux application;
+- native C/Win32 Windows RunnerScope is built, runtime-qualified and released as an EXE;
 - the exact Common dependency is the repository gitlink and is linked directly into both native binaries;
 - both platforms use the same Common-verified MB typography and product artwork;
 - Python/Tk product files are removed;
@@ -20,7 +20,7 @@ Two architectural migrations remain. Issue #2 owns completion of the shared UI d
 
 ## 1.3.x UI migration objective
 
-Create one toolkit-neutral declarative Runner Monitor UI contract and make GTK/Win32 native renderers of that contract. Application structure must no longer be independently invented in `linux_main.c` and `windows_main.c`.
+Create one toolkit-neutral declarative RunnerScope UI contract and make GTK/Win32 native renderers of that contract. Application structure must no longer be independently invented in `linux_main.c` and `windows_main.c`.
 
 The migration follows [UI_CONTRACT_MIGRATION.md](UI_CONTRACT_MIGRATION.md) and uses Branch by Abstraction so `main` remains releasable throughout.
 
@@ -60,4 +60,4 @@ Remaining controller decomposition under issue #14 must preserve these authoriti
 
 ## Completion rule
 
-Architecture work is complete only when one authoritative UI tree defines the supported Runner Monitor product structure, GTK and Win32 render that tree, provider/persistence ownership is explicit, CI proves required native and shared contracts, user data remains migration-compatible, and neither platform contains a second independently authored application policy/layout for concerns already migrated.
+Architecture work is complete only when one authoritative UI tree defines the supported RunnerScope product structure, GTK and Win32 render that tree, provider/persistence ownership is explicit, CI proves required native and shared contracts, user data remains migration-compatible, and neither platform contains a second independently authored application policy/layout for concerns already migrated.

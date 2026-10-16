@@ -1,24 +1,24 @@
-# Runner Monitor
+# RunnerScope
 
 **Project copyright:** © 1993-2026 Shannon Smith
 
-Runner Monitor is a native C desktop monitor for GitHub Actions self-hosted runners. The shipping application is compiled on both supported platforms and links directly against the exact Infiltratr Common revision recorded by the repository gitlink.
+RunnerScope is a native C desktop monitor for GitHub Actions self-hosted runners. The shipping application is compiled on both supported platforms and links directly against the exact Libraries revision recorded by the repository gitlink.
 
 There is no Python or Tk/Tkinter runtime in the current native product line.
 
 ## Native architecture
 
 - Linux: C11 + GTK 3 desktop shell, built as the ELF executable `/usr/bin/runnerscope`.
-- Windows: C11 + native Win32 shell, built as `Runner-Monitor-Windows-v<version>.exe`.
+- Windows: C11 + native Win32 shell, built as `RunnerScope-Windows-v<version>.exe`.
 - Shared configuration contract: `src/core/runner_config.c` owns the tested schema, defaults, validation and serialisation for both native applications.
 - Windows platform adapters: `windows_config_store.c` owns private durable config I/O and `windows_http.c` uses Windows WinHTTP directly.
-- Shared dependency: the exact `infiltratr-common` gitlink recorded by this Runner Monitor revision.
+- Shared dependency: the exact `infiltratr-common` gitlink recorded by this RunnerScope revision.
 - Common owns the product-neutral palette, typography/metrics contract, formatting and other shared primitives.
-- Runner Monitor owns runner/provider semantics, local-service behaviour and application policy.
-- The shared GitHub provider parses and paginates API responses inside Runner Monitor. Linux uses the libcurl library and Windows uses WinHTTP; neither launches a command-line helper.
+- RunnerScope owns runner/provider semantics, local-service behaviour and application policy.
+- The shared GitHub provider parses and paginates API responses inside RunnerScope. Linux uses the libcurl library and Windows uses WinHTTP; neither launches a command-line helper.
 - Python/Tk compatibility sources and the old Common helper bridge are not part of the repository or release product.
 
-The user-facing name is **Runner Monitor**. The stable Linux executable and desktop identity remain `runnerscope`, and the Debian package identity remains `infiltrator-runner-monitor`.
+The user-facing name is **RunnerScope**. The stable Linux executable and desktop identity remain `runnerscope`, and the Debian package identity remains `runnerscope`.
 
 ## Appearance
 
@@ -26,7 +26,7 @@ Both native shells consume Common directly. On Linux, the shell follows the curr
 
 Windows retains the same native bitmap/MB Corpo visual identity for the fleet shell. Its private configuration storage and HTTPS transport use native platform adapters.
 
-System, Day and Night semantics come from Common. Runner-specific status colours and table meanings remain local to Runner Monitor.
+System, Day and Night semantics come from Common. Runner-specific status colours and table meanings remain local to RunnerScope.
 
 ## Features
 
@@ -49,11 +49,11 @@ The native Windows application currently provides the C/Common Win32 monitor she
 
 Windows requires 64-bit Windows with WinHTTP. Linux requires GTK 3, libcurl and trusted CA certificates. Local Linux service health uses systemd's native D-Bus interface; an explicit restart uses its interactive authorization support.
 
-Choose **Sign in with GitHub**. Runner Monitor reuses an existing session when it has runner access; otherwise it opens your browser and copies the one-time code. Paste it into GitHub and approve access. The application remembers the account, discovers organisation choices and saves/connects automatically. A single administered organisation is selected for you. No app registration, Client ID, personal token, terminal command or separate helper installation is required. GitHub’s official sign-in tool is supplied with the release; monitoring itself remains inside the native application.
+Choose **Sign in with GitHub**. RunnerScope reuses an existing session when it has runner access; otherwise it opens your browser and copies the one-time code. Paste it into GitHub and approve access. The application remembers the account, discovers organisation choices and saves/connects automatically. A single administered organisation is selected for you. No app registration, Client ID, personal token, terminal command or separate helper installation is required. GitHub’s official sign-in tool is supplied with the release; monitoring itself remains inside the native application.
 
 ## Install and run
 
-Windows: use the published `Runner-Monitor-Windows-v<version>.exe`.
+Windows: use the published `RunnerScope-Windows-v<version>.exe`.
 
 Linux:
 
@@ -80,7 +80,7 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-CMake verifies that a populated Common submodule matches the gitlink recorded by the Runner Monitor revision; there is no second hand-maintained Common commit/version pin in the build definition.
+CMake verifies that a populated Common submodule matches the gitlink recorded by the RunnerScope revision; there is no second hand-maintained Common commit/version pin in the build definition.
 
 On Windows, configure with the Visual Studio generator and build the Release configuration. Windows CTest additionally exercises the private durable configuration store. Linux CTest exercises native service response interpretation. Both platforms test configuration, API parsing, pagination and failure handling without real credentials.
 
@@ -92,6 +92,6 @@ cJSON 1.7.19 is bundled under its MIT licence; source identity and hashes are re
 
 ## Licence
 
-Runner Monitor is free software licensed under the GNU General Public License v3.0 or later. See `LICENSE`.
+RunnerScope is free software licensed under the GNU General Public License v3.0 or later. See `LICENSE`.
 
-GitHub and GitHub Actions are trademarks of GitHub, Inc. Runner Monitor is an independent project and is not affiliated with or endorsed by GitHub, Inc.
+GitHub and GitHub Actions are trademarks of GitHub, Inc. RunnerScope is an independent project and is not affiliated with or endorsed by GitHub, Inc.

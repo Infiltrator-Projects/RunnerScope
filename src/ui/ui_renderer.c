@@ -20,7 +20,7 @@ static const RunnerUiChromeActionSpec k_header_actions[] = {
 
 static const RunnerUiChromeActionSpec k_footer_actions[] = {
     {RUNNER_UI_CHROME_EXPORT, "Export CSV", "Export the current workspace as CSV.", false},
-    {RUNNER_UI_CHROME_ABOUT, "About", "About Runner Monitor.", false},
+    {RUNNER_UI_CHROME_ABOUT, "About", "About RunnerScope.", false},
     {RUNNER_UI_CHROME_REFRESH, "Refresh now", "Refresh the active workspace now.", true}
 };
 

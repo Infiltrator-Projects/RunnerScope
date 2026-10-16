@@ -28,7 +28,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         if (g_app.config_error[0]) {
             wchar_t text[320];
             utf8_to_wide(g_app.config_error, text, 320U);
-            MessageBoxW(window, text, L"Runner Monitor configuration",
+            MessageBoxW(window, text, L"RunnerScope configuration",
                         MB_OK | MB_ICONWARNING);
         }
         g_app.rows_stale = true;

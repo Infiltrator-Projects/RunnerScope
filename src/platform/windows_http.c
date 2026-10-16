@@ -198,7 +198,7 @@ static bool http_request(const char *url, const char *token, const char *form,
     operation->references = 1;
     operation->event = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!operation->event) goto done;
-    session = WinHttpOpen(L"Runner-Monitor", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+    session = WinHttpOpen(L"RunnerScope", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, WINHTTP_FLAG_ASYNC);
     if (!session || !WinHttpSetTimeouts(session, 30000, 30000, 30000, 30000)) goto done;
     DWORD retries = 1U;

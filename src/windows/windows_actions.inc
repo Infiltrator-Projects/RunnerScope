@@ -57,10 +57,10 @@ static void show_about(void)
 {
     wchar_t text[512];
     _snwprintf_s(text, 512U, _TRUNCATE,
-                 L"Runner Monitor %hs\r\nInfiltrator OS\r\nCommon %hs\r\n\r\n"
+                 L"RunnerScope %hs\r\nInfiltrator OS\r\nCommon %hs\r\n\r\n"
                  L"Native Windows runner fleet monitor with bounded GitHub provider execution.",
                  RUNNERSCOPE_VERSION, INFILTRATR_COMMON_VERSION);
-    MessageBoxW(g_app.window, text, L"About Runner Monitor", MB_OK | MB_ICONINFORMATION);
+    MessageBoxW(g_app.window, text, L"About RunnerScope", MB_OK | MB_ICONINFORMATION);
 }
 
 static void settings_status(const char *message)
@@ -137,7 +137,7 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
             owner.left + ((owner.right - owner.left) - width) / 2,
             owner.top + ((owner.bottom - owner.top) - height) / 2,
             width, height, SWP_SHOWWINDOW);
-        HWND title = CreateWindowW(L"STATIC", L"Runner Monitor settings", WS_CHILD | WS_VISIBLE,
+        HWND title = CreateWindowW(L"STATIC", L"RunnerScope settings", WS_CHILD | WS_VISIBLE,
             sx(20), sx(16), sx(600), sx(32), window, NULL, g_app.instance, NULL);
         SendMessageW(title, WM_SETFONT, (WPARAM)g_app.font_title, TRUE);
         HWND label = CreateWindowW(L"STATIC", L"GitHub &organisation", WS_CHILD | WS_VISIBLE,
@@ -263,7 +263,7 @@ static void open_settings(void)
     if (g_app.settings_window) { SetForegroundWindow(g_app.settings_window); return; }
     EnableWindow(g_app.window, FALSE);
     g_app.settings_window = CreateWindowExW(WS_EX_DLGMODALFRAME, SETTINGS_CLASS,
-        L"Runner Monitor settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+        L"RunnerScope settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
         CW_USEDEFAULT, CW_USEDEFAULT, sx(650), sx(520),
         g_app.window, NULL, g_app.instance, NULL);
     if (!g_app.settings_window) EnableWindow(g_app.window, TRUE);

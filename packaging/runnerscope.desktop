@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 [Desktop Entry]
 Type=Application
-Name=Runner Monitor
-GenericName=GitHub Runner Monitor
+Name=RunnerScope
+GenericName=GitHub RunnerScope
 Comment=Monitor GitHub Actions self-hosted runners
 TryExec=/usr/bin/runnerscope
 Exec=/usr/bin/runnerscope

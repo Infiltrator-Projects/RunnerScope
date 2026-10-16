@@ -21,13 +21,13 @@ set(RUNNERSCOPE_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/infiltratr-common")
 if(NOT EXISTS "${RUNNERSCOPE_COMMON_DIR}/VERSION" OR
    NOT EXISTS "${RUNNERSCOPE_COMMON_DIR}/CMakeLists.txt")
     message(FATAL_ERROR
-        "Infiltratr Common is missing. Run: git submodule update --init --recursive")
+        "Libraries is missing. Run: git submodule update --init --recursive")
 endif()
 
 file(READ "${RUNNERSCOPE_COMMON_DIR}/VERSION" RUNNERSCOPE_COMMON_VERSION)
 string(STRIP "${RUNNERSCOPE_COMMON_VERSION}" RUNNERSCOPE_COMMON_VERSION)
 if(RUNNERSCOPE_COMMON_VERSION STREQUAL "")
-    message(FATAL_ERROR "Infiltratr Common VERSION is empty")
+    message(FATAL_ERROR "Libraries VERSION is empty")
 endif()
 
 find_package(Git QUIET)
@@ -51,12 +51,12 @@ if(GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git" AND
        RUNNERSCOPE_COMMON_EXPECTED_COMMIT STREQUAL "" OR
        NOT RUNNERSCOPE_COMMON_ACTUAL_COMMIT STREQUAL RUNNERSCOPE_COMMON_EXPECTED_COMMIT)
         message(FATAL_ERROR
-            "Infiltratr Common checkout does not match this revision's gitlink: "
+            "Libraries checkout does not match this revision's gitlink: "
             "expected ${RUNNERSCOPE_COMMON_EXPECTED_COMMIT}, "
             "found ${RUNNERSCOPE_COMMON_ACTUAL_COMMIT}")
     endif()
 endif()
-message(STATUS "Runner Monitor Common: ${RUNNERSCOPE_COMMON_VERSION}")
+message(STATUS "RunnerScope Common: ${RUNNERSCOPE_COMMON_VERSION}")
 
 set(INFILTRATR_COMMON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(INFILTRATR_COMMON_BUILD_SHARED OFF CACHE BOOL "" FORCE)
@@ -188,7 +188,7 @@ if(WIN32)
         src/windows/windows_controller.inc
         "${RUNNERSCOPE_WINDOWS_RC}"
     )
-    set_target_properties(runnerscope PROPERTIES OUTPUT_NAME "Runner-Monitor")
+    set_target_properties(runnerscope PROPERTIES OUTPUT_NAME "RunnerScope")
     target_link_libraries(runnerscope PRIVATE
         runnerscope_core
         runnerscope_windows_platform
@@ -263,7 +263,7 @@ else()
 
     install(TARGETS runnerscope RUNTIME DESTINATION bin)
     install(PROGRAMS "${RUNNERSCOPE_GH_BINARY}" DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}/runnerscope")
-    install(FILES third_party/github-cli/LICENSE DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/infiltrator-runner-monitor" RENAME GitHub-CLI-LICENSE)
+    install(FILES third_party/github-cli/LICENSE DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/runnerscope" RENAME GitHub-CLI-LICENSE)
     install(FILES packaging/runnerscope.desktop DESTINATION share/applications)
     install(FILES packaging/runnerscope.svg
             DESTINATION share/icons/hicolor/scalable/apps)
@@ -278,7 +278,7 @@ else()
         "${RUNNERSCOPE_FONT_DIR}/${INFILTRATR_MB_CORPO_UI_REGULAR_FILE}"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/fonts/truetype/runnerscope")
     install(FILES third_party/cjson/LICENSE
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/infiltrator-runner-monitor"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/runnerscope"
         RENAME cJSON-LICENSE)
 endif()
 

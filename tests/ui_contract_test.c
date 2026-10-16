@@ -234,12 +234,12 @@ static int verify_chrome_renderer(void)
     };
     for (size_t i = 0U; i < 4U; ++i)
         if (recorder.header_ids[i] != expected_header[i]) return 3;
-    if (strcmp(recorder.product_title, "Runner Monitor") != 0 ||
+    if (strcmp(recorder.product_title, "RunnerScope") != 0 ||
         strcmp(recorder.product_family, "Infiltrator OS") != 0)
         return 4;
 
     RunnerUiFooterState state = {
-        "Ready", "Runner Monitor test", "Common test", false
+        "Ready", "RunnerScope test", "Common test", false
     };
     if (!runner_ui_render_footer(&renderer, &state)) return 5;
     if (recorder.footer_begin_count != 1U ||
@@ -255,7 +255,7 @@ static int verify_chrome_renderer(void)
         if (recorder.footer_ids[i] != expected_footer[i]) return 7;
     if (strcmp(recorder.footer_labels[2], "Refresh now") != 0 ||
         strcmp(recorder.status_text, "Ready") != 0 ||
-        strcmp(recorder.app_version, "Runner Monitor test") != 0 ||
+        strcmp(recorder.app_version, "RunnerScope test") != 0 ||
         strcmp(recorder.common_version, "Common test") != 0)
         return 8;
 
@@ -344,7 +344,7 @@ static int verify_workspace_summary_renderer(void)
         recorder.page != RUNNER_UI_PAGE_LOCAL_HEALTH)
         return 2;
     if (strcmp(recorder.title, "Local Windows health") != 0 ||
-        strcmp(recorder.subtitle, "SERVICES  •  DIAGNOSTICS  •  LINK") != 0 ||
+        strcmp(recorder.subtitle, "SERVICES  •  DIAGNOSTICS  •  Link") != 0 ||
         strcmp(recorder.nav_asset, "nav-health.png") != 0 ||
         strcmp(recorder.hero_asset, "hero-health.png") != 0)
         return 3;
@@ -604,7 +604,7 @@ int main(void)
         return 1;
     }
 
-    if (strcmp(runner_ui_product_title(), "Runner Monitor") != 0) return 2;
+    if (strcmp(runner_ui_product_title(), "RunnerScope") != 0) return 2;
     if (strcmp(runner_ui_product_family(), "Infiltrator OS") != 0) return 3;
 
     for (int i = 0; i < RUNNER_UI_PAGE_COUNT; ++i) {
@@ -662,6 +662,6 @@ int main(void)
     if (verify_workspace_summary_renderer() != 0) return 18;
     if (verify_runner_cards_renderer() != 0) return 19;
 
-    puts("Runner Monitor shared UI contract, navigation, page transitions, workspace summary, runner cards/details and shell chrome renderers passed.");
+    puts("RunnerScope shared UI contract, navigation, page transitions, workspace summary, runner cards/details and shell chrome renderers passed.");
     return 0;
 }

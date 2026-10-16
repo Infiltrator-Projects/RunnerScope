@@ -1,6 +1,6 @@
 # Documentation
 
-Runner Monitor follows the common Infiltrator documentation baseline.
+RunnerScope follows the common Infiltrator documentation baseline.
 
 - [Engineering philosophy](PHILOSOPHY.md) — governing engineering and documentation standard.
 - [Architecture](ARCHITECTURE.md) — native product structure and ownership.

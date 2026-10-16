@@ -54,7 +54,7 @@ static const RunnerUiPageSpec k_pages[RUNNER_UI_PAGE_COUNT] = {
         "nav-health.png",
         "hero-health.png",
         "Local health",
-        "SERVICES  •  DIAGNOSTICS  •  LINK",
+        "SERVICES  •  DIAGNOSTICS  •  Link",
         "Services and diagnostics",
         {"SERVICES", "RUNNING", "GITHUB", "DIAGNOSTICS"},
         RUNNER_UI_ACTION_OPEN_DIAGNOSTIC | RUNNER_UI_ACTION_RESTART_RUNNER,
@@ -101,7 +101,7 @@ static bool platform_valid(RunnerUiPlatform platform)
 
 const char *runner_ui_product_title(void)
 {
-    return "Runner Monitor";
+    return "RunnerScope";
 }
 
 const char *runner_ui_product_family(void)

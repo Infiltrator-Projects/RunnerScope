@@ -148,7 +148,7 @@ bool runner_windows_config_load(RunnerConfig *config, char *error, size_t error_
     runner_config_defaults(config);
     if (error && error_size) error[0] = '\0';
     wchar_t *path = config_path();
-    if (!path) { set_error(error, error_size, "Unable to resolve the Runner Monitor configuration path."); return false; }
+    if (!path) { set_error(error, error_size, "Unable to resolve the RunnerScope configuration path."); return false; }
     HANDLE file = CreateFileW(path, GENERIC_READ | READ_CONTROL, FILE_SHARE_READ, NULL,
         OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
     const DWORD open_error = file == INVALID_HANDLE_VALUE ? GetLastError() : ERROR_SUCCESS;

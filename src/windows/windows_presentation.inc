@@ -268,7 +268,7 @@ static void draw_footer(HDC dc, RECT client)
                        g_app.row_count, g_app.row_count == 1U ? "" : "s", g_app.config.organisation);
     }
     char app_version[128], common_version[128];
-    (void)snprintf(app_version, sizeof(app_version), "Runner Monitor %s", RUNNERSCOPE_VERSION);
+    (void)snprintf(app_version, sizeof(app_version), "RunnerScope %s", RUNNERSCOPE_VERSION);
     (void)snprintf(common_version, sizeof(common_version), "Common %s", INFILTRATR_COMMON_VERSION);
     RunnerUiFooterState state = {status, app_version, common_version, g_app.refreshing};
     WinChromeContext ctx = {0};

@@ -1,6 +1,6 @@
 # GitHub sign-in
 
-Choose **Sign in with GitHub**. Runner Monitor first reuses an existing GitHub CLI session if it can access the selected organisation's runners. Otherwise it opens GitHub and copies the one-time code. Paste the code and approve access. Sign-in saves and connects automatically.
+Choose **Sign in with GitHub**. RunnerScope first reuses an existing GitHub CLI session if it can access the selected organisation's runners. Otherwise it opens GitHub and copies the one-time code. Paste the code and approve access. Sign-in saves and connects automatically.
 
 No application registration, Client ID, personal token, terminal command, separate helper installation or manual credential copying is required. GitHub may require account sign-in, MFA, SSO or organisation approval.
 
@@ -10,13 +10,13 @@ An existing organisation is retained. On a new setup, a single active organisati
 
 The release supplies the official, unmodified GitHub CLI 2.102.0 as an isolated sign-in broker. cmake/GitHubSignIn.cmake records its exact official archive URLs and SHA-256 release-asset digests. Linux installs the private helper under libexec; the Windows executable embeds it and extracts it into a new private directory only while needed. Neither platform searches PATH or asks the user to install it.
 
-The browser's authorization identifies **GitHub CLI**, the registered identity of the official broker. Runner Monitor does not copy that application's Client ID or secret into its own authentication implementation. It invokes the official program with fixed arguments, without a shell. GitHub CLI's normal scopes plus admin:org provide organisation runner access and private repository activity.
+The browser's authorization identifies **GitHub CLI**, the registered identity of the official broker. RunnerScope does not copy that application's Client ID or secret into its own authentication implementation. It invokes the official program with fixed arguments, without a shell. GitHub CLI's normal scopes plus admin:org provide organisation runner access and private repository activity.
 
 The helper runs with noninteractive input, bounded output, a finite deadline and cancellation. API debugging and environment-token overrides are removed from its environment. Only the pinned one-time-code line is interpreted as a challenge; arbitrary helper output is never displayed as an error or treated as a browser URL.
 
-New authorization uses a fresh owner-restricted temporary configuration. The resulting session is transferred automatically into Runner Monitor's existing private settings, and the temporary files are removed. Other GitHub CLI accounts, git configuration and credential-store entries are left intact. Reading an existing session never changes it.
+New authorization uses a fresh owner-restricted temporary configuration. The resulting session is transferred automatically into RunnerScope's existing private settings, and the temporary files are removed. Other GitHub CLI accounts, git configuration and credential-store entries are left intact. Reading an existing session never changes it.
 
-Runner Monitor still makes every monitoring request directly through libcurl or WinHTTP. Its provider, services, UI and configuration remain native C. The broker is used only for sign-in and the version probe.
+RunnerScope still makes every monitoring request directly through libcurl or WinHTTP. Its provider, services, UI and configuration remain native C. The broker is used only for sign-in and the version probe.
 
 ## Verification
 

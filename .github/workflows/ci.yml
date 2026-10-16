@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: Runner Monitor CI
+name: RunnerScope CI
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
           test "$(dpkg-parsechangelog -SVersion)" = "$version"
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
-          deb="$(find .. -maxdepth 1 -name "infiltrator-runner-monitor_${version}_*.deb" -print -quit)"
+          deb="$(find .. -maxdepth 1 -name "runnerscope_${version}_*.deb" -print -quit)"
           test -n "$deb"
           cp "$deb" "dist/runnerscope_${version}_amd64.deb"
           dpkg-deb --info "dist/runnerscope_${version}_amd64.deb"
@@ -94,8 +94,8 @@ jobs:
       - name: Purge package cleanly
         if: always()
         run: |
-          if dpkg-query -W infiltrator-runner-monitor >/dev/null 2>&1; then
-            sudo apt-get purge -y infiltrator-runner-monitor
+          if dpkg-query -W runnerscope >/dev/null 2>&1; then
+            sudo apt-get purge -y runnerscope
           fi
 
   windows-release:
@@ -133,7 +133,7 @@ jobs:
           ctest --test-dir build -C Release --output-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          $exe = ".\build\Release\Runner-Monitor.exe"
+          $exe = ".\build\Release\RunnerScope.exe"
           if (!(Test-Path $exe)) { throw "Native x64 EXE missing" }
           $bytes = [System.IO.File]::ReadAllBytes($exe)
           $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3c)
@@ -143,13 +143,13 @@ jobs:
           }
 
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item $exe ".\dist\Runner-Monitor-Windows.exe"
+          Copy-Item $exe ".\dist\RunnerScope-Windows.exe"
 
       - name: Upload qualified Windows executable
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: runner-monitor-windows
-          path: dist/Runner-Monitor-Windows.exe
+          path: dist/RunnerScope-Windows.exe
           if-no-files-found: error
 
   release-state:
@@ -226,11 +226,11 @@ jobs:
           version="${{ needs.release-state.outputs.version }}"
           tag="v${version}"
           deb="$(find release/deb -type f -name 'runnerscope_*.deb' -print -quit)"
-          win="release/windows/Runner-Monitor-Windows.exe"
+          win="release/windows/RunnerScope-Windows.exe"
           test -f "$deb"
           test -f "$win"
 
-          win_release="release/Runner-Monitor-Windows-v${version}.exe"
+          win_release="release/RunnerScope-Windows-v${version}.exe"
           cp "$win" "$win_release"
           cp "$deb" "release/$(basename "$deb")"
           deb_release="release/$(basename "$deb")"
@@ -243,7 +243,7 @@ jobs:
 
           if ! gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/release-state"; then
             gh release create "$tag" --target "$GITHUB_SHA" --draft \
-              --title "Runner Monitor $version" \
+              --title "RunnerScope $version" \
               --notes "Exact Linux and Windows binaries qualified from $GITHUB_SHA."
             gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/release-state"
           fi
@@ -307,7 +307,7 @@ jobs:
                 continue
               fi
               stanza="$(awk -v version="$VERSION" 'BEGIN { RS="" }
-                index("\n" $0 "\n", "\nPackage: infiltrator-runner-monitor\n") &&
+                index("\n" $0 "\n", "\nPackage: runnerscope\n") &&
                 index("\n" $0 "\n", "\nVersion: " version "\n") { print }' "$index")"
               if ! grep -Fqx "SHA256: $expected" <<< "$stanza" ||
                  ! grep -Fqx "Filename: pool/main/$ASSET" <<< "$stanza"; then
@@ -317,7 +317,7 @@ jobs:
             if [[ "$ready" == true ]]; then
               curl -fsSL --retry 3 --max-time 30 "$BASE/pool/main/$ASSET" -o "$RUNNER_TEMP/apt-update.deb"
               printf '%s  %s\n' "$expected" "$RUNNER_TEMP/apt-update.deb" | sha256sum --check
-              printf 'Runner Monitor %s is live in beta and alpha APT, with the qualified release digest.\n' "$VERSION"
+              printf 'RunnerScope %s is live in beta and alpha APT, with the qualified release digest.\n' "$VERSION"
               exit 0
             fi
             echo "Waiting for APT publication of $VERSION ($attempt/100)…"

@@ -2,7 +2,7 @@
 
 ## First-principles position
 
-Runner Monitor should remain understandable, testable and native even while dependencies are progressively reduced.
+RunnerScope should remain understandable, testable and native even while dependencies are progressively reduced.
 
 The application therefore separates provider facts from application interpretation and keeps Common limited to genuinely shared primitives.
 
@@ -19,13 +19,13 @@ The application therefore separates provider facts from application interpretati
 
 ## Provider semantics
 
-GitHub is authoritative for GitHub runner/workflow facts. Runner Monitor owns caching, correlation, timing, presentation and persistence.
+GitHub is authoritative for GitHub runner/workflow facts. RunnerScope owns caching, correlation, timing, presentation and persistence.
 
 The shipping native application makes its own bounded HTTPS requests. The session is obtained through the supplied official GitHub sign-in broker and saved automatically in the existing private JSON configuration. Users never register an application or copy credentials. Sign-in opens the browser and copies the one-time code; a sole administered organisation is selected automatically. Monitoring does not launch a helper or browser. Failed requests must remain visible and must not turn stale observations into current idle counts.
 
 ## Common usage
 
-Common owns shared palette, design metrics, typography identity, formatting and other product-neutral helpers. Runner Monitor links it directly into each native binary.
+Common owns shared palette, design metrics, typography identity, formatting and other product-neutral helpers. RunnerScope links it directly into each native binary.
 
 Runner-specific HTTP/provider/service policy must not be moved into Common merely to reduce local code.
 
@@ -37,7 +37,7 @@ The shared UI contract is intentionally small. It describes product hierarchy, c
 
 The rule is: **application structure lives once; platform mechanics live twice.**
 
-The footer must show the Runner Monitor version followed by the linked Common version, with Common as the final line.
+The footer must show the RunnerScope version followed by the linked Common version, with Common as the final line.
 
 ## Local service safety
 
@@ -63,7 +63,7 @@ The Windows shell consumes the same Common palette/metrics, MB typography and pr
 
 ## Graphical presentation contract
 
-Runner Monitor is an Infiltrator OS graphical application, not a text-first data viewer. Shipping builds consume the Common-verified MB Corpo UI, bold and brand faces plus product-local raster artwork for navigation wells, page hero imagery and persistent Infiltrator OS identity. Common owns semantic palette, structural metrics and typography identity. Tables remain the detailed evidence surface, subordinate to the graphical state overview.
+RunnerScope is an Infiltrator OS graphical application, not a text-first data viewer. Shipping builds consume the Common-verified MB Corpo UI, bold and brand faces plus product-local raster artwork for navigation wells, page hero imagery and persistent Infiltrator OS identity. Common owns semantic palette, structural metrics and typography identity. Tables remain the detailed evidence surface, subordinate to the graphical state overview.
 
 Raster artwork must show recognisable solid objects, material detail and tonal depth at its displayed size. Saving procedural grids and outline drawings as PNG does not satisfy this visual requirement. The four workspace identities, their banners and the sidebar use a coordinated graphite/cyan hardware art family. The application/desktop icon retains the shared flat cyan identity. Telemetry refreshes reuse the displayed bitmap; a page change replaces it.
 

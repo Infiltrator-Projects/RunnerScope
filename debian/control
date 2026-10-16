@@ -1,4 +1,4 @@
-Source: infiltrator-runner-monitor
+Source: runnerscope
 Section: devel
 Priority: optional
 Maintainer: Shannon Smith <noreply@github.com>
@@ -7,14 +7,14 @@ Standards-Version: 4.7.0
 Rules-Requires-Root: no
 Homepage: https://github.com/Infiltrator-Projects/RunnerScope
 
-Package: infiltrator-runner-monitor
+Package: runnerscope
 Architecture: any
-Provides: runnerscope
-Breaks: runnerscope (<< 1.1.3)
-Replaces: runnerscope (<< 1.1.3)
+Provides: infiltrator-runner-monitor (= ${binary:Version})
+Breaks: infiltrator-runner-monitor (<< ${binary:Version})
+Replaces: infiltrator-runner-monitor (<< ${binary:Version})
 Depends: ${shlibs:Depends}, ${misc:Depends}, fontconfig, ca-certificates
 Description: native GitHub Actions self-hosted runner desktop monitor
- Runner Monitor is a native C desktop application linked directly to the
- pinned Infiltratr Common library. Linux uses GTK for its native desktop shell.
+ RunnerScope is a native C desktop application linked directly to the
+ pinned Libraries library. Linux uses GTK for its native desktop shell.
  GitHub requests and JSON decoding run inside the application. The Linux package
  includes the Common-verified MB Corpo faces and product-local bitmap artwork.

@@ -544,7 +544,7 @@ static GdkPixbuf *runner_asset_pixbuf(const char *name, gint width, gint height)
     GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(
         path, width, height, TRUE, &error);
     if (!pixbuf) {
-        g_warning("Runner Monitor artwork %s could not be loaded: %s",
+        g_warning("RunnerScope artwork %s could not be loaded: %s",
                   path, error ? error->message : "unknown error");
         g_clear_error(&error);
     }
@@ -608,7 +608,7 @@ static void enforce_required_typography(GtkWidget *widget)
     if (!type || !context ||
         !pango_context_has_family(context, type->ui_family) ||
         !pango_context_has_family(context, type->brand_family)) {
-        g_error("Runner Monitor requires the Common-verified MB Corpo UI and brand faces");
+        g_error("RunnerScope requires the Common-verified MB Corpo UI and brand faces");
     }
 }
 
@@ -2831,7 +2831,7 @@ static gboolean entry_uint(GtkWidget *entry, unsigned int *value)
 static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
 {
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
-        first_run ? "Runner Monitor setup" : "Runner Monitor settings",
+        first_run ? "RunnerScope setup" : "RunnerScope settings",
         app->window ? GTK_WINDOW(app->window) : NULL,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "_Cancel", GTK_RESPONSE_CANCEL, "_Save and test", GTK_RESPONSE_ACCEPT, NULL);
@@ -2989,7 +2989,7 @@ static void on_about(GtkButton *button, gpointer user_data)
     char comments[384];
     (void)g_snprintf(
         comments, sizeof(comments),
-        "%s\n\nNative C / GTK 3\nInfiltratr Common %s",
+        "%s\n\nNative C / GTK 3\nLibraries %s",
         info.comments ? info.comments : "GitHub Actions self-hosted runner monitor",
         INFILTRATR_COMMON_VERSION);
     const char *authors[] = {

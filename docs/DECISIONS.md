@@ -2,7 +2,7 @@
 
 ## ADR-001 — Native C is the product
 
-**Decision.** Runner Monitor ships as compiled C on Linux and Windows.
+**Decision.** RunnerScope ships as compiled C on Linux and Windows.
 
 **Rationale.** The native implementation already existed and directly used Common. Treating Python/Tk as the supported product while a stricter rewrite was underway inverted the intended architecture.
 

@@ -142,7 +142,7 @@ static bool http_request(const char *url, const char *token, const char *form,
         SET_OPTION(CURLOPT_POSTFIELDSIZE, (long)strlen(form));
     } else SET_OPTION(CURLOPT_HTTPGET, 1L);
     SET_OPTION(CURLOPT_HTTPHEADER, headers);
-    SET_OPTION(CURLOPT_USERAGENT, "Runner-Monitor");
+    SET_OPTION(CURLOPT_USERAGENT, "RunnerScope");
     SET_OPTION(CURLOPT_PROTOCOLS_STR, "https");
     SET_OPTION(CURLOPT_FOLLOWLOCATION, 0L);
     SET_OPTION(CURLOPT_SSL_VERIFYPEER, 1L);

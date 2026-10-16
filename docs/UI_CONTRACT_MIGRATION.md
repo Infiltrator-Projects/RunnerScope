@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Runner Monitor currently has two native presentation implementations: GTK on Linux and Win32 on Windows. They share Common, artwork, typography and product semantics, but the application structure is still expressed twice. That leaves room for visual and feature drift whenever one shell evolves without the other.
+RunnerScope currently has two native presentation implementations: GTK on Linux and Win32 on Windows. They share Common, artwork, typography and product semantics, but the application structure is still expressed twice. That leaves room for visual and feature drift whenever one shell evolves without the other.
 
 The target architecture is a small declarative, platform-neutral UI contract with native renderers. Application structure is declared once; GTK and Win32 translate that structure into their own native controls and drawing APIs.
 
@@ -10,12 +10,12 @@ The rule is:
 
 > Application structure lives once; platform mechanics live twice.
 
-This is not a new cross-platform widget toolkit and it must not grow into one. The shared layer describes only Runner Monitor/Infiltrator OS concepts that are genuinely common to both shells.
+This is not a new cross-platform widget toolkit and it must not grow into one. The shared layer describes only RunnerScope/Infiltrator OS concepts that are genuinely common to both shells.
 
 ## Target shape
 
 ```text
-Runner Monitor application model
+RunnerScope application model
             |
             v
    shared declarative UI tree
@@ -83,7 +83,7 @@ The Win32 renderer owns:
 - GDI/WIC/custom drawing where required;
 - message routing, DPI and native window behaviour.
 
-Common continues to own product-neutral palette, structural metrics, typography identity and other genuinely shared primitives. Runner Monitor owns the initial application UI contract. A reusable Infiltrator-wide layer should only move into Common after the vocabulary has proven itself in Runner Monitor and at least one other application.
+Common continues to own product-neutral palette, structural metrics, typography identity and other genuinely shared primitives. RunnerScope owns the initial application UI contract. A reusable Infiltrator-wide layer should only move into Common after the vocabulary has proven itself in RunnerScope and at least one other application.
 
 ## Migration method
 
@@ -171,7 +171,7 @@ A documentation-only release is deliberately avoided; version numbers should rep
 
 The migration is complete when:
 
-1. one authoritative Runner Monitor UI tree defines the supported product structure;
+1. one authoritative RunnerScope UI tree defines the supported product structure;
 2. GTK and Win32 render that same tree;
 3. CI checks the shared contract and renderer coverage;
 4. application-level layout is no longer duplicated between Linux and Windows;
