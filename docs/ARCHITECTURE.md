@@ -30,7 +30,7 @@ Workers consume immutable organisation/token snapshots. Superseded results canno
 
 `RunnerConfig` is the shared configuration authority for both platforms. It owns defaults, validation, duplicate-key rejection, JSON interpretation and deterministic serialisation. Platform storage owns file paths and durable publication. Settings edits a complete candidate configuration so changing the organisation or token preserves other preferences.
 
-The token is masked in Settings and stored in the existing per-user JSON file. Linux uses owner-only file permissions; Windows applies a current-user/SYSTEM ACL before writing temporary files. Both publish the validated document atomically. Legacy documents without a token remain compatible and require setup through Settings. Corrupt and unreadable configuration is surfaced.
+GitHub device authorization supplies the session internally; Settings displays only its one-time browser code. The session is stored in the existing per-user JSON file. Linux uses owner-only file permissions; Windows applies a current-user/SYSTEM ACL before writing temporary files. Both publish the validated document atomically. Legacy documents without a session remain compatible and require browser sign-in through Settings. Corrupt and unreadable configuration is surfaced.
 
 ## Common boundary
 
@@ -71,3 +71,5 @@ Linux configuration storage and history retain the stable paths and use Common d
 `main` is the only retained and working branch. `VERSION` owns the Runner Monitor version. The Common gitlink owns the Common revision. The single CI workflow owns qualification and release publication.
 
 Linux packages and Windows executables are published only when the exact artifact uploaded for release has passed the platform's runtime/contract qualification. Release publication is not selected by commit-message convention and does not rebuild the product in a second workflow.
+
+The shared device-authorization state machine owns reply validation, local expiry, polling and slow-down semantics. Each platform owns a background native HTTPS adapter and a UI-lifetime controller. Closing or superseding a dialog invalidates its generation so a late authorization reply cannot replace a saved account. The project OAuth client is a public build input; no other application identity or client secret is reused.

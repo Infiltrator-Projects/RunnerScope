@@ -2853,7 +2853,7 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         gtk_grid_attach(GTK_GRID(grid), label, 0, (gint)i, 1, 1);
         if (i < G_N_ELEMENTS(entries) && i != 1U) {
             entries[i] = gtk_entry_new();
-            gtk_entry_set_max_length(GTK_ENTRY(entries[i]), i == 1U ? (gint)RUNNER_GITHUB_TOKEN_CAPACITY - 1 : i == 0U ? 127 : 10);
+            gtk_entry_set_max_length(GTK_ENTRY(entries[i]), i == 0U ? 127 : 10);
             gtk_grid_attach(GTK_GRID(grid), entries[i], 1, (gint)i, 1, 1);
         }
     }

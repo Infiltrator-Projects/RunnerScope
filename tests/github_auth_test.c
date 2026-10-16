@@ -72,6 +72,10 @@ int main(void)
     runner_github_auth_clear(&auth); f.fail = true;
     CHECK(step(&auth, 0U, &f) == RUNNER_AUTH_FAILED && !strstr(auth.error, "offline-secret"));
     f.fail = false;
+    runner_github_auth_clear(&auth); f.status = 400U;
+    f.json = "{\"error\":\"device_flow_disabled\"}";
+    CHECK(step(&auth, 0U, &f) == RUNNER_AUTH_FAILED && strstr(auth.error, "Device Flow"));
+    f.status = 200U;
     const char *invalid[] = {
         "{}", "{bad-json", "null", "[]",
         "{\"device_code\":\"fixture-device\",\"user_code\":\"ABCD-EFGH\",\"verification_uri\":\"https://github.com.evil.invalid/login/device\",\"expires_in\":900,\"interval\":5}",

@@ -27,7 +27,7 @@ The last point is a regression gate for the pre-1.3.8 Windows Settings defect th
 
 Offline GitHub tests cover all four response projections, malformed JSON/schema/UTF-8, trusted-origin Link pagination, cycles, page/byte limits, permission/rate-limit failures and all-or-nothing failure across pages. Diagnostics must not echo the supplied token or arbitrary transport error text.
 
-The installed GTK self-test uses isolated configuration and an injected offline transport. It checks masked token input, Settings validation and save/reload, private permissions, legacy migration, corrupt/NUL/oversized-file rejection, immutable credential snapshots, superseded-result rejection and stale runner/activity presentation. It must not access real credentials or restart services. Native service tests use response fixtures and cancelled operations.
+The installed GTK self-test uses isolated configuration and an injected offline transport. It checks native browser sign-in and cancellation, Settings validation and save/reload, private permissions, legacy migration, corrupt/NUL/oversized-file rejection, immutable credential snapshots, superseded-result rejection and stale runner/activity presentation. It must not access real credentials or restart services. Native service tests use response fixtures and cancelled operations.
 
 ## Linux qualification
 
