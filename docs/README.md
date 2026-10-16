@@ -2,6 +2,7 @@
 
 Runner Monitor follows the common Infiltrator documentation baseline.
 
+- [Engineering philosophy](PHILOSOPHY.md) — governing engineering and documentation standard.
 - [Architecture](ARCHITECTURE.md) — native product structure and ownership.
 - [Design](DESIGN.md) — state, Common and cross-platform presentation rules.
 - [Shared UI contract migration](UI_CONTRACT_MIGRATION.md) — 1.3.x declarative UI model, GTK/Win32 renderer boundary, migration phases and completion criteria.
