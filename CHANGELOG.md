@@ -4,6 +4,10 @@
 
 No unreleased changes.
 
+## 1.3.12 - 2026-10-16
+
+- Move the governing engineering philosophy into `docs/PHILOSOPHY.md` and update maintained documentation references.
+
 ## 1.3.11 - 2026-10-16
 
 - Parse JSON number syntax independently of the desktop locale, preserving legacy decimal settings on comma-decimal desktops.

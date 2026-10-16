@@ -1,3 +1,10 @@
+infiltrator-runner-monitor (1.3.12) unstable; urgency=medium
+
+  * Move the governing engineering philosophy into docs/PHILOSOPHY.md and
+    update maintained documentation references.
+
+ -- Infiltrator Projects <noreply@github.com>  Fri, 16 Oct 2026 04:55:00 +0000
+
 infiltrator-runner-monitor (1.3.11) unstable; urgency=medium
 
   * Validate JSON numbers independently of the desktop numeric locale.
