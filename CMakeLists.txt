@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.20)
 
 file(READ "${CMAKE_CURRENT_LIST_DIR}/VERSION" RUNNERSCOPE_VERSION)
 string(STRIP "${RUNNERSCOPE_VERSION}" RUNNERSCOPE_VERSION)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/VERSION")
 project(RunnerMonitor VERSION "${RUNNERSCOPE_VERSION}" LANGUAGES C)
 
 include(CTest)
 include(GNUInstallDirs)
+include(cmake/GitHubSignIn.cmake)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -64,27 +66,8 @@ add_library(runnerscope_core STATIC
     src/core/runner_config.c
     src/core/github.c
     src/core/github_auth.c
-    src/core/github_setup.c
     third_party/cjson/cJSON.c
 )
-# Optional public project registration, never a secret. A configured build
-# signs in directly; other builds offer complete native setup in Settings.
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/packaging/github-oauth-client-id.txt" RUNNERSCOPE_DEFAULT_CLIENT_ID)
-string(STRIP "${RUNNERSCOPE_DEFAULT_CLIENT_ID}" RUNNERSCOPE_DEFAULT_CLIENT_ID)
-set(RUNNERSCOPE_GITHUB_CLIENT_ID "${RUNNERSCOPE_DEFAULT_CLIENT_ID}" CACHE STRING "Runner Monitor public GitHub OAuth client ID")
-if(RUNNERSCOPE_GITHUB_CLIENT_ID STREQUAL "")
-    set(RUNNERSCOPE_GITHUB_CLIENT_ID "${RUNNERSCOPE_DEFAULT_CLIENT_ID}")
-endif()
-string(LENGTH "${RUNNERSCOPE_GITHUB_CLIENT_ID}" RUNNERSCOPE_CLIENT_ID_LENGTH)
-if(RUNNERSCOPE_CLIENT_ID_LENGTH GREATER_EQUAL 128)
-    message(FATAL_ERROR "GitHub OAuth client ID exceeds the supported length")
-endif()
-if(NOT RUNNERSCOPE_GITHUB_CLIENT_ID MATCHES "^[A-Za-z0-9_.-]*$")
-    message(FATAL_ERROR "Invalid GitHub OAuth client ID")
-endif()
-target_compile_definitions(runnerscope_core PRIVATE
-    RUNNERSCOPE_GITHUB_CLIENT_ID="${RUNNERSCOPE_GITHUB_CLIENT_ID}")
-
 target_include_directories(runnerscope_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -155,12 +138,14 @@ if(WIN32)
 
     add_library(runnerscope_windows_platform STATIC
         src/platform/windows_config_store.c
+        src/platform/windows_github_sign_in.c
         src/platform/windows_http.c
     )
     target_include_directories(runnerscope_windows_platform PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_link_libraries(runnerscope_windows_platform PUBLIC runnerscope_core winhttp advapi32)
+    target_link_libraries(runnerscope_windows_platform PUBLIC runnerscope_core winhttp advapi32 bcrypt)
+    target_compile_definitions(runnerscope_windows_platform PRIVATE RUNNERSCOPE_GH_VERSION="${RUNNERSCOPE_GH_VERSION}")
     if(MSVC)
         target_compile_options(runnerscope_windows_platform PRIVATE /W4 /utf-8)
     elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -187,6 +172,10 @@ if(WIN32)
         "2103 RCDATA \"${RUNNERSCOPE_FONT_RC}/${INFILTRATR_MB_CORPO_UI_REGULAR_FILE}\"\n"
         "2201 RCDATA \"${RUNNERSCOPE_SOURCE_RC}/third_party/cjson/LICENSE\"\n")
 
+    file(APPEND "${RUNNERSCOPE_WINDOWS_RC}" "2301 RCDATA \"${RUNNERSCOPE_GH_BINARY}\"\n")
+
+    file(APPEND "${RUNNERSCOPE_WINDOWS_RC}" "2302 RCDATA \"${RUNNERSCOPE_SOURCE_RC}/third_party/github-cli/LICENSE\"\n")
+
     add_executable(runnerscope WIN32
         src/windows_main.c
         src/windows_resources.h
@@ -195,7 +184,6 @@ if(WIN32)
         src/windows/windows_layout.inc
         src/windows/windows_presentation.inc
         src/windows/windows_auth.inc
-        src/windows/windows_github_setup.inc
         src/windows/windows_actions.inc
         src/windows/windows_controller.inc
         "${RUNNERSCOPE_WINDOWS_RC}"
@@ -236,7 +224,13 @@ else()
     target_link_libraries(runnerscope_core PUBLIC Threads::Threads)
     add_library(runnerscope_linux_platform STATIC
         src/platform/linux_http.c
-        src/platform/linux_services.c)
+        src/platform/linux_services.c
+        src/platform/linux_github_sign_in.c)
+    target_compile_definitions(runnerscope_linux_platform PRIVATE
+        RUNNERSCOPE_GH_VERSION="${RUNNERSCOPE_GH_VERSION}"
+        RUNNERSCOPE_BUILD_ROOT="${CMAKE_BINARY_DIR}"
+        RUNNERSCOPE_GH_BUILD_EXECUTABLE="${RUNNERSCOPE_GH_BINARY}"
+        RUNNERSCOPE_GH_EXECUTABLE="${CMAKE_INSTALL_FULL_LIBEXECDIR}/runnerscope/gh")
     target_include_directories(runnerscope_linux_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(runnerscope_linux_platform PUBLIC
         runnerscope_core PkgConfig::GTK3 CURL::libcurl Threads::Threads)
@@ -268,6 +262,8 @@ else()
     endif()
 
     install(TARGETS runnerscope RUNTIME DESTINATION bin)
+    install(PROGRAMS "${RUNNERSCOPE_GH_BINARY}" DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}/runnerscope")
+    install(FILES third_party/github-cli/LICENSE DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/infiltrator-runner-monitor" RENAME GitHub-CLI-LICENSE)
     install(FILES packaging/runnerscope.desktop DESTINATION share/applications)
     install(FILES packaging/runnerscope.svg
             DESTINATION share/icons/hicolor/scalable/apps)
@@ -337,3 +333,13 @@ else()
     target_link_libraries(runnerscope-http-policy-test PRIVATE runnerscope_linux_platform)
 endif()
 add_test(NAME runnerscope-http-policy-test COMMAND runnerscope-http-policy-test)
+
+add_executable(runnerscope-github-auth-fixture tests/github_auth_fixture.c)
+add_executable(runnerscope-github-auth-process-test tests/github_auth_process_test.c)
+if(WIN32)
+    target_link_libraries(runnerscope-github-auth-process-test PRIVATE runnerscope_windows_platform)
+else()
+    target_link_libraries(runnerscope-github-auth-process-test PRIVATE runnerscope_linux_platform)
+endif()
+add_test(NAME runnerscope-github-auth-process-test COMMAND runnerscope-github-auth-process-test $<TARGET_FILE:runnerscope-github-auth-fixture>)
+set_tests_properties(runnerscope-github-auth-process-test PROPERTIES TIMEOUT 15)

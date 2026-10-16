@@ -269,3 +269,57 @@ jobs:
           verify_remote
           git fetch origin "refs/tags/$tag:refs/tags/$tag"
           test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
+
+  apt-publication:
+    name: Verify published APT update
+    needs: [publish, release-state]
+    if: >-
+      always() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.release-state.result == 'success' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Require the qualified release in the live APT repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.release-state.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=https://infiltrator-projects.github.io/Infiltrator-Repository
+          ASSET="runnerscope_${VERSION}_amd64.deb"
+          digest="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$VERSION" \
+            --jq ".assets[] | select(.name == \"$ASSET\") | .digest")"
+          expected="${digest#sha256:}"
+          [[ "$expected" =~ ^[a-f0-9]{64}$ ]]
+          # The distribution repository owns its pull/dispatch publication.
+          # Release CI is not complete until that publication is actually live.
+          for attempt in $(seq 1 100); do
+            ready=true
+            for channel in beta alpha; do
+              index="$RUNNER_TEMP/apt-$channel-Packages"
+              if ! curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' \
+                "$BASE/dists/$channel/main/binary-amd64/Packages?release=$VERSION" > "$index"; then
+                ready=false
+                continue
+              fi
+              stanza="$(awk -v version="$VERSION" 'BEGIN { RS="" }
+                index("\n" $0 "\n", "\nPackage: infiltrator-runner-monitor\n") &&
+                index("\n" $0 "\n", "\nVersion: " version "\n") { print }' "$index")"
+              if ! grep -Fqx "SHA256: $expected" <<< "$stanza" ||
+                 ! grep -Fqx "Filename: pool/main/$ASSET" <<< "$stanza"; then
+                ready=false
+              fi
+            done
+            if [[ "$ready" == true ]]; then
+              curl -fsSL --retry 3 --max-time 30 "$BASE/pool/main/$ASSET" -o "$RUNNER_TEMP/apt-update.deb"
+              printf '%s  %s\n' "$expected" "$RUNNER_TEMP/apt-update.deb" | sha256sum --check
+              printf 'Runner Monitor %s is live in beta and alpha APT, with the qualified release digest.\n' "$VERSION"
+              exit 0
+            fi
+            echo "Waiting for APT publication of $VERSION ($attempt/100)…"
+            sleep 15
+          done
+          echo "GitHub release exists, but APT publication is incomplete." >&2
+          exit 1

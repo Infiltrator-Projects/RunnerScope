@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.14
+
+- Replace developer registration with automatically supplied official GitHub sign-in.
+- Reuse an existing authorised session when it has runner access.
+- Open the browser and copy the one-time code automatically.
+- Discover organisation choices, select a sole administered organisation, and save/connect after sign-in.
+- Remove the app-registration form, Client ID controls and separate Save requirement from sign-in.
+- Verify the bundled sign-in helper and exercise cancellation, private temporary storage and process failures.
+
+
 ## 1.3.13
 
 - Replace manual token entry with native GitHub browser sign-in on Windows and Linux.

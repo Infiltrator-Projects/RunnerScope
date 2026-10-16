@@ -101,4 +101,4 @@ The shared parser recognises JSON numeric syntax as ASCII and performs exact int
 
 ## Native browser sign-in
 
-The shared OAuth test exercises device-code parsing, requested permissions, polling intervals, server slow-down, expiry, denial, malformed responses, endpoint errors and credential cleanup. The GTK installed UI test signs in using the real asynchronous controller with an offline transport, then reloads the saved session and preserved legacy preferences. Production authorization still requires the project OAuth registration and an interactive account approval; offline tests do not claim to validate those external steps.
+Authentication qualification covers reuse, denied access, invalid output, cancellation, organisation discovery and cleanup. The native child-process fixture exercises the same adapters used for the supplied broker. GTK qualification checks automatic clipboard copy, absence of developer-registration controls and automatic save with preserved preferences. The shipping native self-test launches the supplied helper with --version. Real GitHub account approval and organisation access remain external checks.

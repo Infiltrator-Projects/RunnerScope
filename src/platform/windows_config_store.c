@@ -278,3 +278,17 @@ done:
     free(path);
     return ok;
 }
+
+bool runner_windows_private_directory(const wchar_t *path)
+{
+    PrivateSecurity security;
+    if (!private_security_create(&security)) return false;
+    for (DWORD i = 0U; i < security.acl->AceCount; ++i) {
+        void *raw = NULL;
+        if (!GetAce(security.acl, i, &raw)) { private_security_destroy(&security); return false; }
+        ((ACE_HEADER *)raw)->AceFlags |= OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
+    }
+    const bool ok = CreateDirectoryW(path, &security.attributes) != 0;
+    private_security_destroy(&security);
+    return ok;
+}

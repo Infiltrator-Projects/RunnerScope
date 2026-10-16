@@ -71,7 +71,6 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         InvalidateRect(window, NULL, FALSE);
         return 0;
     case WM_TIMER:
-        if (wparam == TIMER_AUTH) { auth_tick(); return 0; }
         if (wparam == TIMER_REFRESH) {
             if (!g_app.refreshing && !g_app.settings_dirty && g_app.config.organisation[0] &&
                 g_app.config.github_token[0] && !g_app.config_error[0])
@@ -130,6 +129,9 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
             return 0;
         }
         break;
+    case WM_APP_AUTH_CODE:
+        auth_code_apply((AuthCode *)lparam);
+        return 0;
     case WM_APP_AUTH_DONE:
         auth_apply((AuthResult *)lparam);
         return 0;
@@ -209,6 +211,7 @@ static bool resource_exists(int resource_id)
 
 static int self_test(void)
 {
+    if (!runner_github_sign_in_available() || !runner_github_sign_in_probe()) return 12;
     char ui_error[256];
     if (!runner_ui_contract_validate(ui_error, sizeof(ui_error))) return 1;
     RunnerConfig config;

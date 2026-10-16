@@ -1,3 +1,11 @@
+infiltrator-runner-monitor (1.3.14) unstable; urgency=medium
+
+  * Replace developer setup with supplied GitHub browser sign-in.
+  * Reuse sessions, copy the code, discover the organisation and save automatically.
+  * Qualify native helper lifetime, private storage and cancellation.
+
+ -- Shannon Smith <noreply@github.com>  Fri, 16 Oct 2026 09:06:54 +0000
+
 infiltrator-runner-monitor (1.3.13) unstable; urgency=medium
 
   * Restore native GitHub browser sign-in without manual token entry.

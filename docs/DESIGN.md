@@ -21,7 +21,7 @@ The application therefore separates provider facts from application interpretati
 
 GitHub is authoritative for GitHub runner/workflow facts. Runner Monitor owns caching, correlation, timing, presentation and persistence.
 
-The shipping native application makes its own bounded HTTPS requests. Organisation and access token are entered in Settings and saved in the existing private JSON configuration. Normal operation must not require a CLI program, terminal command, external credential store or browser authorization flow. Failed requests must remain visible and must not turn stale observations into current idle counts.
+The shipping native application makes its own bounded HTTPS requests. The session is obtained through the supplied official GitHub sign-in broker and saved automatically in the existing private JSON configuration. Users never register an application or copy credentials. Sign-in opens the browser and copies the one-time code; a sole administered organisation is selected automatically. Monitoring does not launch a helper or browser. Failed requests must remain visible and must not turn stale observations into current idle counts.
 
 ## Common usage
 

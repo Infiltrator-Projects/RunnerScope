@@ -1,35 +1,33 @@
-# GitHub sign-in registration
+# GitHub sign-in
 
-Runner Monitor uses GitHub's native OAuth device flow. Users choose **Sign in with GitHub**, approve a one-time code in their browser, and the application saves the resulting session in its existing owner-restricted settings. No GitHub CLI, client secret, password entry or manually copied personal token is used.
+Choose **Sign in with GitHub**. Runner Monitor first reuses an existing GitHub CLI session if it can access the selected organisation's runners. Otherwise it opens GitHub and copies the one-time code. Paste the code and approve access. Sign-in saves and connects automatically.
 
-## Setup inside the application
+No application registration, Client ID, personal token, terminal command, separate helper installation or manual credential copying is required. GitHub may require account sign-in, MFA, SSO or organisation approval.
 
-Open **Settings → GitHub setup**. The setup window contains the complete registration instructions, an **Open GitHub registration** button/link, and a **Public Client ID** field. **Sign in with GitHub** opens this setup automatically if no Client ID has been supplied. After registration, enter the Client ID in that same window and choose **Save and sign in**. No rebuild or return to a support chat is required. Existing project Client IDs can be reused; builds with a supplied project ID bypass registration.
+An existing organisation is retained. On a new setup, a single active organisation administered by the signed-in account is selected automatically. When there are several, the app offers a selection. A manually specified organisation remains supported for delegated runner administrators.
 
-## Optional shared project setup
+## Sign-in boundary
 
-The project owner registers one OAuth app at https://github.com/settings/applications/new:
+The release supplies the official, unmodified GitHub CLI 2.102.0 as an isolated sign-in broker. cmake/GitHubSignIn.cmake records its exact official archive URLs and SHA-256 release-asset digests. Linux installs the private helper under libexec; the Windows executable embeds it and extracts it into a new private directory only while needed. Neither platform searches PATH or asks the user to install it.
 
-| Field | Value |
-| --- | --- |
-| Application name | Runner Monitor |
-| Homepage URL | https://github.com/Infiltrator-Projects/RunnerScope |
-| Description | Native desktop monitor for GitHub Actions self-hosted runners |
-| Authorization callback URL | http://127.0.0.1/ |
-| Enable Device Flow | Enabled |
+The browser's authorization identifies **GitHub CLI**, the registered identity of the official broker. Runner Monitor does not copy that application's Client ID or secret into its own authentication implementation. It invokes the official program with fixed arguments, without a shell. GitHub CLI's normal scopes plus admin:org provide organisation runner access and private repository activity.
 
-The callback is required by the registration form but is not used by device flow. Copy the **public Client ID** into `packaging/github-oauth-client-id.txt`. Never add a client secret or a personal access token to the repository. A shared build configuration lets users bypass this setup. Alternatively the application saves a locally entered public Client ID in its existing private settings. Local builds can override it with `-DRUNNERSCOPE_GITHUB_CLIENT_ID=<public-client-id>`.
+The helper runs with noninteractive input, bounded output, a finite deadline and cancellation. API debugging and environment-token overrides are removed from its environment. Only the pinned one-time-code line is interpreted as a challenge; arbitrary helper output is never displayed as an error or treated as a browser URL.
 
-Builds without a shared project registration provide the tested in-app setup instead. Offline CI uses an explicitly labelled fixture client and makes no real authorization requests. A successful production sign-in must still be verified with the registered app before release.
+New authorization uses a fresh owner-restricted temporary configuration. The resulting session is transferred automatically into Runner Monitor's existing private settings, and the temporary files are removed. Other GitHub CLI accounts, git configuration and credential-store entries are left intact. Reading an existing session never changes it.
 
-## Sessions and access
+Runner Monitor still makes every monitoring request directly through libcurl or WinHTTP. Its provider, services, UI and configuration remain native C. The broker is used only for sign-in and the version probe.
 
-GitHub's organization runner endpoint requires OAuth `admin:org`; activity in private repositories also requires `repo`. Runner Monitor requests these during device authorization. The server remains the authority for organization membership, SSO and app restrictions. After sign-in the normal runner provider checks access and reports permission failures inside the application.
+## Verification
 
-Existing settings and existing valid sessions are preserved. Cancelling or closing sign-in discards its temporary codes and cannot replace an existing account. Session expiry or revocation asks the user to sign in again in Settings.
+Core tests cover session reuse, permission failures, token validation, cancellation and organisation discovery. Native process tests run an offline executable through the production process adapter, including fragmented challenge output, private environment, cancellation and malformed output. The installed GTK test proves automatic clipboard copy, removal of registration/token controls, organisation selection and automatic save. The native self-test launches the actual supplied broker with --version.
+
+Offline qualification does not approve a real GitHub account or prove its organisation permissions. Those remain GitHub-controlled account actions.
 
 ## References
 
-- https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app
-- https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow
+- https://cli.github.com/manual/gh_auth_login
+- https://cli.github.com/manual/gh_auth_token
+- https://github.com/cli/cli/releases/tag/v2.102.0
+- https://github.com/cli/cli/blob/v2.102.0/internal/authflow/flow.go
 - https://docs.github.com/en/rest/actions/self-hosted-runners#list-self-hosted-runners-for-an-organization

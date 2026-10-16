@@ -1,174 +1,148 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "core/github_auth.h"
 #include "cJSON.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifndef RUNNERSCOPE_GITHUB_CLIENT_ID
-#define RUNNERSCOPE_GITHUB_CLIENT_ID ""
-#endif
-
-const char *runner_github_auth_client_id(void)
-{
-    return RUNNERSCOPE_GITHUB_CLIENT_ID;
-}
-
-const char *runner_github_auth_client_for_config(const RunnerConfig *config)
-{
-    return config && config->github_client_id[0] ? config->github_client_id : runner_github_auth_client_id();
-}
 
 void runner_github_auth_clear(RunnerGithubAuth *auth)
 {
     if (!auth) return;
     volatile unsigned char *p = (volatile unsigned char *)auth;
-    for (size_t n = 0U; n < sizeof(*auth); ++n) p[n] = 0U;
+    for (size_t i = 0U; i < sizeof(*auth); ++i) p[i] = 0U;
 }
-
-static bool identifier(const char *s, size_t capacity)
+bool runner_github_auth_cancelled(const RunnerAuthCallbacks *callbacks)
 {
-    if (!s || !s[0]) return false;
-    for (size_t i = 0U; i < capacity; ++i) {
-        const unsigned char c = (unsigned char)s[i];
-        if (!c) return true;
-        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-              (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.')) return false;
-    }
-    return false;
+    return callbacks && callbacks->cancelled && callbacks->cancelled(callbacks->context);
 }
-
-static RunnerAuthPhase failed(RunnerGithubAuth *auth, const char *message)
+static bool org_name(const char *s)
+{
+    if (!s || !s[0] || strlen(s) >= 128U) return false;
+    for (const unsigned char *p = (const unsigned char *)s; *p; ++p)
+        if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+              (*p >= '0' && *p <= '9') || *p == '-' || *p == '_' || *p == '.')) return false;
+    return true;
+}
+bool runner_github_auth_code(const char *line, char code[32])
+{
+    if (!line || !code) return false;
+    /* Pinned official CLI, NO_COLOR=1 and C locale. Never interpret a URL or command. */
+    const char *prefix = "First copy your one-time code: ";
+    const char *p = strstr(line, prefix);
+    if (!p) return false;
+    p += strlen(prefix);
+    for (size_t i = 0U; i < 9U; ++i) {
+        if (!p[i]) return false;
+        if (i == 4U) { if (p[i] != '-') return false; }
+        else if (!((p[i] >= 'A' && p[i] <= 'Z') || (p[i] >= '0' && p[i] <= '9'))) return false;
+    }
+    if (p[9] && p[9] != '\r' && p[9] != '\n') return false;
+    memcpy(code, p, 9U); code[9] = '\0';
+    return true;
+}
+bool runner_github_auth_token(const char *output, char *token, size_t capacity)
+{
+    if (!output || !token || !capacity) return false;
+    size_t n = strlen(output);
+    while (n && (output[n - 1U] == '\r' || output[n - 1U] == '\n')) --n;
+    if (n < 20U || n >= capacity) return false;
+    for (size_t i = 0U; i < n; ++i) {
+        const unsigned char c = (unsigned char)output[i];
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+              (c >= '0' && c <= '9') || c == '_')) return false;
+    }
+    memcpy(token, output, n); token[n] = '\0';
+    return true;
+}
+static cJSON *request_json(const char *url, const char *token, RunnerHttpGet get, void *context)
+{
+    if (!get) return NULL;
+    RunnerHttpResponse response = {0U, NULL, NULL};
+    char error[320] = "";
+    const bool ok = get(url, token, &response, error, sizeof(error), context);
+    cJSON *json = ok && response.status == 200U && response.body &&
+        strlen(response.body) <= 1024U * 1024U ? cJSON_ParseWithOpts(response.body, NULL, true) : NULL;
+    free(response.body); free(response.link);
+    return json;
+}
+static bool can_monitor(const char *org, const char *token, RunnerHttpGet get, void *context)
+{
+    if (!org_name(org)) return false;
+    char url[320];
+    (void)snprintf(url, sizeof(url), "https://api.github.com/orgs/%s/actions/runners?per_page=1", org);
+    cJSON *json = request_json(url, token, get, context);
+    const bool ok = json && cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(json, "runners"));
+    cJSON_Delete(json);
+    return ok;
+}
+static void discover_organisations(RunnerGithubAuth *auth, RunnerHttpGet get, void *context)
+{
+    if (auth->organisation[0]) return;
+    cJSON *json = request_json("https://api.github.com/user/memberships/orgs?state=active&per_page=100",
+        auth->token, get, context);
+    if (!cJSON_IsArray(json)) { cJSON_Delete(json); return; }
+    const cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, json) {
+        const cJSON *state = cJSON_GetObjectItemCaseSensitive(entry, "state");
+        const cJSON *role = cJSON_GetObjectItemCaseSensitive(entry, "role");
+        const cJSON *org = cJSON_GetObjectItemCaseSensitive(entry, "organization");
+        const cJSON *login = cJSON_GetObjectItemCaseSensitive(org, "login");
+        if (!cJSON_IsString(state) || strcmp(state->valuestring, "active") != 0 ||
+            !cJSON_IsString(role) || strcmp(role->valuestring, "admin") != 0 ||
+            !cJSON_IsString(login) || !org_name(login->valuestring)) continue;
+        bool duplicate = false;
+        for (size_t i = 0U; i < auth->organisation_count; ++i)
+            if (strcmp(auth->organisations[i], login->valuestring) == 0) duplicate = true;
+        if (!duplicate && auth->organisation_count < RUNNER_AUTH_MAX_ORGANISATIONS) {
+            (void)snprintf(auth->organisations[auth->organisation_count], 128U, "%s", login->valuestring);
+            ++auth->organisation_count;
+        }
+    }
+    /* A full page might have more memberships. Never guess a sole organisation. */
+    if (cJSON_IsArray(json) && cJSON_GetArraySize(json) < 100 && auth->organisation_count == 1U)
+        (void)snprintf(auth->organisation, sizeof(auth->organisation), "%s", auth->organisations[0]);
+    cJSON_Delete(json);
+}
+static void fail(RunnerGithubAuth *auth, const char *message)
 {
     runner_github_auth_clear(auth);
     auth->phase = RUNNER_AUTH_FAILED;
     (void)snprintf(auth->error, sizeof(auth->error), "%s", message);
-    return auth->phase;
 }
-
-static bool copy_field(const cJSON *json, const char *name, char *out, size_t size)
+void runner_github_authenticate(RunnerGithubAuth *auth, const char *organisation,
+    RunnerAuthExecute execute, void *execute_context, RunnerHttpGet get, void *http_context,
+    const RunnerAuthCallbacks *callbacks)
 {
-    const cJSON *value = cJSON_GetObjectItemCaseSensitive(json, name);
-    if (!cJSON_IsString(value) || !identifier(value->valuestring, size)) return false;
-    memcpy(out, value->valuestring, strlen(value->valuestring) + 1U);
-    return true;
-}
-
-static bool seconds_field(const cJSON *json, const char *name,
-    unsigned int maximum, unsigned int *out)
-{
-    const cJSON *value = cJSON_GetObjectItemCaseSensitive(json, name);
-    if (!cJSON_IsNumber(value) || !(value->valuedouble >= 1.0) ||
-        !(value->valuedouble <= (double)maximum)) return false;
-    const unsigned int number = (unsigned int)value->valuedouble;
-    if ((double)number != value->valuedouble) return false;
-    *out = number;
-    return true;
-}
-
-static const char *oauth_error(const char *code)
-{
-    if (code && strcmp(code, "access_denied") == 0)
-        return "GitHub sign-in was cancelled. Select Sign in with GitHub to try again.";
-    if (code && (strcmp(code, "expired_token") == 0 || strcmp(code, "token_expired") == 0))
-        return "The GitHub sign-in code expired. Select Sign in with GitHub for a new code.";
-    if (code && strcmp(code, "device_flow_disabled") == 0)
-        return "GitHub sign-in is unavailable: Device Flow must be enabled for the Runner Monitor OAuth app.";
-    if (code && strcmp(code, "incorrect_client_credentials") == 0)
-        return "GitHub sign-in is unavailable: the Runner Monitor OAuth app registration needs attention.";
-    return "GitHub could not complete sign-in. Select Sign in with GitHub to try again.";
-}
-
-RunnerAuthPhase runner_github_auth_step(RunnerGithubAuth *auth,
-    const char *client_id, uint64_t now_ms, RunnerHttpPost post, void *context)
-{
-    if (!auth) return RUNNER_AUTH_FAILED;
-    if (auth->phase == RUNNER_AUTH_COMPLETE || auth->phase == RUNNER_AUTH_FAILED)
-        return auth->phase;
-    if (!identifier(client_id, 128U))
-        return failed(auth, "GitHub sign-in is unavailable in this build: the Runner Monitor OAuth app has not been configured.");
-    if (!post) return failed(auth, "GitHub sign-in transport is unavailable.");
-    const bool starting = auth->phase == RUNNER_AUTH_NEW;
-    if (!starting) {
-        if (now_ms >= auth->expires_at_ms)
-            return failed(auth, oauth_error("expired_token"));
-        if (now_ms < auth->next_poll_ms) return auth->phase;
-        if (!identifier(auth->device_code, sizeof(auth->device_code)))
-            return failed(auth, "The GitHub sign-in session is invalid. Start sign-in again.");
+    if (!auth) return;
+    runner_github_auth_clear(auth);
+    if (organisation && organisation[0]) {
+        if (!org_name(organisation)) { fail(auth, "Choose a valid GitHub organisation."); return; }
+        (void)snprintf(auth->organisation, sizeof(auth->organisation), "%s", organisation);
     }
-    char form[512];
-    if (starting) {
-        /* admin:org is required by GitHub's organisation runner endpoint for
-         * OAuth tokens; repo permits activity discovery in private projects. */
-        (void)snprintf(form, sizeof(form), "client_id=%s&scope=admin%%3Aorg%%20repo", client_id);
-    } else {
-        (void)snprintf(form, sizeof(form),
-            "client_id=%s&device_code=%s&grant_type=urn%%3Aietf%%3Aparams%%3Aoauth%%3Agrant-type%%3Adevice_code",
-            client_id, auth->device_code);
-    }
-    RunnerHttpResponse response = {0U, NULL, NULL};
-    char transport_error[320] = "";
-    const bool sent = post(starting ? "/login/device/code" : "/login/oauth/access_token",
-        form, &response, transport_error, sizeof(transport_error), context);
-    memset(form, 0, sizeof(form));
-    /* Do not propagate arbitrary provider/server text: it can contain tokens. */
-    cJSON *json = sent && (response.status == 200U || response.status == 400U) && response.body &&
-        strlen(response.body) <= 16384U ? cJSON_ParseWithOpts(response.body, NULL, true) : NULL;
-    if (response.body) { memset(response.body, 0, strlen(response.body)); free(response.body); }
-    free(response.link);
-    if (!json || !cJSON_IsObject(json)) {
-        cJSON_Delete(json);
-        return failed(auth, sent ? "GitHub returned an invalid sign-in response. Try again."
-            : "Unable to reach GitHub for sign-in. Check the connection and try again.");
-    }
-    const cJSON *error = cJSON_GetObjectItemCaseSensitive(json, "error");
-    if (cJSON_IsString(error)) {
-        if (!starting && strcmp(error->valuestring, "authorization_pending") == 0) {
-            auth->next_poll_ms = now_ms + (uint64_t)auth->interval_seconds * 1000U;
-        } else if (!starting && strcmp(error->valuestring, "slow_down") == 0) {
-            unsigned int interval = 0U;
-            if (auth->interval_seconds > 3595U) failed(auth, "GitHub sign-in timed out. Try again.");
-            else {
-                auth->interval_seconds += 5U;
-                if (seconds_field(json, "interval", 3600U, &interval) && interval > auth->interval_seconds)
-                    auth->interval_seconds = interval;
-                auth->next_poll_ms = now_ms + (uint64_t)auth->interval_seconds * 1000U;
-            }
-        } else failed(auth, oauth_error(error->valuestring));
-    } else if (response.status != 200U) {
-        failed(auth, "GitHub could not complete sign-in. Try again.");
-    } else if (starting) {
-        unsigned int expires = 0U, interval = 0U;
-        const cJSON *uri = cJSON_GetObjectItemCaseSensitive(json, "verification_uri");
-        if (!copy_field(json, "device_code", auth->device_code, sizeof(auth->device_code)) ||
-            !copy_field(json, "user_code", auth->user_code, sizeof(auth->user_code)) ||
-            !cJSON_IsString(uri) || strcmp(uri->valuestring, "https://github.com/login/device") != 0 ||
-            !seconds_field(json, "expires_in", 3600U, &expires) ||
-            !seconds_field(json, "interval", 3600U, &interval) ||
-            now_ms > UINT64_MAX - 3600000U) {
-            failed(auth, "GitHub returned an invalid sign-in code. Try again.");
-        } else {
-            auth->phase = RUNNER_AUTH_WAITING;
-            auth->interval_seconds = interval;
-            auth->expires_at_ms = now_ms + (uint64_t)expires * 1000U;
-            auth->next_poll_ms = now_ms + (uint64_t)interval * 1000U;
-        }
-    } else {
-        const cJSON *type = cJSON_GetObjectItemCaseSensitive(json, "token_type");
-        if (!cJSON_IsString(type) || strcmp(type->valuestring, "bearer") != 0 ||
-            !copy_field(json, "access_token", auth->token, sizeof(auth->token))) {
-            failed(auth, "GitHub returned an invalid sign-in session. Try again.");
-        } else {
-            memset(auth->device_code, 0, sizeof(auth->device_code));
-            memset(auth->user_code, 0, sizeof(auth->user_code));
-            auth->phase = RUNNER_AUTH_COMPLETE;
+    char output[RUNNER_GITHUB_TOKEN_CAPACITY + 64U] = "";
+    bool reused = false;
+    if (execute && !runner_github_auth_cancelled(callbacks) &&
+        execute(RUNNER_AUTH_EXISTING_SESSION, output, sizeof(output), callbacks, execute_context) &&
+        runner_github_auth_token(output, auth->token, sizeof(auth->token)) &&
+        !runner_github_auth_cancelled(callbacks))
+        reused = can_monitor(auth->organisation, auth->token, get, http_context);
+    memset(output, 0, sizeof(output));
+    if (!reused) {
+        memset(auth->token, 0, sizeof(auth->token));
+        if (!execute || runner_github_auth_cancelled(callbacks) ||
+            !execute(RUNNER_AUTH_BROWSER_LOGIN, output, sizeof(output), callbacks, execute_context) ||
+            runner_github_auth_cancelled(callbacks) ||
+            !execute(RUNNER_AUTH_NEW_SESSION, output, sizeof(output), callbacks, execute_context) ||
+            !runner_github_auth_token(output, auth->token, sizeof(auth->token))) {
+            memset(output, 0, sizeof(output));
+            fail(auth, runner_github_auth_cancelled(callbacks) ? "Sign-in cancelled. Your saved account has been kept."
+                : "GitHub sign-in did not complete. Select Sign in with GitHub to try again.");
+            return;
         }
     }
-    cJSON *secret = cJSON_GetObjectItemCaseSensitive(json, "access_token");
-    if (cJSON_IsString(secret)) memset(secret->valuestring, 0, strlen(secret->valuestring));
-    secret = cJSON_GetObjectItemCaseSensitive(json, "refresh_token");
-    if (cJSON_IsString(secret)) memset(secret->valuestring, 0, strlen(secret->valuestring));
-    cJSON_Delete(json);
-    return auth->phase;
+    memset(output, 0, sizeof(output));
+    if (runner_github_auth_cancelled(callbacks)) { fail(auth, "Sign-in cancelled."); return; }
+    discover_organisations(auth, get, http_context);
+    if (runner_github_auth_cancelled(callbacks)) { fail(auth, "Sign-in cancelled."); return; }
+    auth->phase = RUNNER_AUTH_COMPLETE;
 }

@@ -66,12 +66,8 @@ static void show_about(void)
 static void settings_status(const char *message)
 {
     if (!g_app.settings_status) return;
-    char path[4096], text[5000];
-    const bool has_path = runner_windows_config_path(path, sizeof(path));
-    (void)snprintf(text, sizeof(text), "%s\r\n\r\nSaved configuration: %s",
-        message ? message : "", has_path ? path : "Path unavailable");
     wchar_t wide[5000];
-    utf8_to_wide(text, wide, sizeof(wide) / sizeof(wide[0]));
+    utf8_to_wide(message ? message : "", wide, sizeof(wide) / sizeof(wide[0]));
     SetWindowTextW(g_app.settings_status, wide);
 }
 
@@ -149,12 +145,13 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         SendMessageW(label, WM_SETFONT, (WPARAM)g_app.font, TRUE);
         wchar_t organisation[128];
         utf8_to_wide(g_app.config.organisation, organisation, 128U);
-        g_app.settings_org = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", organisation,
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
-            sx(20), sx(88), sx(600), sx(31), window,
+        g_app.settings_org = CreateWindowExW(WS_EX_CLIENTEDGE, L"COMBOBOX", organisation,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWN | CBS_AUTOHSCROLL,
+            sx(20), sx(88), sx(600), sx(250), window,
             (HMENU)(INT_PTR)ID_SETTINGS_ORG, g_app.instance, NULL);
         SendMessageW(g_app.settings_org, WM_SETFONT, (WPARAM)g_app.font, TRUE);
-        SendMessageW(g_app.settings_org, EM_LIMITTEXT, 127U, 0);
+        SendMessageW(g_app.settings_org, CB_LIMITTEXT, 127U, 0);
+        SetWindowTextW(g_app.settings_org, organisation);
         label = CreateWindowW(L"STATIC", L"GitHub sign-in code", WS_CHILD | WS_VISIBLE,
             sx(20), sx(131), sx(600), sx(24), window, NULL, g_app.instance, NULL);
         SendMessageW(label, WM_SETFONT, (WPARAM)g_app.font, TRUE);
@@ -162,18 +159,18 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_AUTOHSCROLL,
             sx(20), sx(157), sx(600), sx(31), window, NULL, g_app.instance, NULL);
         SendMessageW(g_app.settings_code, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
-        const wchar_t *captions[] = {L"Sign in with &GitHub", L"&Copy code", L"&Open GitHub", L"Cancel sign-&in"};
-        const int ids[] = {ID_AUTH_START, ID_AUTH_COPY, ID_AUTH_OPEN, ID_AUTH_CANCEL};
-        const int positions[] = {20, 210, 325, 465};
-        const int widths[] = {180, 105, 130, 155};
-        for (int i = 0; i < 4; ++i) {
+        const wchar_t *captions[] = {L"Sign in with &GitHub", L"Cancel sign-&in"};
+        const int ids[] = {ID_AUTH_START, ID_AUTH_CANCEL};
+        const int positions[] = {20, 465};
+        const int widths[] = {180, 155};
+        for (int i = 0; i < 2; ++i) {
             HWND action = CreateWindowW(L"BUTTON", captions[i], WS_CHILD | WS_VISIBLE | WS_TABSTOP,
                 sx(positions[i]), sx(203), sx(widths[i]), sx(32), window,
                 (HMENU)(INT_PTR)ids[i], g_app.instance, NULL);
             SendMessageW(action, WM_SETFONT, (WPARAM)g_app.font, TRUE);
         }
         HWND hint = CreateWindowW(L"STATIC",
-            L"Sign in through GitHub in your browser. Enter the one-time code shown above, then approve Runner Monitor. Your account is remembered on this computer.",
+            L"Sign-in opens your browser and copies the code. Paste it into GitHub and approve. GitHub’s official sign-in tool is supplied automatically. Your account is remembered.",
             WS_CHILD | WS_VISIBLE, sx(20), sx(248), sx(600), sx(52), window, NULL, g_app.instance, NULL);
         SendMessageW(hint, WM_SETFONT, (WPARAM)g_app.font_small, TRUE);
         g_app.settings_status = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
@@ -184,10 +181,6 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
             : g_app.provider_error[0] ? g_app.provider_error
             : g_app.config.github_token[0] ? "Signed in. Select Save and test to verify runner access."
             : "Select Sign in with GitHub to connect.");
-        HWND setup = CreateWindowW(L"BUTTON", L"GitHub &setup…", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            sx(20), sx(435), sx(195), sx(32), window,
-            (HMENU)(INT_PTR)ID_AUTH_SETUP, g_app.instance, NULL);
-        SendMessageW(setup, WM_SETFONT, (WPARAM)g_app.font, TRUE);
         HWND save = CreateWindowW(L"BUTTON", L"&Save", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
             sx(230), sx(435), sx(95), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_SAVE, g_app.instance, NULL);
@@ -205,18 +198,22 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         return 0;
     }
     case WM_COMMAND:
-        if (LOWORD(wparam) == ID_AUTH_SETUP) { open_github_setup(); return 0; }
         if (LOWORD(wparam) == ID_AUTH_START) { auth_start(); return 0; }
         if (LOWORD(wparam) == ID_AUTH_COPY) { auth_copy_code(); return 0; }
         if (LOWORD(wparam) == ID_AUTH_OPEN) { auth_open_browser(); return 0; }
         if (LOWORD(wparam) == ID_AUTH_CANCEL) { auth_cancel(); settings_status("Sign-in cancelled. Your saved account has been kept."); return 0; }
         if ((LOWORD(wparam) == ID_SETTINGS_ORG || LOWORD(wparam) == ID_SETTINGS_TOKEN) &&
-            HIWORD(wparam) == EN_CHANGE) {
-            auth_cancel();
+            (HIWORD(wparam) == CBN_EDITCHANGE || HIWORD(wparam) == CBN_SELCHANGE)) {
+            if (g_app.auth_active) auth_cancel();
             g_app.settings_dirty = true;
             g_app.config_generation++;
             if (g_app.refresh_cancel) SetEvent(g_app.refresh_cancel);
             settings_status("Unsaved changes. Save and test to check these settings.");
+            return 0;
+        }
+        if (LOWORD(wparam) == ID_SETTINGS_ORG && HIWORD(wparam) == CBN_SELENDOK && g_app.config.github_token[0]) {
+            save_settings(window, true);
+            if (!g_app.settings_dirty) DestroyWindow(window);
             return 0;
         }
         if (LOWORD(wparam) == ID_SETTINGS_SAVE || LOWORD(wparam) == ID_SETTINGS_SAVE_TEST) {
@@ -247,7 +244,6 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         return 1;
     }
     case WM_DESTROY:
-        if (g_app.setup_window) DestroyWindow(g_app.setup_window);
         auth_cancel();
         g_app.settings_window = NULL;
         g_app.settings_org = NULL;

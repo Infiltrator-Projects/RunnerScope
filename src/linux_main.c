@@ -15,6 +15,7 @@
 #include "core/runner_config.h"
 #include "core/github.h"
 #include "core/github_auth.h"
+#include "platform/github_sign_in.h"
 #include "platform/linux_services.h"
 
 #include <ctype.h>
@@ -2852,9 +2853,9 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         gtk_widget_set_halign(label, GTK_ALIGN_START);
         gtk_grid_attach(GTK_GRID(grid), label, 0, (gint)i, 1, 1);
         if (i < G_N_ELEMENTS(entries) && i != 1U) {
-            entries[i] = gtk_entry_new();
+            entries[i] = i == 0U ? gtk_bin_get_child(GTK_BIN(gtk_combo_box_text_new_with_entry())) : gtk_entry_new();
             gtk_entry_set_max_length(GTK_ENTRY(entries[i]), i == 0U ? 127 : 10);
-            gtk_grid_attach(GTK_GRID(grid), entries[i], 1, (gint)i, 1, 1);
+            gtk_grid_attach(GTK_GRID(grid), i == 0U ? gtk_widget_get_parent(entries[i]) : entries[i], 1, (gint)i, 1, 1);
         }
     }
     gtk_entry_set_text(GTK_ENTRY(entries[0]), app->config.organisation);
@@ -2870,8 +2871,8 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
     gtk_combo_box_set_active(GTK_COMBO_BOX(theme), (gint)app->config.theme_mode);
     gtk_grid_attach(GTK_GRID(grid), theme, 1, 7, 1, 1);
     GtkWidget *hint = gtk_label_new(
-        "Sign in through GitHub in your browser. Enter the one-time code shown above,\n"
-        "then approve Runner Monitor. Your account is remembered on this computer.");
+        "Sign-in opens your browser and copies the code. Paste it into GitHub and approve.\n"
+        "GitHub’s official sign-in tool is supplied automatically. Your account is remembered.");
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_label_set_max_width_chars(GTK_LABEL(hint), 65);
     gtk_label_set_xalign(GTK_LABEL(hint), 0.0F);
@@ -2884,10 +2885,9 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
     gtk_grid_attach(GTK_GRID(grid), error_label, 0, 10, 2, 1);
     GithubSignIn *sign_in = github_sign_in_create(dialog, grid, error_label);
     sign_in->app = app;
-    g_strlcpy(sign_in->client_id_storage, runner_github_auth_client_for_config(&app->config),
-        sizeof(sign_in->client_id_storage));
-    sign_in->client_id = sign_in->client_id_storage;
     g_object_set_data(G_OBJECT(dialog), "organisation-entry", entries[0]);
+    g_object_set_data(G_OBJECT(dialog), "organisation-choices", gtk_widget_get_parent(entries[0]));
+    g_signal_connect(entries[0], "changed", G_CALLBACK(github_sign_in_org_changed), sign_in);
     g_object_set_data(G_OBJECT(dialog), "settings-error", error_label);
     g_object_set_data(G_OBJECT(dialog), "sign-in-help", hint);
     gtk_widget_show_all(dialog);
@@ -4347,6 +4347,7 @@ static InfiltratrProjectInfo project_info(void)
 
 static int self_test(void)
 {
+    if (!runner_github_sign_in_available() || !runner_github_sign_in_probe()) return 18;
     char ui_error[256];
     if (!runner_ui_contract_validate(ui_error, sizeof(ui_error))) {
         fprintf(stderr, "Shared UI contract failed: %s\n", ui_error);
@@ -4552,19 +4553,25 @@ typedef struct {
     const RunnerConfig *expected;
 } UiTestSettings;
 
-static bool ui_test_oauth_post(const char *request_path, const char *form,
-    RunnerHttpResponse *response, char *error, size_t size, void *context)
+static void ui_test_login_success(RunnerGithubAuth *auth, const char *organisation,
+    const RunnerAuthCallbacks *callbacks)
 {
-    (void)error; (void)size; (void)context;
-    g_assert_nonnull(strstr(form, "client_id=offline-client"));
-    response->status = 200U;
-    response->link = NULL;
-    response->body = g_strdup(strcmp(request_path, "/login/device/code") == 0
-        ? "{\"device_code\":\"offline-device\",\"user_code\":\"ABCD-EFGH\",\"verification_uri\":\"https://github.com/login/device\",\"expires_in\":900,\"interval\":1}"
-        : "{\"access_token\":\"offline-settings-fixture\",\"token_type\":\"bearer\"}");
-    return true;
+    if (callbacks && callbacks->challenge) callbacks->challenge("ABCD-EFGH", callbacks->context);
+    g_usleep(100000U);
+    runner_github_auth_clear(auth);
+    if (runner_github_auth_cancelled(callbacks)) { auth->phase = RUNNER_AUTH_FAILED; return; }
+    auth->phase = RUNNER_AUTH_COMPLETE;
+    g_strlcpy(auth->token, "offline-settings-fixture", sizeof(auth->token));
+    g_strlcpy(auth->organisation, organisation[0] ? organisation : "Infiltrator-Projects", sizeof(auth->organisation));
 }
-
+static void ui_test_login_wait(RunnerGithubAuth *auth, const char *organisation,
+    const RunnerAuthCallbacks *callbacks)
+{
+    (void)organisation;
+    if (callbacks && callbacks->challenge) callbacks->challenge("ABCD-EFGH", callbacks->context);
+    while (!runner_github_auth_cancelled(callbacks)) g_usleep(1000U);
+    runner_github_auth_clear(auth); auth->phase = RUNNER_AUTH_FAILED;
+}
 static void ui_test_sign_in_cancel(RunnerScopeApp *app)
 {
     GtkWidget *dialog = gtk_dialog_new();
@@ -4572,70 +4579,30 @@ static void ui_test_sign_in_cancel(RunnerScopeApp *app)
     GtkWidget *status = gtk_label_new("");
     gtk_container_add(GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), grid);
     GithubSignIn *sign_in = github_sign_in_create(dialog, grid, status);
-    sign_in->client_id = "offline-client";
-    sign_in->post = ui_test_oauth_post;
+    sign_in->login = ui_test_login_wait;
     sign_in->open_browser = FALSE;
     github_sign_in_start(NULL, sign_in);
     gint64 deadline = g_get_monotonic_time() + 5000000;
-    while (sign_in->busy && g_get_monotonic_time() < deadline) {
+    while (sign_in->auth.phase != RUNNER_AUTH_WAITING && g_get_monotonic_time() < deadline) {
         while (g_main_context_iteration(NULL, FALSE)) {}
         g_usleep(1000U);
     }
-    g_assert_false(sign_in->busy);
+    g_assert_true(sign_in->busy);
     g_assert_cmpint(sign_in->auth.phase, ==, RUNNER_AUTH_WAITING);
-    sign_in->auth.next_poll_ms = 0U;
-    (void)github_sign_in_tick(sign_in);
+    char *copied = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
+    g_assert_cmpstr(copied, ==, "ABCD-EFGH"); g_free(copied);
     github_sign_in_cancel(sign_in);
     deadline = g_get_monotonic_time() + 5000000;
     while (sign_in->busy && g_get_monotonic_time() < deadline) {
         while (g_main_context_iteration(NULL, FALSE)) {}
         g_usleep(1000U);
     }
-    g_assert_false(sign_in->busy);
-    g_assert_false(sign_in->active);
+    g_assert_false(sign_in->busy); g_assert_false(sign_in->active);
     g_assert_cmpstr(sign_in->auth.token, ==, "");
     g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(sign_in->code)), ==, "");
     g_assert_cmpstr(app->config.github_token, ==, "");
-    github_sign_in_close(sign_in);
-    gtk_widget_destroy(dialog);
-    gtk_widget_destroy(status);
+    github_sign_in_close(sign_in); gtk_widget_destroy(dialog); gtk_widget_destroy(status);
 }
-
-typedef struct { guint attempts; } UiTestGithubSetup;
-
-static gboolean ui_test_github_setup_response(gpointer data)
-{
-    UiTestGithubSetup *test = data;
-    GList *windows = gtk_window_list_toplevels();
-    gboolean found = FALSE;
-    for (GList *item = windows; item; item = item->next) {
-        GtkWidget *entry = g_object_get_data(G_OBJECT(item->data), "github-client-entry");
-        if (!entry) continue;
-        GtkWidget *guide = g_object_get_data(G_OBJECT(item->data), "github-setup-guide");
-        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(guide));
-        GtkTextIter start, end; gtk_text_buffer_get_bounds(buffer, &start, &end);
-        char *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
-        g_assert_cmpstr(text, ==, runner_github_setup_instructions());
-        g_free(text);
-        GtkWidget *link = g_object_get_data(G_OBJECT(item->data), "github-setup-link");
-        g_assert_cmpstr(gtk_link_button_get_uri(GTK_LINK_BUTTON(link)), ==,
-            "https://github.com/settings/applications/new");
-        if (test->attempts == 0U) {
-            gtk_entry_set_text(GTK_ENTRY(entry), "ghp_not_a_client_id");
-        } else {
-            GtkWidget *error = g_object_get_data(G_OBJECT(item->data), "github-setup-error");
-            g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(error)), "Client ID"));
-            gtk_entry_set_text(GTK_ENTRY(entry), "offline-client");
-        }
-        test->attempts++;
-        gtk_dialog_response(GTK_DIALOG(item->data), GTK_RESPONSE_ACCEPT);
-        found = TRUE; break;
-    }
-    g_list_free(windows);
-    g_assert_true(found);
-    return test->attempts == 1U ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
-}
-
 static gboolean ui_test_settings_response(gpointer data)
 {
     UiTestSettings *test = data;
@@ -4646,42 +4613,33 @@ static gboolean ui_test_settings_response(gpointer data)
         if (!sign_in) continue;
         GtkWidget *organisation = g_object_get_data(G_OBJECT(item->data), "organisation-entry");
         g_assert_null(g_object_get_data(G_OBJECT(item->data), "token-entry"));
+        g_assert_null(g_object_get_data(G_OBJECT(item->data), "github-setup-button"));
         g_assert_nonnull(g_object_get_data(G_OBJECT(item->data), "github-sign-in-button"));
         if (test->attempts == 0U) {
             g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(organisation)), ==, test->expected->organisation);
-            GtkWidget *grid = gtk_widget_get_parent(organisation);
+            GtkWidget *grid = gtk_widget_get_parent(gtk_widget_get_parent(organisation));
             const unsigned int values[] = {test->expected->expected_runners, test->expected->runner_poll_seconds,
                 test->expected->activity_scan_seconds, test->expected->repository_scan_limit, test->expected->local_health_seconds};
             for (guint i = 0U; i < G_N_ELEMENTS(values); ++i) {
                 GtkWidget *number_entry = gtk_grid_get_child_at(GTK_GRID(grid), 1, (gint)i + 2);
-                unsigned int value = 0U;
-                g_assert_true(entry_uint(number_entry, &value));
+                unsigned int value = 0U; g_assert_true(entry_uint(number_entry, &value));
                 g_assert_cmpuint(value, ==, values[i]);
             }
             GtkWidget *theme = gtk_grid_get_child_at(GTK_GRID(grid), 1, 7);
             g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(theme)), ==, (gint)test->expected->theme_mode);
-            GtkWidget *help = g_object_get_data(G_OBJECT(item->data), "sign-in-help");
-            g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(help)), "browser"));
             gtk_entry_set_text(GTK_ENTRY(organisation), "");
             gtk_dialog_response(GTK_DIALOG(item->data), GTK_RESPONSE_ACCEPT);
         } else {
             GtkWidget *message = g_object_get_data(G_OBJECT(item->data), "settings-error");
             g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(message)), "organisation"));
-            gtk_entry_set_text(GTK_ENTRY(organisation), test->expected->organisation);
-            sign_in->post = ui_test_oauth_post;
+            /* Leave the organisation empty: sign-in discovers it, then saves/closes automatically. */
+            sign_in->login = ui_test_login_success;
             sign_in->open_browser = FALSE;
-            UiTestGithubSetup setup_test = {0U};
-            g_idle_add(ui_test_github_setup_response, &setup_test);
-            GtkWidget *setup = g_object_get_data(G_OBJECT(item->data), "github-setup-button");
-            gtk_button_clicked(GTK_BUTTON(setup));
-            g_assert_cmpuint(setup_test.attempts, ==, 2U);
+            gtk_button_clicked(GTK_BUTTON(g_object_get_data(G_OBJECT(item->data), "github-sign-in-button")));
         }
-        test->attempts++;
-        found = TRUE;
-        break;
+        test->attempts++; found = TRUE; break;
     }
-    g_list_free(windows);
-    g_assert_true(found);
+    g_list_free(windows); g_assert_true(found);
     return test->attempts == 1U ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
 }
 
@@ -4906,7 +4864,7 @@ static int ui_self_test(int *argc, char ***argv)
     g_assert_true(settings_dialog(&app, TRUE));
     g_assert_true(load_config(&reloaded, &error));
     g_assert_cmpstr(reloaded.github_token, ==, "offline-settings-fixture");
-    g_assert_cmpstr(reloaded.github_client_id, ==, "offline-client");
+    g_assert_cmpstr(reloaded.github_client_id, ==, "");
     g_assert_cmpstr(reloaded.organisation, ==, "Infiltrator-Projects");
     g_assert_cmpuint(reloaded.expected_runners, ==, 15U);
     g_assert_cmpuint(reloaded.runner_poll_seconds, ==, 2U);
@@ -4914,7 +4872,7 @@ static int ui_self_test(int *argc, char ***argv)
     g_assert_cmpuint(reloaded.repository_scan_limit, ==, 25U);
     g_assert_cmpuint(reloaded.local_health_seconds, ==, 10U);
     g_assert_cmpint(reloaded.theme_mode, ==, RUNNER_THEME_SYSTEM);
-    g_assert_cmpuint(app.config_generation, ==, 3U);
+    g_assert_cmpuint(app.config_generation, ==, 2U);
     ui_test_provider_failures(&app);
     gtk_widget_destroy(app.window);
     g_object_unref(app.application);
