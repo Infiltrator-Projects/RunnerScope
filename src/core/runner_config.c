@@ -57,6 +57,34 @@ static bool skip_json_string(const char **cursor, char *error, size_t error_size
     return true;
 }
 
+/* JSON numbers have an ASCII grammar, independent of the desktop locale.
+ * Syntax validation must not round unknown fields or accept C-only NaN/hex. */
+static bool json_number(const char *first, const char *last)
+{
+    const char *p = first;
+    if (p < last && *p == '-') p++;
+    if (p == last) return false;
+    if (*p == '0') p++;
+    else {
+        if (*p < '1' || *p > '9') return false;
+        do { p++; } while (p < last && *p >= '0' && *p <= '9');
+    }
+    if (p < last && *p == '.') {
+        p++;
+        const char *digits = p;
+        while (p < last && *p >= '0' && *p <= '9') p++;
+        if (p == digits) return false;
+    }
+    if (p < last && (*p == 'e' || *p == 'E')) {
+        p++;
+        if (p < last && (*p == '+' || *p == '-')) p++;
+        const char *digits = p;
+        while (p < last && *p >= '0' && *p <= '9') p++;
+        if (p == digits) return false;
+    }
+    return p == last;
+}
+
 static bool validate_object_syntax(const char *json, char *error, size_t error_size)
 {
     const char *p = skip_space(json);
@@ -100,10 +128,7 @@ static bool validate_object_syntax(const char *json, char *error, size_t error_s
                 (length == 4U && strncmp(start, "null", 4U) == 0)) {
                 primitive = true;
             } else {
-                char *end = NULL;
-                errno = 0;
-                (void)strtod(start, &end);
-                primitive = errno == 0 && end == p;
+                primitive = json_number(start, p);
             }
             if (!primitive) {
                 set_error(error, error_size,

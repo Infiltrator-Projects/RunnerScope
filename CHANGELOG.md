@@ -4,6 +4,13 @@
 
 No unreleased changes.
 
+## 1.3.11 - 2026-10-16
+
+- Parse JSON number syntax independently of the desktop locale, preserving legacy decimal settings on comma-decimal desktops.
+- Reject C-only NaN, infinity, hexadecimal and malformed numeric tokens, including in unknown forward-compatible fields.
+- Exercise the real parser under available non-C locales and preserve caller state on malformed input.
+- Verify complete staged release bytes before and after publication.
+
 ## 1.3.10 - 2026-10-16
 
 - Restore settings compatibility with saved System/Day/Night theme names and historical runner/local-health refresh intervals, preserving organisation and expected runner count during upgrades.

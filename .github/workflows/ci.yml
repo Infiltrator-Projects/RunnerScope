@@ -185,10 +185,6 @@ jobs:
             gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null
             echo "publish=false" >> "$GITHUB_OUTPUT"
           else
-            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "Release ${tag} exists without a matching fetched tag; refusing ambiguous publication state." >&2
-              exit 1
-            fi
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -242,10 +238,32 @@ jobs:
             ! grep -qE '  .*/' SHA256SUMS.txt
           )
 
-          gh release create "$tag" \
-            "$deb_release" "$win_release" release/SHA256SUMS.txt \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Runner Monitor ${version}" \
-            --notes "Native C Runner Monitor with internal HTTPS and organisation/access-token setup in Settings. No command-line helpers are required at runtime. Linux and Windows artifacts are the exact binaries qualified by this workflow, linked with the repository-pinned Infiltratr Common revision." \
-            --latest
+          if ! gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/release-state"; then
+            gh release create "$tag" --target "$GITHUB_SHA" --draft \
+              --title "Runner Monitor $version" \
+              --notes "Exact Linux and Windows binaries qualified from $GITHUB_SHA."
+            gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/release-state"
+          fi
+          test "$(jq -r .targetCommitish "$RUNNER_TEMP/release-state")" = "$GITHUB_SHA"
+          draft=$(jq -r .isDraft "$RUNNER_TEMP/release-state")
+          if [[ "$draft" == true ]]; then
+            gh release upload "$tag" "$deb_release" "$win_release" release/SHA256SUMS.txt --clobber
+          fi
+          verify_remote() {
+            local destination
+            destination=$(mktemp -d)
+            gh release download "$tag" --dir "$destination"
+            expected=$(printf '%s\n' "$(basename "$deb_release")" "$(basename "$win_release")" SHA256SUMS.txt | sort)
+            test "$(find "$destination" -type f -printf '%f\n' | sort)" = "$expected"
+            cmp "$deb_release" "$destination/$(basename "$deb_release")"
+            cmp "$win_release" "$destination/$(basename "$win_release")"
+            cmp release/SHA256SUMS.txt "$destination/SHA256SUMS.txt"
+            rm -rf "$destination"
+          }
+          verify_remote
+          if [[ "$draft" == true ]]; then
+            gh release edit "$tag" --draft=false --latest
+          fi
+          verify_remote
+          git fetch origin "refs/tags/$tag:refs/tags/$tag"
+          test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"

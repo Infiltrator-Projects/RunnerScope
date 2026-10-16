@@ -2,6 +2,7 @@
 #include "core/runner_config.h"
 
 #include <limits.h>
+#include <locale.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -84,6 +85,44 @@ static bool migration_contract(void)
     CHECK_MIGRATION(!runner_config_parse_json(document, &roundtrip, error, sizeof(error)));
     (void)snprintf(document, sizeof(document), "{\"runner_poll_seconds\":%u.00000000000000000001}", UINT_MAX);
     CHECK_MIGRATION(!runner_config_parse_json(document, &roundtrip, error, sizeof(error)));
+    return true;
+}
+
+static bool number_syntax_contract(void)
+{
+    char error[256];
+    RunnerConfig config;
+    runner_config_defaults(&config);
+    const char *valid[] = {"0", "-0", "-12.5e-2", "1E+4", "0.125"};
+    const char *invalid[] = {"NaN", "nan", "Infinity", "-Infinity", "+1",
+        ".5", "1.", "01", "0x10", "1e", "1e+", "--1"};
+    char document[128];
+    for (size_t i = 0U; i < sizeof(valid) / sizeof(valid[0]); ++i) {
+        snprintf(document, sizeof(document), "{\"future\":%s}", valid[i]);
+        CHECK_MIGRATION(runner_config_parse_json(document, &config, error, sizeof(error)));
+    }
+    for (size_t i = 0U; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+        snprintf(document, sizeof(document), "{\"future\":%s}", invalid[i]);
+        const RunnerConfig previous = config;
+        CHECK_MIGRATION(!runner_config_parse_json(document, &config, error, sizeof(error)));
+        CHECK_MIGRATION(memcmp(&previous, &config, sizeof(config)) == 0);
+    }
+    const char *original = setlocale(LC_NUMERIC, NULL);
+    CHECK_MIGRATION(original != NULL);
+    char saved[256];
+    CHECK_MIGRATION(strlen(original) < sizeof(saved));
+    snprintf(saved, sizeof(saved), "%s", original);
+    const char *locales[] = {"de_DE.UTF-8", "fr_FR.UTF-8", "German_Germany.1252",
+                            "French_France.1252", "de_DE", "fr_FR"};
+    bool exercised = false;
+    for (size_t i = 0U; i < sizeof(locales) / sizeof(locales[0]); ++i) {
+        if (setlocale(LC_NUMERIC, locales[i])) {
+            CHECK_MIGRATION(migration_contract());
+            exercised = true;
+        }
+    }
+    CHECK_MIGRATION(setlocale(LC_NUMERIC, saved) != NULL);
+    if (!exercised) puts("Non-C numeric locale unavailable; ASCII grammar fixtures remain active.");
     return true;
 }
 
@@ -222,6 +261,7 @@ int main(void)
     runner_config_defaults(&config);
     if (!runner_config_validate(&config, error, sizeof(error))) return 22;
     if (!migration_contract()) return 23;
+    if (!number_syntax_contract()) return 24;
 
     puts("Runner configuration contract passed.");
     return 0;

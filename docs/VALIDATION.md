@@ -94,3 +94,7 @@ A platform feature is complete only when its behaviour is present, its shared pr
 ## Remaining architectural hardening
 
 Issue #2 remains the authority for completion of the shared declarative UI migration. Both platforms now consume the shared configuration and GitHub provider contracts. Native HTTP, Windows storage and Linux systemd operations have explicit platform adapters. Further controller and history/persistence decomposition under issue #14 must preserve those authorities.
+
+## Configuration number grammar
+
+The shared parser recognises JSON numeric syntax as ASCII and performs exact integer policy checks separately. It never uses desktop-locale floating conversion to validate the document. Regression fixtures cover legacy decimal timer migration, unknown finite JSON numbers, malformed/C-only numeric forms and unchanged caller state on rejection. Available German/French numeric locales exercise the full migration fixture; a test environment without those locales reports that limitation explicitly.
