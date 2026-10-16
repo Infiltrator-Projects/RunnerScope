@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.16 - 2026-10-17
+
+- Use canonical alpha product and package identities without migration aliases.
+
 ## 1.3.14
 
 - Replace developer registration with automatically supplied official GitHub sign-in.
@@ -51,7 +55,7 @@ No unreleased changes.
 
 ## 1.3.8 - 2026-10-15
 
-- Introduce a toolkit-neutral Runner Monitor configuration contract with one authority for defaults, validation, parsing and serialisation.
+- Introduce a toolkit-neutral RunnerScope configuration contract with one authority for defaults, validation, parsing and serialisation.
 - Fix the Windows Settings corruption path: changing only the organisation now preserves expected-runner, poll, scan, repository-limit and theme values.
 - Move Windows durable configuration I/O out of the Win32 controller; writes are flushed and atomically replaced, and malformed persisted state fails closed instead of silently becoming defaults.
 - Move Windows child-process capture out of the Win32 controller and replace the ineffective post-read timeout with nonblocking pipe draining plus a real wall-clock timeout/termination contract.
@@ -66,7 +70,7 @@ No unreleased changes.
 
 ## 1.3.6 - 2026-10-15
 
-- Advance the exact repository gitlink to released Infiltratr Common 1.19.42 and remove the duplicated Common version/commit literals from CMake and README.
+- Advance the exact repository gitlink to released Libraries 1.19.42 and remove the duplicated Common version/commit literals from CMake and README.
 - Derive Common checkout validation from the gitlink itself so dependency identity has one authority.
 - Collapse Linux qualification into the clean Debian build/install path and run the full CTest suite from `dh_auto_test`, including the shared UI contracts.
 - Collapse Windows qualification into one hosted x64 build so the executable that passes runtime tests is the executable staged for release.
@@ -121,7 +125,7 @@ No unreleased changes.
 
 ## 1.3.0 - 2026-10-06
 
-- Introduce the first toolkit-neutral Runner Monitor UI contract shared by the native GTK and Win32 products.
+- Introduce the first toolkit-neutral RunnerScope UI contract shared by the native GTK and Win32 products.
 - Give the four pages and major shell surfaces stable component IDs so cross-platform parity can be tested independently of either toolkit.
 - Make both native shells consume shared product identity, page/navigation metadata, hero artwork, metric captions and contextual action policy.
 - Add a toolkit-free UI-contract CTest and validate the same contract from both native application self-tests.

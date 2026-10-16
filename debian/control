@@ -9,9 +9,6 @@ Homepage: https://github.com/Infiltrator-Projects/RunnerScope
 
 Package: runnerscope
 Architecture: any
-Provides: infiltrator-runner-monitor (= ${binary:Version})
-Breaks: infiltrator-runner-monitor (<< ${binary:Version})
-Replaces: infiltrator-runner-monitor (<< ${binary:Version})
 Depends: ${shlibs:Depends}, ${misc:Depends}, fontconfig, ca-certificates
 Description: native GitHub Actions self-hosted runner desktop monitor
  RunnerScope is a native C desktop application linked directly to the

@@ -4262,7 +4262,7 @@ static void build_ui(RunnerScopeApp *app)
     char app_version[128];
     char common_version[128];
     (void)snprintf(app_version, sizeof(app_version),
-                   "Runner Monitor %s", RUNNERSCOPE_VERSION);
+                   "RunnerScope %s", RUNNERSCOPE_VERSION);
     (void)snprintf(common_version, sizeof(common_version),
                    "Common %s", INFILTRATR_COMMON_VERSION);
     RunnerUiFooterState footer_state = {
@@ -4365,7 +4365,7 @@ static int self_test(void)
     if (!infiltratr_format_duration_compact(true, 3661U, duration, sizeof(duration)))
         return 4;
     if (strstr(duration, "1h") == NULL) return 5;
-    printf("Runner Monitor %s native C/Common self-test passed (Common %s)\n",
+    printf("RunnerScope %s native C/Common self-test passed (Common %s)\n",
            RUNNERSCOPE_VERSION, INFILTRATR_COMMON_VERSION);
     return 0;
 }
