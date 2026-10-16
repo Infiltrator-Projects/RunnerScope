@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Replace manual token entry with native GitHub browser sign-in on Windows and Linux.
+- Preserve existing settings and sessions; cancelled sign-in cannot overwrite the saved account.
+- Test authorization codes, server polling intervals, slow-down, expiry and safe error handling.
+- Require the project OAuth client registration before publication.
+
+## Unreleased
+
 No unreleased changes.
 
 ## 1.3.12 - 2026-10-16

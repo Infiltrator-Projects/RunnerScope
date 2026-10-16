@@ -71,6 +71,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         InvalidateRect(window, NULL, FALSE);
         return 0;
     case WM_TIMER:
+        if (wparam == TIMER_AUTH) { auth_tick(); return 0; }
         if (wparam == TIMER_REFRESH) {
             if (!g_app.refreshing && !g_app.settings_dirty && g_app.config.organisation[0] &&
                 g_app.config.github_token[0] && !g_app.config_error[0])
@@ -129,6 +130,9 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
             return 0;
         }
         break;
+    case WM_APP_AUTH_DONE:
+        auth_apply((AuthResult *)lparam);
+        return 0;
     case WM_APP_REFRESH_DONE:
         apply_refresh((RefreshResult *)lparam);
         return 0;
@@ -169,6 +173,8 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         return 0;
     }
     case WM_DESTROY:
+        auth_cancel();
+        if (g_app.auth_thread) { CloseHandle(g_app.auth_thread); g_app.auth_thread = NULL; }
         g_app.shutting_down = true;
         if (g_app.refresh_cancel) {
             SetEvent(g_app.refresh_cancel);

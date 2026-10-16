@@ -14,6 +14,7 @@
 #include "ui/ui_renderer.h"
 #include "core/runner_config.h"
 #include "core/github.h"
+#include "core/github_auth.h"
 #include "platform/linux_services.h"
 
 #include <ctype.h>
@@ -1687,7 +1688,7 @@ static void update_connection_banner(RunnerScopeApp *app)
     char *notice = NULL;
     if (app->runner_data_stale) {
         notice = g_strdup_printf("%s%s", app->runner_error ? app->runner_error :
-            app->config.github_token[0] ? "Checking GitHub runner access…" : "Add your GitHub token in Settings.",
+            app->config.github_token[0] ? "Checking GitHub runner access…" : "Sign in with GitHub in Settings.",
             app->runner_rows->len ? " Displayed runners are last known data." : " Runner status is unavailable.");
     } else if (app->activity_data_stale && app->activity_error) {
         notice = g_strdup_printf("%s Displayed activity is last known data.", app->activity_error);
@@ -2237,9 +2238,9 @@ static void request_runner_refresh(RunnerScopeApp *app)
     if (!app->config.organisation[0] || g_atomic_int_get(&app->shutting_down)) return;
     if (!app->config.github_token[0]) {
         app->runner_data_stale = TRUE;
-        label_set_if_changed(app->connection_label, "Add your GitHub token in Settings to view organisation runners.");
+        label_set_if_changed(app->connection_label, "Sign in with GitHub in Settings to view organisation runners.");
         gtk_widget_show(app->connection_bar);
-        label_set_if_changed(app->status_label, "GitHub token required — open Settings");
+        label_set_if_changed(app->status_label, "Sign in with GitHub — open Settings");
         update_workspace_context(app, gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
         return;
     }
@@ -2824,6 +2825,8 @@ static gboolean entry_uint(GtkWidget *entry, unsigned int *value)
     return TRUE;
 }
 
+#include "linux_auth.inc"
+
 static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
 {
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
@@ -2838,17 +2841,17 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
     gtk_grid_set_column_spacing(GTK_GRID(grid), metrics ? metrics->control_spacing : 10U);
     gtk_container_set_border_width(GTK_CONTAINER(grid), metrics ? metrics->content_padding : 16U);
     gtk_container_add(GTK_CONTAINER(area), grid);
-    const char *labels[] = {"GitHub organisation", "GitHub token", "Expected runners",
+    const char *labels[] = {"GitHub organisation", "GitHub account", "Expected runners",
         "Runner refresh (seconds)", "Activity scan (seconds)", "Repositories to scan",
         "Local health (seconds)", "Theme"};
-    GtkWidget *entries[7];
+    GtkWidget *entries[7] = {NULL};
     const unsigned int values[] = {app->config.expected_runners, app->config.runner_poll_seconds,
         app->config.activity_scan_seconds, app->config.repository_scan_limit, app->config.local_health_seconds};
     for (guint i = 0U; i < G_N_ELEMENTS(labels); ++i) {
         GtkWidget *label = gtk_label_new(labels[i]);
         gtk_widget_set_halign(label, GTK_ALIGN_START);
         gtk_grid_attach(GTK_GRID(grid), label, 0, (gint)i, 1, 1);
-        if (i < G_N_ELEMENTS(entries)) {
+        if (i < G_N_ELEMENTS(entries) && i != 1U) {
             entries[i] = gtk_entry_new();
             gtk_entry_set_max_length(GTK_ENTRY(entries[i]), i == 1U ? (gint)RUNNER_GITHUB_TOKEN_CAPACITY - 1 : i == 0U ? 127 : 10);
             gtk_grid_attach(GTK_GRID(grid), entries[i], 1, (gint)i, 1, 1);
@@ -2856,10 +2859,6 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
     }
     gtk_entry_set_text(GTK_ENTRY(entries[0]), app->config.organisation);
     gtk_widget_set_tooltip_text(entries[0], "Your saved GitHub organisation is filled in automatically. Keep it unless you want to monitor another organisation.");
-    gtk_entry_set_visibility(GTK_ENTRY(entries[1]), FALSE);
-    gtk_entry_set_input_purpose(GTK_ENTRY(entries[1]), GTK_INPUT_PURPOSE_PASSWORD);
-    gtk_entry_set_text(GTK_ENTRY(entries[1]), app->config.github_token);
-    gtk_entry_set_placeholder_text(GTK_ENTRY(entries[1]), "Paste your GitHub token");
     for (guint i = 2U; i < G_N_ELEMENTS(entries); ++i) {
         char number[32]; g_snprintf(number, sizeof(number), "%u", values[i - 2U]);
         gtk_entry_set_text(GTK_ENTRY(entries[i]), number);
@@ -2871,38 +2870,29 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
     gtk_combo_box_set_active(GTK_COMBO_BOX(theme), (gint)app->config.theme_mode);
     gtk_grid_attach(GTK_GRID(grid), theme, 1, 7, 1, 1);
     GtkWidget *hint = gtk_label_new(
-        "Create a personal access token on GitHub, then paste it above.\n"
-        "Select your organisation as Resource owner.\n"
-        "Organisation permissions: Self-hosted runners: Read.\n"
-        "Repository permissions: Actions: Read for monitored repositories.\n"
-        "The token is saved in your private settings file.\n"
-        "Save and test checks runner access.");
+        "Sign in through GitHub in your browser. Enter the one-time code shown above,\n"
+        "then approve Runner Monitor. Your account is remembered on this computer.");
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_label_set_max_width_chars(GTK_LABEL(hint), 65);
     gtk_label_set_xalign(GTK_LABEL(hint), 0.0F);
     gtk_widget_set_halign(hint, GTK_ALIGN_START);
     gtk_grid_attach(GTK_GRID(grid), hint, 0, 8, 2, 1);
-    GtkWidget *create_token = gtk_link_button_new_with_label(
-        "https://github.com/settings/personal-access-tokens/new", "Create token on GitHub");
-    gtk_widget_set_halign(create_token, GTK_ALIGN_START);
-    gtk_widget_set_tooltip_text(create_token, "Open GitHub's personal access token settings in your browser.");
-    gtk_grid_attach(GTK_GRID(grid), create_token, 0, 9, 2, 1);
     GtkWidget *error_label = gtk_label_new(app->config_error ? app->config_error : "");
     gtk_label_set_line_wrap(GTK_LABEL(error_label), TRUE);
     gtk_label_set_max_width_chars(GTK_LABEL(error_label), 65);
     gtk_widget_set_halign(error_label, GTK_ALIGN_START);
     gtk_grid_attach(GTK_GRID(grid), error_label, 0, 10, 2, 1);
-    g_object_set_data(G_OBJECT(dialog), "token-entry", entries[1]);
+    GithubSignIn *sign_in = github_sign_in_create(dialog, grid, error_label);
     g_object_set_data(G_OBJECT(dialog), "organisation-entry", entries[0]);
     g_object_set_data(G_OBJECT(dialog), "settings-error", error_label);
-    g_object_set_data(G_OBJECT(dialog), "token-help", hint);
-    g_object_set_data(G_OBJECT(dialog), "create-token-link", create_token);
+    g_object_set_data(G_OBJECT(dialog), "sign-in-help", hint);
     gtk_widget_show_all(dialog);
     gboolean saved = FALSE;
     while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         RunnerConfig candidate = app->config;
         g_strlcpy(candidate.organisation, gtk_entry_get_text(GTK_ENTRY(entries[0])), sizeof(candidate.organisation));
-        g_strlcpy(candidate.github_token, gtk_entry_get_text(GTK_ENTRY(entries[1])), sizeof(candidate.github_token));
+        if (sign_in->auth.phase == RUNNER_AUTH_COMPLETE)
+            g_strlcpy(candidate.github_token, sign_in->auth.token, sizeof(candidate.github_token));
         unsigned int *fields[] = {&candidate.expected_runners, &candidate.runner_poll_seconds,
             &candidate.activity_scan_seconds, &candidate.repository_scan_limit, &candidate.local_health_seconds};
         gboolean valid_numbers = TRUE;
@@ -2914,7 +2904,7 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
             !runner_config_validate(&candidate, detail, sizeof(detail)) || !candidate.github_token[0]) {
             label_set_if_changed(error_label, !valid_numbers ? "Enter valid whole numbers for the polling settings."
                 : !candidate.organisation[0] ? "Enter your GitHub organisation name."
-                : !candidate.github_token[0] ? "Paste your GitHub token to test organisation runner access." : detail);
+                : !candidate.github_token[0] ? "Select Sign in with GitHub to connect." : detail);
             memset(candidate.github_token, 0, sizeof(candidate.github_token));
             continue;
         }
@@ -2951,7 +2941,7 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         saved = TRUE;
         break;
     }
-    gtk_entry_set_text(GTK_ENTRY(entries[1]), "");
+    github_sign_in_close(sign_in);
     gtk_widget_destroy(dialog);
     if (saved && app->window) apply_theme(app);
     return saved;
@@ -4067,7 +4057,7 @@ static void build_ui(RunnerScopeApp *app)
     app->connection_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (gint)control_spacing);
     gtk_widget_set_no_show_all(app->connection_bar, TRUE);
     gtk_style_context_add_class(gtk_widget_get_style_context(app->connection_bar), "selection-card");
-    app->connection_label = gtk_label_new("Add your GitHub token in Settings to view organisation runners.");
+    app->connection_label = gtk_label_new("Sign in with GitHub in Settings to view organisation runners.");
     gtk_label_set_line_wrap(GTK_LABEL(app->connection_label), TRUE);
     gtk_label_set_xalign(GTK_LABEL(app->connection_label), 0.0F);
     gtk_widget_set_hexpand(app->connection_label, TRUE);
@@ -4558,21 +4548,69 @@ typedef struct {
     const RunnerConfig *expected;
 } UiTestSettings;
 
+static bool ui_test_oauth_post(const char *request_path, const char *form,
+    RunnerHttpResponse *response, char *error, size_t size, void *context)
+{
+    (void)error; (void)size; (void)context;
+    g_assert_nonnull(strstr(form, "client_id=offline-client"));
+    response->status = 200U;
+    response->link = NULL;
+    response->body = g_strdup(strcmp(request_path, "/login/device/code") == 0
+        ? "{\"device_code\":\"offline-device\",\"user_code\":\"ABCD-EFGH\",\"verification_uri\":\"https://github.com/login/device\",\"expires_in\":900,\"interval\":1}"
+        : "{\"access_token\":\"offline-settings-fixture\",\"token_type\":\"bearer\"}");
+    return true;
+}
+
+static void ui_test_sign_in_cancel(RunnerScopeApp *app)
+{
+    GtkWidget *dialog = gtk_dialog_new();
+    GtkWidget *grid = gtk_grid_new();
+    GtkWidget *status = gtk_label_new("");
+    gtk_container_add(GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), grid);
+    GithubSignIn *sign_in = github_sign_in_create(dialog, grid, status);
+    sign_in->client_id = "offline-client";
+    sign_in->post = ui_test_oauth_post;
+    sign_in->open_browser = FALSE;
+    github_sign_in_start(NULL, sign_in);
+    gint64 deadline = g_get_monotonic_time() + 5000000;
+    while (sign_in->busy && g_get_monotonic_time() < deadline) {
+        while (g_main_context_iteration(NULL, FALSE)) {}
+        g_usleep(1000U);
+    }
+    g_assert_false(sign_in->busy);
+    g_assert_cmpint(sign_in->auth.phase, ==, RUNNER_AUTH_WAITING);
+    sign_in->auth.next_poll_ms = 0U;
+    (void)github_sign_in_tick(sign_in);
+    github_sign_in_cancel(sign_in);
+    deadline = g_get_monotonic_time() + 5000000;
+    while (sign_in->busy && g_get_monotonic_time() < deadline) {
+        while (g_main_context_iteration(NULL, FALSE)) {}
+        g_usleep(1000U);
+    }
+    g_assert_false(sign_in->busy);
+    g_assert_false(sign_in->active);
+    g_assert_cmpstr(sign_in->auth.token, ==, "");
+    g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(sign_in->code)), ==, "");
+    g_assert_cmpstr(app->config.github_token, ==, "");
+    github_sign_in_close(sign_in);
+    gtk_widget_destroy(dialog);
+    gtk_widget_destroy(status);
+}
+
 static gboolean ui_test_settings_response(gpointer data)
 {
     UiTestSettings *test = data;
     GList *windows = gtk_window_list_toplevels();
     gboolean found = FALSE;
     for (GList *item = windows; item; item = item->next) {
-        GtkWidget *entry = g_object_get_data(G_OBJECT(item->data), "token-entry");
-        if (!entry) continue;
-        g_assert_false(gtk_entry_get_visibility(GTK_ENTRY(entry)));
-        g_assert_cmpint(gtk_entry_get_input_purpose(GTK_ENTRY(entry)), ==, GTK_INPUT_PURPOSE_PASSWORD);
-        gtk_entry_set_text(GTK_ENTRY(entry), "offline-settings-fixture");
+        GithubSignIn *sign_in = g_object_get_data(G_OBJECT(item->data), "github-sign-in");
+        if (!sign_in) continue;
         GtkWidget *organisation = g_object_get_data(G_OBJECT(item->data), "organisation-entry");
+        g_assert_null(g_object_get_data(G_OBJECT(item->data), "token-entry"));
+        g_assert_nonnull(g_object_get_data(G_OBJECT(item->data), "github-sign-in-button"));
         if (test->attempts == 0U) {
             g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(organisation)), ==, test->expected->organisation);
-            GtkWidget *grid = gtk_widget_get_parent(entry);
+            GtkWidget *grid = gtk_widget_get_parent(organisation);
             const unsigned int values[] = {test->expected->expected_runners, test->expected->runner_poll_seconds,
                 test->expected->activity_scan_seconds, test->expected->repository_scan_limit, test->expected->local_health_seconds};
             for (guint i = 0U; i < G_N_ELEMENTS(values); ++i) {
@@ -4583,21 +4621,20 @@ static gboolean ui_test_settings_response(gpointer data)
             }
             GtkWidget *theme = gtk_grid_get_child_at(GTK_GRID(grid), 1, 7);
             g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(theme)), ==, (gint)test->expected->theme_mode);
-            GtkWidget *help = g_object_get_data(G_OBJECT(item->data), "token-help");
-            g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(help)), "Self-hosted runners: Read"));
-            g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(help)), "Actions: Read"));
-            GtkWidget *link = g_object_get_data(G_OBJECT(item->data), "create-token-link");
-            g_assert_cmpstr(gtk_link_button_get_uri(GTK_LINK_BUTTON(link)), ==,
-                "https://github.com/settings/personal-access-tokens/new");
+            GtkWidget *help = g_object_get_data(G_OBJECT(item->data), "sign-in-help");
+            g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(help)), "browser"));
             gtk_entry_set_text(GTK_ENTRY(organisation), "");
-        }
-        else {
+            gtk_dialog_response(GTK_DIALOG(item->data), GTK_RESPONSE_ACCEPT);
+        } else {
             GtkWidget *message = g_object_get_data(G_OBJECT(item->data), "settings-error");
             g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(message)), "organisation"));
             gtk_entry_set_text(GTK_ENTRY(organisation), test->expected->organisation);
+            sign_in->post = ui_test_oauth_post;
+            sign_in->client_id = "offline-client";
+            sign_in->open_browser = FALSE;
+            github_sign_in_start(NULL, sign_in);
         }
         test->attempts++;
-        gtk_dialog_response(GTK_DIALOG(item->data), GTK_RESPONSE_ACCEPT);
         found = TRUE;
         break;
     }
@@ -4821,6 +4858,7 @@ static int ui_self_test(int *argc, char ***argv)
     g_assert_false(g_hash_table_contains(app.runner_card_by_name, "Fixture-0"));
     g_assert_false(gtk_widget_get_visible(app.selection_card));
     g_assert_cmpint(gtk_tree_model_iter_n_children(GTK_TREE_MODEL(app.runner_store), NULL), ==, 2);
+    ui_test_sign_in_cancel(&app);
     UiTestSettings settings_test = {0U, &reloaded};
     g_idle_add(ui_test_settings_response, &settings_test);
     g_assert_true(settings_dialog(&app, TRUE));
@@ -4848,7 +4886,7 @@ static int ui_self_test(int *argc, char ***argv)
     (void)g_rmdir(config_directory); (void)g_rmdir(state_directory); (void)g_rmdir(directory);
     g_free(history_directory); g_free(settings_directory); g_free(history); g_free(path);
     g_free(config_directory); g_free(state_directory); g_free(directory);
-    puts("Runner UI passed: cards, masked token, private settings save/reload, corrupt-file preservation, configuration snapshots, stale generations and provider failures.");
+    puts("Runner UI passed: cards, native browser sign-in, private settings save/reload, corrupt-file preservation, configuration snapshots, stale generations and provider failures.");
     return 0;
 }
 

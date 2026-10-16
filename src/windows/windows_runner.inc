@@ -280,7 +280,7 @@ static void refresh_begin(void)
     if (g_app.refreshing || g_app.settings_dirty || g_app.shutting_down || !g_app.window) return;
     if (!g_app.config.organisation[0] || !g_app.config.github_token[0]) {
         infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error),
-                               "Open Settings and save the GitHub organisation and token to connect.");
+                               "Open Settings, enter your organisation and select Sign in with GitHub.");
         mark_rows_stale();
         PostMessageW(g_app.window, WM_APP_OPEN_SETTINGS, 0, 0);
         return;

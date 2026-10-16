@@ -4,6 +4,8 @@ name: Runner Monitor CI
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -171,6 +173,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$(tr -d '[:space:]' < packaging/github-oauth-client-id.txt)" || {
+            echo "Configure the project GitHub OAuth client before publishing browser sign-in." >&2
+            exit 1
+          }
           version="$(tr -d '[:space:]' < VERSION)"
           test -n "$version"
           tag="v${version}"

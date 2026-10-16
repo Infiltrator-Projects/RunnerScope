@@ -260,7 +260,7 @@ static void draw_footer(HDC dc, RECT client)
         (void)snprintf(status, sizeof(status), "%s%s", g_app.provider_error,
                       g_app.rows_stale ? " Last known runner data is stale." : "");
     } else if (!g_app.config.github_token[0]) {
-        infiltratr_copy_string(status, sizeof(status), "Open Settings and save a GitHub token to connect.");
+        infiltratr_copy_string(status, sizeof(status), "Open Settings and select Sign in with GitHub to connect.");
     } else if (!g_app.config.organisation[0]) {
         infiltratr_copy_string(status, sizeof(status), "Open Settings and enter the GitHub organisation.");
     } else {

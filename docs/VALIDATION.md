@@ -98,3 +98,7 @@ Issue #2 remains the authority for completion of the shared declarative UI migra
 ## Configuration number grammar
 
 The shared parser recognises JSON numeric syntax as ASCII and performs exact integer policy checks separately. It never uses desktop-locale floating conversion to validate the document. Regression fixtures cover legacy decimal timer migration, unknown finite JSON numbers, malformed/C-only numeric forms and unchanged caller state on rejection. Available German/French numeric locales exercise the full migration fixture; a test environment without those locales reports that limitation explicitly.
+
+## Native browser sign-in
+
+The shared OAuth test exercises device-code parsing, requested permissions, polling intervals, server slow-down, expiry, denial, malformed responses, endpoint errors and credential cleanup. The GTK installed UI test signs in using the real asynchronous controller with an offline transport, then reloads the saved session and preserved legacy preferences. Production authorization still requires the project OAuth registration and an interactive account approval; offline tests do not claim to validate those external steps.

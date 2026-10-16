@@ -63,8 +63,20 @@ add_subdirectory(infiltratr-common EXCLUDE_FROM_ALL)
 add_library(runnerscope_core STATIC
     src/core/runner_config.c
     src/core/github.c
+    src/core/github_auth.c
     third_party/cjson/cJSON.c
 )
+# Public project registration, never a secret. Packagers set this once; end
+# users sign in through GitHub and never enter a personal token or client ID.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/packaging/github-oauth-client-id.txt" RUNNERSCOPE_DEFAULT_CLIENT_ID)
+string(STRIP "${RUNNERSCOPE_DEFAULT_CLIENT_ID}" RUNNERSCOPE_DEFAULT_CLIENT_ID)
+set(RUNNERSCOPE_GITHUB_CLIENT_ID "${RUNNERSCOPE_DEFAULT_CLIENT_ID}" CACHE STRING "Runner Monitor public GitHub OAuth client ID")
+if(NOT RUNNERSCOPE_GITHUB_CLIENT_ID MATCHES "^[A-Za-z0-9_.-]*$")
+    message(FATAL_ERROR "Invalid GitHub OAuth client ID")
+endif()
+target_compile_definitions(runnerscope_core PRIVATE
+    RUNNERSCOPE_GITHUB_CLIENT_ID="${RUNNERSCOPE_GITHUB_CLIENT_ID}")
+
 target_include_directories(runnerscope_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -302,3 +314,7 @@ else()
     target_link_libraries(runnerscope-linux-services-test PRIVATE runnerscope_linux_platform)
     add_test(NAME runnerscope-linux-services-test COMMAND runnerscope-linux-services-test)
 endif()
+
+add_executable(runnerscope-github-auth-test tests/github_auth_test.c)
+target_link_libraries(runnerscope-github-auth-test PRIVATE runnerscope_core)
+add_test(NAME runnerscope-github-auth-test COMMAND runnerscope-github-auth-test)

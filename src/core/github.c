@@ -414,7 +414,7 @@ char *runner_github_fetch(const char *endpoint, const char *token,
 {
     if (error && error_size) error[0] = '\0';
     if (!token_valid(token)) {
-        fail(error, error_size, "Enter a valid GitHub token in Settings to connect.");
+        fail(error, error_size, "Sign in with GitHub in Settings to connect.");
         return NULL;
     }
     if (!get || !endpoint || bounded_length(endpoint, GITHUB_URL_LIMIT) >= GITHUB_URL_LIMIT) {
@@ -461,15 +461,15 @@ char *runner_github_fetch(const char *endpoint, const char *token,
             ok = false;
         } else if (response.status != 200U) {
             const char *message = response.status == 401U
-                ? "GitHub rejected the token. Replace or renew it in Settings."
+                ? "GitHub sign-in expired or was revoked. Sign in again in Settings."
                 : response.status == 429U || (response.status == 403U && contains(response.body, "rate limit"))
                 ? "GitHub's request limit was reached. Wait before refreshing again."
                 : response.status == 403U
                 ? projection == RUNNER_GITHUB_RUNNERS
-                    ? "GitHub denied runner access. Replace the token in Settings with one authorized for organisation Self-hosted runners: Read and SSO where required."
-                    : "GitHub denied activity access. Replace the token in Settings with one authorized for these repositories, Actions: Read and SSO where required."
+                    ? "GitHub denied runner access. Sign in with GitHub in Settings using an account authorized for organisation Self-hosted runners: Read and SSO where required."
+                    : "GitHub denied activity access. Sign in with GitHub in Settings using an account authorized for these repositories, Actions: Read and SSO where required."
                 : response.status == 404U
-                ? "GitHub could not access this organisation or repository. Check Settings and token access."
+                ? "GitHub could not access this organisation or repository. Check the organisation in Settings and sign in again."
                 : "GitHub is temporarily unavailable or returned an unexpected response. Try refreshing again.";
             fail(error, error_size, message);
             ok = false;

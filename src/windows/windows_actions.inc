@@ -77,16 +77,13 @@ static void settings_status(const char *message)
 
 static void save_settings(HWND window, bool test_access)
 {
-    wchar_t organisation[128], token[RUNNER_GITHUB_TOKEN_CAPACITY];
+    wchar_t organisation[128];
     GetWindowTextW(g_app.settings_org, organisation, 128);
-    GetWindowTextW(g_app.settings_token, token, RUNNER_GITHUB_TOKEN_CAPACITY);
     RunnerConfig next = g_app.config;
     char error[640] = "";
     bool valid = wide_to_utf8(organisation, next.organisation, sizeof(next.organisation)) &&
-                 next.organisation[0] &&
-                 wide_to_utf8(token, next.github_token, sizeof(next.github_token));
-    SecureZeroMemory(token, sizeof(token));
-    if (!valid) infiltratr_copy_string(error, sizeof(error), "Enter a valid organisation and GitHub token.");
+                 next.organisation[0];
+    if (!valid) infiltratr_copy_string(error, sizeof(error), "Enter a valid GitHub organisation.");
     else valid = runner_config_validate(&next, error, sizeof(error));
     if (valid) valid = runner_windows_config_save(&next, error, sizeof(error));
     if (!valid) {
@@ -121,9 +118,9 @@ static void save_settings(HWND window, bool test_access)
         mark_rows_stale();
         infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error),
             g_app.config.github_token[0] ? "Settings saved. Runner access has not been verified yet."
-                : "No GitHub token saved. Open Settings to connect.");
+                : "Sign in with GitHub in Settings to connect.");
     }
-    if (!g_app.config.github_token[0]) settings_status("Settings saved. Add a GitHub token to connect.");
+    if (!g_app.config.github_token[0]) settings_status("Settings saved. Select Sign in with GitHub to connect.");
     else if (test_access) {
         settings_status("Settings saved. Checking access to this organisation's runners…");
         refresh_begin();
@@ -150,31 +147,34 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         HWND label = CreateWindowW(L"STATIC", L"GitHub &organisation", WS_CHILD | WS_VISIBLE,
             sx(20), sx(62), sx(600), sx(24), window, NULL, g_app.instance, NULL);
         SendMessageW(label, WM_SETFONT, (WPARAM)g_app.font, TRUE);
-        wchar_t organisation[128], token[RUNNER_GITHUB_TOKEN_CAPACITY];
+        wchar_t organisation[128];
         utf8_to_wide(g_app.config.organisation, organisation, 128U);
-        utf8_to_wide(g_app.config.github_token, token, RUNNER_GITHUB_TOKEN_CAPACITY);
         g_app.settings_org = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", organisation,
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
             sx(20), sx(88), sx(600), sx(31), window,
             (HMENU)(INT_PTR)ID_SETTINGS_ORG, g_app.instance, NULL);
         SendMessageW(g_app.settings_org, WM_SETFONT, (WPARAM)g_app.font, TRUE);
         SendMessageW(g_app.settings_org, EM_LIMITTEXT, 127U, 0);
-        label = CreateWindowW(L"STATIC", L"GitHub &token", WS_CHILD | WS_VISIBLE,
+        label = CreateWindowW(L"STATIC", L"GitHub sign-in code", WS_CHILD | WS_VISIBLE,
             sx(20), sx(131), sx(600), sx(24), window, NULL, g_app.instance, NULL);
         SendMessageW(label, WM_SETFONT, (WPARAM)g_app.font, TRUE);
-        g_app.settings_token = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", token,
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_PASSWORD | ES_AUTOHSCROLL,
-            sx(20), sx(157), sx(600), sx(31), window,
-            (HMENU)(INT_PTR)ID_SETTINGS_TOKEN, g_app.instance, NULL);
-        SecureZeroMemory(token, sizeof(token));
-        SendMessageW(g_app.settings_token, WM_SETFONT, (WPARAM)g_app.font, TRUE);
-        SendMessageW(g_app.settings_token, EM_LIMITTEXT, RUNNER_GITHUB_TOKEN_CAPACITY - 1U, 0);
+        g_app.settings_code = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_AUTOHSCROLL,
+            sx(20), sx(157), sx(600), sx(31), window, NULL, g_app.instance, NULL);
+        SendMessageW(g_app.settings_code, WM_SETFONT, (WPARAM)g_app.font_bold, TRUE);
+        const wchar_t *captions[] = {L"Sign in with &GitHub", L"&Copy code", L"&Open GitHub", L"Cancel sign-&in"};
+        const int ids[] = {ID_AUTH_START, ID_AUTH_COPY, ID_AUTH_OPEN, ID_AUTH_CANCEL};
+        const int positions[] = {20, 210, 325, 465};
+        const int widths[] = {180, 105, 130, 155};
+        for (int i = 0; i < 4; ++i) {
+            HWND action = CreateWindowW(L"BUTTON", captions[i], WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+                sx(positions[i]), sx(203), sx(widths[i]), sx(32), window,
+                (HMENU)(INT_PTR)ids[i], g_app.instance, NULL);
+            SendMessageW(action, WM_SETFONT, (WPARAM)g_app.font, TRUE);
+        }
         HWND hint = CreateWindowW(L"STATIC",
-            L"Paste a GitHub personal access token (not your password).\r\n"
-            L"Create one: GitHub Settings > Developer settings > Personal access tokens.\r\n"
-            L"Fine-grained: choose your organisation and Self-hosted runners: Read. Classic: admin:org.\r\n"
-            L"Paste the generated token here, then select Save and test. It is saved in a private local file.",
-            WS_CHILD | WS_VISIBLE, sx(20), sx(201), sx(600), sx(94), window, NULL, g_app.instance, NULL);
+            L"Sign in through GitHub in your browser. Enter the one-time code shown above, then approve Runner Monitor. Your account is remembered on this computer.",
+            WS_CHILD | WS_VISIBLE, sx(20), sx(248), sx(600), sx(52), window, NULL, g_app.instance, NULL);
         SendMessageW(hint, WM_SETFONT, (WPARAM)g_app.font_small, TRUE);
         g_app.settings_status = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_READONLY | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL,
@@ -182,8 +182,8 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         SendMessageW(g_app.settings_status, WM_SETFONT, (WPARAM)g_app.font, TRUE);
         settings_status(g_app.config_error[0] ? g_app.config_error
             : g_app.provider_error[0] ? g_app.provider_error
-            : g_app.config.github_token[0] ? "Token saved. Select Save and test to verify runner access."
-            : "Save the organisation and GitHub token to connect. Existing installations need a token entered here once.");
+            : g_app.config.github_token[0] ? "Signed in. Select Save and test to verify runner access."
+            : "Select Sign in with GitHub to connect.");
         HWND save = CreateWindowW(L"BUTTON", L"&Save", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
             sx(230), sx(435), sx(95), sx(32), window,
             (HMENU)(INT_PTR)ID_SETTINGS_SAVE, g_app.instance, NULL);
@@ -201,8 +201,13 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         return 0;
     }
     case WM_COMMAND:
+        if (LOWORD(wparam) == ID_AUTH_START) { auth_start(); return 0; }
+        if (LOWORD(wparam) == ID_AUTH_COPY) { auth_copy_code(); return 0; }
+        if (LOWORD(wparam) == ID_AUTH_OPEN) { auth_open_browser(); return 0; }
+        if (LOWORD(wparam) == ID_AUTH_CANCEL) { auth_cancel(); settings_status("Sign-in cancelled. Your saved account has been kept."); return 0; }
         if ((LOWORD(wparam) == ID_SETTINGS_ORG || LOWORD(wparam) == ID_SETTINGS_TOKEN) &&
             HIWORD(wparam) == EN_CHANGE) {
+            auth_cancel();
             g_app.settings_dirty = true;
             g_app.config_generation++;
             if (g_app.refresh_cancel) SetEvent(g_app.refresh_cancel);
@@ -237,9 +242,10 @@ static LRESULT CALLBACK settings_proc(HWND window, UINT message,
         return 1;
     }
     case WM_DESTROY:
+        auth_cancel();
         g_app.settings_window = NULL;
         g_app.settings_org = NULL;
-        g_app.settings_token = NULL;
+        g_app.settings_code = NULL;
         g_app.settings_status = NULL;
         g_app.settings_dirty = false;
         EnableWindow(g_app.window, TRUE);

@@ -22,6 +22,7 @@
 
 #include "core/runner_config.h"
 #include "core/github.h"
+#include "core/github_auth.h"
 #include "platform/http.h"
 #include "platform/windows_config_store.h"
 #include "ui/ui_contract.h"
@@ -52,6 +53,12 @@
 #define APP_TITLE L"Runner Monitor"
 #define WM_APP_REFRESH_DONE (WM_APP + 1)
 #define WM_APP_OPEN_SETTINGS (WM_APP + 2)
+#define WM_APP_AUTH_DONE (WM_APP + 3)
+#define TIMER_AUTH 3U
+#define ID_AUTH_START 1110
+#define ID_AUTH_COPY 1111
+#define ID_AUTH_OPEN 1112
+#define ID_AUTH_CANCEL 1113
 #define TIMER_REFRESH 1U
 #define TIMER_PRESENT 2U
 #define ID_SEARCH 1001
@@ -107,8 +114,12 @@ typedef struct {
     HWND list;
     HWND settings_window;
     HWND settings_org;
-    HWND settings_token;
+    HWND settings_code;
     HWND settings_status;
+    RunnerGithubAuth auth;
+    HANDLE auth_thread;
+    ULONGLONG auth_generation;
+    bool auth_active;
     RunnerConfig config;
     char config_error[320];
     char provider_error[640];
@@ -173,6 +184,8 @@ static void settings_status(const char *message);
 #include "windows/windows_runner.inc"
 #include "windows/windows_layout.inc"
 #include "windows/windows_presentation.inc"
+static void save_settings(HWND window, bool test_access);
+#include "windows/windows_auth.inc"
 #include "windows/windows_actions.inc"
 #include "windows/windows_controller.inc"
 

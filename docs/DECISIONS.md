@@ -62,9 +62,9 @@
 
 ## ADR-010 — Settings owns setup; requests stay internal
 
-**Decision.** Users enter an organisation and access token in Settings. Runner Monitor saves them in its existing JSON configuration and calls GitHub through native HTTPS libraries. Linux service work uses native D-Bus APIs.
+**Decision.** Users enter an organisation in Settings and sign in through GitHub in their browser. Native device authorization runs inside Runner Monitor using the project OAuth registration, with no CLI or manually pasted token. Runner Monitor saves the resulting session in its existing private configuration and calls GitHub through native HTTPS libraries. Linux service work uses native D-Bus APIs.
 
-**Consequence.** No GitHub CLI, systemctl, pkexec or other subprocess is required for monitoring or restart. Both platforms consume one configuration and GitHub response contract. Tokens are masked in the UI, kept in owner-restricted files and excluded from errors. Missing permissions are reported inside the application.
+**Consequence.** No GitHub CLI, systemctl, pkexec or other subprocess is required for monitoring or restart. Both platforms consume one configuration and GitHub response contract. Credentials are absent from the UI, kept in owner-restricted files and excluded from errors. Device codes have explicit expiry, bounded requests, server-directed polling and cancellation. Missing permissions are reported inside the application.
 
 ## ADR-011 — Main is the only branch
 
