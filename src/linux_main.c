@@ -2846,6 +2846,7 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         "Runner refresh (seconds)", "Activity scan (seconds)", "Repositories to scan",
         "Local health (seconds)", "Theme"};
     GtkWidget *entries[7] = {NULL};
+    GtkWidget *organisation_choices = gtk_combo_box_text_new_with_entry();
     const unsigned int values[] = {app->config.expected_runners, app->config.runner_poll_seconds,
         app->config.activity_scan_seconds, app->config.repository_scan_limit, app->config.local_health_seconds};
     for (guint i = 0U; i < G_N_ELEMENTS(labels); ++i) {
@@ -2853,9 +2854,9 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
         gtk_widget_set_halign(label, GTK_ALIGN_START);
         gtk_grid_attach(GTK_GRID(grid), label, 0, (gint)i, 1, 1);
         if (i < G_N_ELEMENTS(entries) && i != 1U) {
-            entries[i] = i == 0U ? gtk_bin_get_child(GTK_BIN(gtk_combo_box_text_new_with_entry())) : gtk_entry_new();
+            entries[i] = i == 0U ? gtk_bin_get_child(GTK_BIN(organisation_choices)) : gtk_entry_new();
             gtk_entry_set_max_length(GTK_ENTRY(entries[i]), i == 0U ? 127 : 10);
-            gtk_grid_attach(GTK_GRID(grid), i == 0U ? gtk_widget_get_parent(entries[i]) : entries[i], 1, (gint)i, 1, 1);
+            gtk_grid_attach(GTK_GRID(grid), i == 0U ? organisation_choices : entries[i], 1, (gint)i, 1, 1);
         }
     }
     gtk_entry_set_text(GTK_ENTRY(entries[0]), app->config.organisation);
@@ -2886,7 +2887,7 @@ static gboolean settings_dialog(RunnerScopeApp *app, gboolean first_run)
     GithubSignIn *sign_in = github_sign_in_create(dialog, grid, error_label);
     sign_in->app = app;
     g_object_set_data(G_OBJECT(dialog), "organisation-entry", entries[0]);
-    g_object_set_data(G_OBJECT(dialog), "organisation-choices", gtk_widget_get_parent(entries[0]));
+    g_object_set_data(G_OBJECT(dialog), "organisation-choices", organisation_choices);
     g_signal_connect(entries[0], "changed", G_CALLBACK(github_sign_in_org_changed), sign_in);
     g_object_set_data(G_OBJECT(dialog), "settings-error", error_label);
     g_object_set_data(G_OBJECT(dialog), "sign-in-help", hint);
@@ -4617,7 +4618,8 @@ static gboolean ui_test_settings_response(gpointer data)
         g_assert_nonnull(g_object_get_data(G_OBJECT(item->data), "github-sign-in-button"));
         if (test->attempts == 0U) {
             g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(organisation)), ==, test->expected->organisation);
-            GtkWidget *grid = gtk_widget_get_parent(gtk_widget_get_parent(organisation));
+            GtkWidget *choices = g_object_get_data(G_OBJECT(item->data), "organisation-choices");
+            GtkWidget *grid = gtk_widget_get_parent(choices);
             const unsigned int values[] = {test->expected->expected_runners, test->expected->runner_poll_seconds,
                 test->expected->activity_scan_seconds, test->expected->repository_scan_limit, test->expected->local_health_seconds};
             for (guint i = 0U; i < G_N_ELEMENTS(values); ++i) {

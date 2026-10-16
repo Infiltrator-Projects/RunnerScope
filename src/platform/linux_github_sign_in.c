@@ -37,7 +37,7 @@ static bool execute(RunnerAuthCommand command, char *output, size_t capacity,
         {"CLICOLOR","0"},{"LC_ALL","C"},{"GH_NO_UPDATE_NOTIFIER","1"},{"GH_NO_EXTENSION_UPDATE_NOTIFIER","1"}};
     for (size_t i = 0U; i < G_N_ELEMENTS(pairs); ++i)
         environment = g_environ_setenv(environment, pairs[i][0], pairs[i][1], TRUE);
-    if (command != RUNNER_AUTH_EXISTING_SESSION)
+    if (command != RUNNER_AUTH_EXISTING_SESSION && broker->directory)
         environment = g_environ_setenv(environment, "GH_CONFIG_DIR", broker->directory, TRUE);
     char *login[] = {(char *)broker->executable, "auth", "login", "--web", "--hostname", "github.com",
         "--git-protocol", "https", "--skip-ssh-key", "--scopes", "admin:org,repo",

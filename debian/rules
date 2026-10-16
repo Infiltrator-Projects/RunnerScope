@@ -17,3 +17,7 @@ override_dh_auto_install:
 	DESTDIR="$(CURDIR)/debian/infiltrator-runner-monitor" cmake --install build-debian --prefix /usr
 	install -D -m 0644 packaging/runnerscope.png "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/app-install/icons/infiltrator-runner-monitor.png"
 	install -D -m 0644 README.md "$(CURDIR)/debian/infiltrator-runner-monitor/usr/share/doc/infiltrator-runner-monitor/README.md"
+
+# Preserve the verified upstream sign-in executable byte for byte.
+override_dh_strip:
+	dh_strip -X/runnerscope/gh
