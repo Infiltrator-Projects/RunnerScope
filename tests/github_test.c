@@ -113,6 +113,29 @@ static bool pagination(void)
     return true;
 }
 
+static bool active_run_filtering(void)
+{
+    const Page pages[] = {
+        {"https://api.github.com/repos/A/R/actions/runs?per_page=100&exclude_pull_requests=true&status=in_progress",
+         "{\"workflow_runs\":[{\"id\":101,\"name\":\"Build\",\"status\":\"in_progress\",\"created_at\":\"2026-10-17T01:00:00Z\"}]}",
+         NULL, 200U, false},
+        {"https://api.github.com/repos/A/R/actions/runs?per_page=100&exclude_pull_requests=true&status=queued",
+         "{\"workflow_runs\":[{\"id\":102,\"name\":\"Package\",\"status\":\"queued\",\"created_at\":\"2026-10-17T01:01:00Z\"}]}",
+         NULL, 200U, false}
+    };
+    Fixture fixture = {pages, 2U, 0U, true};
+    char error[320] = "";
+    char *rows = runner_github_fetch(
+        "/repos/A/R/actions/runs?per_page=100&exclude_pull_requests=true",
+        PRIVATE_TOKEN, RUNNER_GITHUB_RUNS, get, &fixture, error, sizeof(error));
+    CHECK(rows && fixture.valid && fixture.calls == 2U && !error[0]);
+    CHECK(strcmp(rows,
+        "101\tBuild\t—\t—\t2026-10-17T01:00:00Z\t\tin_progress\n"
+        "102\tPackage\t—\t—\t2026-10-17T01:01:00Z\t\tqueued\n") == 0);
+    free(rows);
+    return true;
+}
+
 static bool refused_requests(void)
 {
     const char *bad_urls[] = {"http://api.github.com/x", "https://evil.example/x", "https://api.github.com.evil.example/x", "https://api.github.com@evil.example/x", "//evil.example/x", "/x#fragment", "/x\r\nheader"};
@@ -239,10 +262,10 @@ static bool bounds(void)
 int main(void)
 {
     if (!decoding() || !invalid_payloads() || !pagination() ||
-        !refused_requests() || !safe_failures() || !bounds()) return 1;
+        !active_run_filtering() || !refused_requests() || !safe_failures() || !bounds()) return 1;
     RunnerHttpResponse response = {200U, copy("body"), copy("link")};
     runner_http_response_destroy(&response);
     if (response.status || response.body || response.link) return 2;
-    puts("Native GitHub projection, pagination, Settings credentials and safe failures passed.");
+    puts("Native GitHub projection, pagination, active-run filtering, Settings credentials and safe failures passed.");
     return 0;
 }
