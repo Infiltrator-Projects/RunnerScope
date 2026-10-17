@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.18 — 2026-10-17
+
+- Stop Activity scans from paging through completed workflow history that the UI never consumes.
+- Query GitHub separately for in-progress and queued workflow runs, preserving existing bounded pagination and error handling.
+- Add regression coverage proving unfiltered activity requests are narrowed to active run states.
+
 ## 1.3.17 — 2026-10-17
 
 - Use RunnerScope consistently in the build project, Windows class identities, exports and CI artifacts.
