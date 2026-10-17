@@ -284,6 +284,8 @@ jobs:
           installer="$(find release/linux -type f -name 'runnerscope-*-native-installer.run' -print -quit)"
           win="release/windows/RunnerScope-Windows.exe"
           test -f "$deb"
+          test -f "$installer"
+          chmod +x "$installer"
           test -x "$installer"
           test -f "$win"
           "$installer" --help | grep -Fq 'native CPU tuning + LTO + trained two-pass PGO'
