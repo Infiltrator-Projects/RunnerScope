@@ -7,7 +7,7 @@ The application should be able to express product structure once in toolkit-neut
 ```c
 UiNode *runnerscope_build_ui(AppModel *model)
 {
-    return ui_window("runner-monitor",
+    return ui_window("runnerscope",
         ui_shell(
             ui_header("RunnerScope", "Infiltrator OS"),
             ui_nav(

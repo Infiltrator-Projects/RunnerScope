@@ -14,7 +14,7 @@ static void csv_field(FILE *stream, const char *value)
 
 static void export_csv(void)
 {
-    wchar_t path[MAX_PATH] = L"runner-monitor.csv";
+    wchar_t path[MAX_PATH] = L"runnerscope.csv";
     OPENFILENAMEW dialog;
     ZeroMemory(&dialog, sizeof(dialog));
     dialog.lStructSize = sizeof(dialog);

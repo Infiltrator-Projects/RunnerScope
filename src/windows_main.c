@@ -49,8 +49,8 @@
 #error "RUNNERSCOPE_VERSION must be provided by CMake"
 #endif
 
-#define APP_CLASS L"InfiltratrRunnerMonitor"
-#define SETTINGS_CLASS L"InfiltratrRunnerMonitorSettings"
+#define APP_CLASS L"RunnerScope"
+#define SETTINGS_CLASS L"RunnerScopeSettings"
 #define APP_TITLE L"RunnerScope"
 #define WM_APP_REFRESH_DONE (WM_APP + 1)
 #define WM_APP_OPEN_SETTINGS (WM_APP + 2)

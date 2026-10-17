@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.17 — 2026-10-17
+
+- Use RunnerScope consistently in the build project, Windows class identities, exports and CI artifacts.
+
 ## 1.3.16 - 2026-10-17
 
 - Use canonical alpha product and package identities without migration aliases.
