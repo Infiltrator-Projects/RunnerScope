@@ -59,35 +59,31 @@ if [[ -z "$jobs" ]]; then
     [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || jobs=2
 fi
 
+# The .run ultimately creates a Debian package, so command presence is not
+# enough: hosted images can expose gcc/cmake from a tool cache while the Debian
+# package database still reports Build-Depends as unsatisfied. Require the
+# actual packages that debian/control names before beginning the expensive PGO
+# build, then let dpkg-checkbuilddeps verify the complete packaging contract.
 missing=()
 packages=()
-need_package() {
-    local label=$1 package=$2 command_name=$3
-    if ! command -v "$command_name" >/dev/null 2>&1; then
+need_deb_package() {
+    local label=$1 package=$2
+    if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -Fqx 'install ok installed'; then
         missing+=("$label")
         packages+=("$package")
     fi
 }
-need_package "GCC" build-essential gcc
-need_package "CMake" cmake cmake
-need_package "Debian package builder" dpkg-dev dpkg-buildpackage
-need_package "debhelper" debhelper dh
-need_package "pkg-config" pkg-config pkg-config
-need_package "fontconfig" fontconfig fc-cache
-need_package "Xvfb" xvfb xvfb-run
-need_package "xauth" xauth xauth
-
-if ! pkg-config --exists gtk+-3.0 >/dev/null 2>&1; then
-    missing+=("GTK 3 development files")
-    packages+=(libgtk-3-dev)
-fi
-if ! pkg-config --exists libcurl >/dev/null 2>&1; then
-    missing+=("libcurl development files")
-    packages+=(libcurl4-openssl-dev)
-fi
-if ! dpkg-query -W -f='${Status}' ca-certificates 2>/dev/null | grep -Fqx 'install ok installed'; then
-    packages+=(ca-certificates)
-fi
+need_deb_package "build-essential" build-essential
+need_deb_package "CMake" cmake
+need_deb_package "Debian package builder" dpkg-dev
+need_deb_package "debhelper" debhelper
+need_deb_package "pkg-config" pkg-config
+need_deb_package "fontconfig" fontconfig
+need_deb_package "Xvfb" xvfb
+need_deb_package "xauth" xauth
+need_deb_package "GTK 3 development files" libgtk-3-dev
+need_deb_package "libcurl development files" libcurl4-openssl-dev
+need_deb_package "CA certificates" ca-certificates
 
 if ((${#missing[@]})); then
     printf 'Missing build requirements: %s\n' "${missing[*]}" >&2
@@ -95,6 +91,10 @@ fi
 if ((dry_run)); then
     if ((${#missing[@]})); then
         printf 'Dry run: install requirements first: %s\n' "${packages[*]}" >&2
+        exit 1
+    fi
+    if ! (cd "$ROOT" && dpkg-checkbuilddeps >/dev/null); then
+        printf 'Dry run: Debian Build-Depends are not fully satisfied.\n' >&2
         exit 1
     fi
     printf 'Dry run: RunnerScope native build requirements are satisfied.\n'
@@ -121,6 +121,11 @@ if ((${#packages[@]})); then
         "$sudo_path" -- "$apt_get" -o DPkg::Lock::Timeout=300 update
         "$sudo_path" -- "$apt_get" -o DPkg::Lock::Timeout=300 install -y "${unique_packages[@]}"
     fi
+fi
+
+if ! (cd "$ROOT" && dpkg-checkbuilddeps); then
+    printf 'Debian Build-Depends remain unsatisfied after dependency installation.\n' >&2
+    exit 1
 fi
 
 gcc_path=$(command -v gcc)
