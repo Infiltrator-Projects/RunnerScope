@@ -73,6 +73,7 @@ need_package "CMake" cmake cmake
 need_package "Debian package builder" dpkg-dev dpkg-buildpackage
 need_package "debhelper" debhelper dh
 need_package "pkg-config" pkg-config pkg-config
+need_package "fontconfig" fontconfig fc-cache
 need_package "Xvfb" xvfb xvfb-run
 need_package "xauth" xauth xauth
 
@@ -153,6 +154,26 @@ cmake -S "$ROOT" -B "$build" \
     -DCMAKE_EXE_LINKER_FLAGS="$generate_link"
 cmake --build "$build" --parallel "$jobs"
 
+# The UI intentionally refuses substitute fonts. Make the exact Common-verified
+# MB faces from this build visible to fontconfig while training the unpackaged
+# binary, then remove the temporary registration again. The installed package
+# later owns the durable system font files.
+font_base="${XDG_DATA_HOME:-$HOME/.local/share}/fonts"
+mkdir -p -- "$font_base"
+training_fonts=$(mktemp -d "$font_base/runnerscope-pgo-XXXXXX")
+cleanup_training_fonts() {
+    rm -rf -- "$training_fonts"
+    fc-cache -f >/dev/null 2>&1 || true
+}
+trap cleanup_training_fonts EXIT
+mapfile -t pgo_fonts < <(find "$build/mb-corpo-fonts" -maxdepth 1 -type f -name '*.ttf' -print | sort)
+if ((${#pgo_fonts[@]} < 3)); then
+    printf 'PGO training cannot find the Common-verified MB Corpo faces.\n' >&2
+    exit 1
+fi
+cp -- "${pgo_fonts[@]}" "$training_fonts/"
+fc-cache -f "$training_fonts" >/dev/null
+
 printf 'Training the native profile...\n'
 "$build/runnerscope" --self-test
 XDG_CONFIG_HOME="$ROOT/.pgo-config" \
@@ -220,4 +241,6 @@ installed=$(dpkg-query -W -f='${Version}' runnerscope 2>/dev/null || true)
     printf 'RunnerScope installation verification failed.\n' >&2
     exit 1
 }
+cleanup_training_fonts
+trap - EXIT
 printf 'RunnerScope %s installed with native CPU tuning, LTO and trained PGO.\n' "$version"
