@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.19 — 2026-10-17
+
+- Add a System Monitor-style hardware-native `.run` release alongside the normal Debian package and Windows executable.
+- Compile the `.run` path with `-O3 -march=native -mtune=native`, LTO and trained two-pass PGO, then package the trained result as the normal `runnerscope` Debian package.
+- Qualify the exact `.run` end to end on a clean hosted Linux runner before release publication.
+- Publish `.deb`, `.run`, `.exe` and a checksum manifest together from the same qualified release run.
+
 ## 1.3.18 — 2026-10-17
 
 - Stop Activity scans from paging through completed workflow history that the UI never consumes.
@@ -76,7 +83,7 @@ No unreleased changes.
 ## 1.3.7 - 2026-10-15
 
 - Make `SHA256SUMS.txt` portable by recording release asset basenames instead of workflow-local `release/` paths.
-- Verify the checksum manifest against the exact qualified Debian and Windows artifacts before publishing the release.
+- Verify the generated checksum manifest against the exact qualified Debian and Windows artifacts before publishing the release.
 
 ## 1.3.6 - 2026-10-15
 
@@ -122,7 +129,7 @@ No unreleased changes.
 - Emit Export CSV, About and Refresh footer actions once, including the Refreshing state plus shared status/application/Common version slots.
 - Keep GTK and Win32 native: GTK creates native controls and Win32 draws native GDI surfaces from the same shared emission.
 - Add toolkit-free tests for header/footer action order, identity, refresh-state labelling and status/version propagation.
-- Leave contextual footer actions, page switching and deeper workspace composition for later small 1.3.x slices; retain Common 1.19.38.
+- Leave contextual footer actions, page switching and deeper workspace composition for later small 1.3.x migration slices; retain Common 1.19.38.
 
 ## 1.3.1 - 2026-10-06
 
@@ -136,10 +143,10 @@ No unreleased changes.
 ## 1.3.0 - 2026-10-06
 
 - Introduce the first toolkit-neutral RunnerScope UI contract shared by the native GTK and Win32 products.
-- Give the four pages and major shell surfaces stable component IDs so cross-platform parity can be tested independently of either toolkit.
+- Give the four pages and major shell surfaces stable component IDs so cross-platform parity can be tested independently of either native toolkit.
 - Make both native shells consume shared product identity, page/navigation metadata, hero artwork, metric captions and contextual action policy.
-- Add a toolkit-free UI-contract CTest and validate the same contract from both native application self-tests.
-- Run the full Linux, Windows build/runtime and clean Debian qualification suite on pull requests as well as `main`, so future drift is caught before merge.
+- Add a toolkit-free CTest and validate the same contract from both native application self-tests.
+- Run the full Linux, Windows build/runtime and clean Debian qualification suite on pull requests as well as `main`, so future cross-platform drift is caught before merge.
 - Keep GTK and Win32 native and preserve existing configuration/history data and Common 1.19.38 integration.
 
 Earlier release detail remains permanently available in Git history and the corresponding release tags.

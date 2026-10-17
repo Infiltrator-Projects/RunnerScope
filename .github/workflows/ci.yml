@@ -54,6 +54,19 @@ jobs:
           dpkg-deb --info "dist/runnerscope_${version}_amd64.deb"
           ! dpkg-deb -f "dist/runnerscope_${version}_amd64.deb" Depends | grep -Eiq 'python|tkinter|python3-tk|(^|[ ,])gh([ ,(]|$)'
 
+      - name: Build exact hardware-native installer launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          installer="dist/runnerscope-${version}-native-installer.run"
+          support/installer/make-run.sh "$installer"
+          test -x "$installer"
+          "$installer" --help | grep -Fq 'native CPU tuning + LTO + trained two-pass PGO'
+          grep -Fq "source_revision='${GITHUB_SHA}'" "$installer"
+          common_revision="$(git rev-parse HEAD:infiltratr-common)"
+          grep -Fq "common_revision='${common_revision}'" "$installer"
+
       - name: Install and smoke exact package
         shell: bash
         run: |
@@ -84,14 +97,56 @@ jobs:
           grep -qx 'Exec=/usr/bin/runnerscope' /usr/share/applications/runnerscope.desktop
           ! test -e /usr/lib/runnerscope/runnerscope.py
 
-      - name: Upload qualified Debian package
+      - name: Upload qualified Linux release artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: runnerscope-deb
-          path: dist/runnerscope_*.deb
+          name: runnerscope-linux
+          path: |
+            dist/runnerscope_*.deb
+            dist/runnerscope-*-native-installer.run
           if-no-files-found: error
 
       - name: Purge package cleanly
+        if: always()
+        run: |
+          if dpkg-query -W runnerscope >/dev/null 2>&1; then
+            sudo apt-get purge -y runnerscope
+          fi
+
+  native-installer:
+    name: Hardware-native .run / clean-host qualification
+    needs: linux-package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Download exact Linux release candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: runnerscope-linux
+          path: dist
+
+      - name: Compile, package and install through the exact .run
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t installers < <(find dist -maxdepth 1 -type f -name 'runnerscope-*-native-installer.run' -print | sort)
+          test "${#installers[@]}" -eq 1
+          installer="${installers[0]}"
+          chmod +x "$installer"
+          "$installer" --help | grep -Fq 'native CPU tuning + LTO + trained two-pass PGO'
+          sudo "$installer" --system-package-mode --jobs 2
+          version="$(basename "$installer" | sed -E 's/^runnerscope-([0-9]+\.[0-9]+\.[0-9]+)-native-installer\.run$/\1/')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(dpkg-query -W -f='${Status}' runnerscope)" = 'install ok installed'
+          test "$(dpkg-query -W -f='${Version}' runnerscope)" = "$version"
+          runnerscope --self-test
+          XDG_CONFIG_HOME="$RUNNER_TEMP/native-ui-config" \
+          XDG_STATE_HOME="$RUNNER_TEMP/native-ui-state" \
+            xvfb-run -a runnerscope --ui-self-test
+          file /usr/bin/runnerscope | grep -q ELF
+          ! ldd /usr/bin/runnerscope | grep -Eiq 'python|libtk|tkinter'
+
+      - name: Purge native package cleanly
         if: always()
         run: |
           if dpkg-query -W runnerscope >/dev/null 2>&1; then
@@ -193,7 +248,7 @@ jobs:
 
   publish:
     name: Publish qualified release
-    needs: [linux-package, windows-release, release-state]
+    needs: [linux-package, native-installer, windows-release, release-state]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-state.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -205,11 +260,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download qualified Debian artifact
+      - name: Download qualified Linux artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: runnerscope-deb
-          path: release/deb
+          name: runnerscope-linux
+          path: release/linux
 
       - name: Download qualified Windows artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -225,18 +280,25 @@ jobs:
           set -euo pipefail
           version="${{ needs.release-state.outputs.version }}"
           tag="v${version}"
-          deb="$(find release/deb -type f -name 'runnerscope_*.deb' -print -quit)"
+          deb="$(find release/linux -type f -name 'runnerscope_*.deb' -print -quit)"
+          installer="$(find release/linux -type f -name 'runnerscope-*-native-installer.run' -print -quit)"
           win="release/windows/RunnerScope-Windows.exe"
           test -f "$deb"
+          test -x "$installer"
           test -f "$win"
+          "$installer" --help | grep -Fq 'native CPU tuning + LTO + trained two-pass PGO'
 
           win_release="release/RunnerScope-Windows-v${version}.exe"
+          installer_release="release/runnerscope-${version}-native-installer.run"
           cp "$win" "$win_release"
           cp "$deb" "release/$(basename "$deb")"
+          cp "$installer" "$installer_release"
+          chmod +x "$installer_release"
           deb_release="release/$(basename "$deb")"
           (
             cd release
-            sha256sum "$(basename "$deb_release")" "$(basename "$win_release")" > SHA256SUMS.txt
+            sha256sum "$(basename "$deb_release")" "$(basename "$installer_release")" \
+              "$(basename "$win_release")" > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
             ! grep -qE '  .*/' SHA256SUMS.txt
           )
@@ -244,21 +306,23 @@ jobs:
           if ! gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/release-state"; then
             gh release create "$tag" --target "$GITHUB_SHA" --draft \
               --title "RunnerScope $version" \
-              --notes "Exact Linux and Windows binaries qualified from $GITHUB_SHA."
+              --notes "Exact Linux package, aggressive native installer and Windows binary qualified from $GITHUB_SHA."
             gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/release-state"
           fi
           test "$(jq -r .targetCommitish "$RUNNER_TEMP/release-state")" = "$GITHUB_SHA"
           draft=$(jq -r .isDraft "$RUNNER_TEMP/release-state")
           if [[ "$draft" == true ]]; then
-            gh release upload "$tag" "$deb_release" "$win_release" release/SHA256SUMS.txt --clobber
+            gh release upload "$tag" "$deb_release" "$installer_release" "$win_release" release/SHA256SUMS.txt --clobber
           fi
           verify_remote() {
-            local destination
+            local destination expected
             destination=$(mktemp -d)
             gh release download "$tag" --dir "$destination"
-            expected=$(printf '%s\n' "$(basename "$deb_release")" "$(basename "$win_release")" SHA256SUMS.txt | sort)
+            expected=$(printf '%s\n' "$(basename "$deb_release")" \
+              "$(basename "$installer_release")" "$(basename "$win_release")" SHA256SUMS.txt | sort)
             test "$(find "$destination" -type f -printf '%f\n' | sort)" = "$expected"
             cmp "$deb_release" "$destination/$(basename "$deb_release")"
+            cmp "$installer_release" "$destination/$(basename "$installer_release")"
             cmp "$win_release" "$destination/$(basename "$win_release")"
             cmp release/SHA256SUMS.txt "$destination/SHA256SUMS.txt"
             rm -rf "$destination"
