@@ -421,6 +421,46 @@ char *runner_github_fetch(const char *endpoint, const char *token,
         fail(error, error_size, "GitHub request configuration is invalid. Check Settings.");
         return NULL;
     }
+
+    /* The activity view only consumes queued and in-progress runs. Asking the
+     * unfiltered workflow-runs endpoint to paginate through completed history
+     * makes response volume grow forever with repository age. Split that
+     * logical request into GitHub's two active-state filters instead, so old
+     * completed runs are never transferred merely to be discarded. */
+    if (projection == RUNNER_GITHUB_RUNS && !strstr(endpoint, "status=")) {
+        const char *states[] = {"in_progress", "queued"};
+        Text active = {0};
+        if (!append(&active, "", 0U)) {
+            fail(error, error_size, "Unable to allocate GitHub request data.");
+            return NULL;
+        }
+        for (size_t i = 0U; i < sizeof(states) / sizeof(states[0]); ++i) {
+            char filtered[GITHUB_URL_LIMIT];
+            const char separator = strchr(endpoint, '?') ? '&' : '?';
+            const int amount = snprintf(filtered, sizeof(filtered), "%s%cstatus=%s",
+                                        endpoint, separator, states[i]);
+            if (amount < 0 || (size_t)amount >= sizeof(filtered)) {
+                free(active.data);
+                fail(error, error_size, "GitHub request configuration is invalid. Check Settings.");
+                return NULL;
+            }
+            char *rows = runner_github_fetch(filtered, token, projection, get, context,
+                                             error, error_size);
+            if (!rows) {
+                free(active.data);
+                return NULL;
+            }
+            const bool combined = append(&active, rows, strlen(rows));
+            free(rows);
+            if (!combined) {
+                free(active.data);
+                fail(error, error_size, "GitHub data exceeds the supported size. Try again later.");
+                return NULL;
+            }
+        }
+        return active.data;
+    }
+
     char initial[GITHUB_URL_LIMIT];
     const int written = endpoint[0] == '/' && endpoint[1] != '/'
         ? snprintf(initial, sizeof(initial), "%s%s", GITHUB_ORIGIN, endpoint)
