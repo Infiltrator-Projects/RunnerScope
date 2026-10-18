@@ -74,7 +74,11 @@ jobs:
           test -n "$deb"
           cp "$deb" "dist/runnerscope_${version}_amd64.deb"
           dpkg-deb --info "dist/runnerscope_${version}_amd64.deb"
-          ! dpkg-deb -f "dist/runnerscope_${version}_amd64.deb" Depends | grep -Eiq 'python|tkinter|python3-tk|(^|[ ,])gh([ ,(]|$)'
+          dependencies=$(dpkg-deb -f "dist/runnerscope_${version}_amd64.deb" Depends)
+          if grep -Eiq 'python|tkinter|python3-tk|(^|[ ,])gh([ ,(]|$)' <<< "$dependencies"; then
+            echo 'Unexpected interpreter or external sign-in package dependency.' >&2
+            exit 1
+          fi
 
       - name: Build exact hardware-native installer launcher
         shell: bash
@@ -84,7 +88,8 @@ jobs:
           installer="dist/runnerscope-${version}-native-installer.run"
           support/installer/make-run.sh "$installer"
           test -x "$installer"
-          "$installer" --help | grep -Fq 'native CPU tuning + LTO + trained two-pass PGO'
+          help_output=$("$installer" --help)
+          grep -Fq 'native CPU tuning + LTO + trained two-pass PGO' <<< "$help_output"
           grep -Fq "source_revision='${GITHUB_SHA}'" "$installer"
           common_revision="$(git rev-parse HEAD:infiltratr-common)"
           grep -Fq "common_revision='${common_revision}'" "$installer"
@@ -98,31 +103,7 @@ jobs:
           broker=$(find build-debian/github-sign-in -type f -path '*/bin/gh' -print)
           test -n "$broker"
           cmp "$broker" /usr/libexec/runnerscope/gh
-          runnerscope --self-test
-          XDG_CONFIG_HOME="$RUNNER_TEMP/runner-ui-config" \
-          XDG_STATE_HOME="$RUNNER_TEMP/runner-ui-state" \
-            xvfb-run -a runnerscope --ui-self-test
-          file /usr/bin/runnerscope | grep -q ELF
-          ! ldd /usr/bin/runnerscope | grep -Eiq 'python|libtk|tkinter'
-          test -s /usr/share/doc/runnerscope/COPYING
-          test -s /usr/share/doc/runnerscope/cJSON-LICENSE
-          test -s /usr/share/doc/runnerscope/GitHub-CLI-LICENSE
-          test -f /usr/share/applications/runnerscope.desktop
-          test -f /usr/share/icons/hicolor/scalable/apps/runnerscope.svg
-          test -f /usr/share/icons/hicolor/128x128/apps/runnerscope.png
-          test -f /usr/share/fonts/truetype/runnerscope/mb_corpo_a_cond_regular.ttf
-          test -f /usr/share/fonts/truetype/runnerscope/mb_corpo_s_bold.ttf
-          test -f /usr/share/fonts/truetype/runnerscope/mb_corpo_s_regular.ttf
-          for asset in nav-runners nav-active nav-history nav-health nav-infiltrator \
-                       hero-runners hero-active hero-history hero-health; do
-            test -s "/usr/share/runnerscope/art/${asset}.png"
-            gdk-pixbuf-thumbnailer -s 64 "/usr/share/runnerscope/art/${asset}.png" \
-              "$RUNNER_TEMP/${asset}.png"
-          done
-          fc-match "MB Corpo S Title WEB" | grep -qi 'MB Corpo'
-          fc-match "MB Corpo A Title Cond WEB" | grep -qi 'MB Corpo'
-          grep -qx 'Exec=/usr/bin/runnerscope' /usr/share/applications/runnerscope.desktop
-          ! test -e /usr/lib/runnerscope/runnerscope.py
+          bash support/release/verify-installed.sh "$version"
 
       - name: Upload qualified Linux release artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -160,7 +141,8 @@ jobs:
           test "${#installers[@]}" -eq 1
           installer="${installers[0]}"
           chmod +x "$installer"
-          "$installer" --help | grep -Fq 'native CPU tuning + LTO + trained two-pass PGO'
+          help_output=$("$installer" --help)
+          grep -Fq 'native CPU tuning + LTO + trained two-pass PGO' <<< "$help_output"
           sudo "$installer" --system-package-mode --jobs 2
           version="$(basename "$installer" | sed -E 's/^runnerscope-([0-9]+\.[0-9]+\.[0-9]+)-native-installer\.run$/\1/')"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -170,8 +152,13 @@ jobs:
           XDG_CONFIG_HOME="$RUNNER_TEMP/native-ui-config" \
           XDG_STATE_HOME="$RUNNER_TEMP/native-ui-state" \
             xvfb-run -a runnerscope --ui-self-test
-          file /usr/bin/runnerscope | grep -q ELF
-          ! ldd /usr/bin/runnerscope | grep -Eiq 'python|libtk|tkinter'
+          executable_type=$(file /usr/bin/runnerscope)
+          grep -q ELF <<< "$executable_type"
+          runtime_libraries=$(ldd /usr/bin/runnerscope)
+          if grep -Eiq 'python|libtk|tkinter' <<< "$runtime_libraries"; then
+            echo 'Unexpected interpreter or Tk runtime linkage.' >&2
+            exit 1
+          fi
 
       - name: Purge native package cleanly
         if: always()
@@ -298,7 +285,8 @@ jobs:
           chmod +x "$installer"
           test -x "$installer"
           test -f "$win"
-          "$installer" --help | grep -Fq 'native CPU tuning + LTO + trained two-pass PGO'
+          help_output=$("$installer" --help)
+          grep -Fq 'native CPU tuning + LTO + trained two-pass PGO' <<< "$help_output"
 
           win_release="release/RunnerScope-Windows-v${version}.exe"
           installer_release="release/runnerscope-${version}-native-installer.run"
@@ -312,7 +300,10 @@ jobs:
             sha256sum "$(basename "$deb_release")" "$(basename "$installer_release")" \
               "$(basename "$win_release")" > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
-            ! grep -qE '  .*/' SHA256SUMS.txt
+            if grep -qE '  .*/' SHA256SUMS.txt; then
+              echo 'Release checksum entries must use flat asset filenames.' >&2
+              exit 1
+            fi
           )
 
           if ! gh release view "$tag" --json isDraft,targetCommitish > "$RUNNER_TEMP/release-state"; then
