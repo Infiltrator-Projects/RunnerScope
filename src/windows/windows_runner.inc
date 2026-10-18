@@ -1,4 +1,18 @@
 // Private Win32 implementation slice; included by windows_main.c.
+static int runner_index(const RunnerRow *rows, size_t count, const char *name)
+{
+    if (!name || !*name) return -1;
+    for (size_t i = 0U; i < count; ++i)
+        if (!strcmp(rows[i].name, name)) return (int)i;
+    return -1;
+}
+
+static UINT refresh_interval_ms(unsigned int seconds)
+{
+    const ULONGLONG milliseconds = (ULONGLONG)seconds * 1000U;
+    return milliseconds > USER_TIMER_MAXIMUM ? USER_TIMER_MAXIMUM : (UINT)milliseconds;
+}
+
 static RunnerSession *session_for(const char *name, bool create)
 {
     if (!name || !*name) return NULL;
@@ -159,6 +173,9 @@ static void rebuild_table(void)
         ListView_SetItemText(g_app.list, inserted, 7, jobs);
         ListView_SetItemText(g_app.list, inserted, 8, busy);
         ListView_SetItemText(g_app.list, inserted, 9, labels);
+        if (g_app.selected_row == (int)i)
+            ListView_SetItemState(g_app.list, inserted, LVIS_SELECTED | LVIS_FOCUSED,
+                LVIS_SELECTED | LVIS_FOCUSED);
     }
 }
 
@@ -175,6 +192,11 @@ static size_t split_runner_fields(char *line, char **fields, size_t capacity)
     }
 }
 
+static bool refresh_cancelled(void *context)
+{
+    return WaitForSingleObject(((RefreshRequest *)context)->cancel, 0U) == WAIT_OBJECT_0;
+}
+
 static bool refresh_http_get(const char *url, const char *token,
     RunnerHttpResponse *response, char *error, size_t error_size, void *context)
 {
@@ -185,8 +207,8 @@ static bool refresh_http_get(const char *url, const char *token,
             (void)snprintf(error, error_size, "Runner refresh was cancelled or exceeded its 60-second deadline.");
         return false;
     }
-    /* Native Windows HTTP accepts an optional absolute monotonic deadline. */
-    return runner_http_get(url, token, response, error, error_size, &request->deadline);
+    RunnerHttpOptions options = {request->deadline, refresh_cancelled, request};
+    return runner_http_get(url, token, response, error, error_size, &options);
 }
 
 static DWORD WINAPI refresh_worker(LPVOID parameter)
@@ -272,6 +294,7 @@ static void mark_rows_stale(void)
         }
     }
     g_app.rows_stale = true;
+    update_layout(g_app.window);
     rebuild_table();
 }
 
@@ -339,6 +362,9 @@ static void apply_refresh(RefreshResult *result)
             result ? result->error : "Unable to load the runner snapshot.");
         settings_status(g_app.provider_error);
     } else {
+        char selected[sizeof(g_app.rows[0].name)] = "";
+        if (g_app.selected_row >= 0 && (size_t)g_app.selected_row < g_app.row_count)
+            infiltratr_copy_string(selected, sizeof(selected), g_app.rows[g_app.selected_row].name);
         free(g_app.rows);
         g_app.rows = result->rows;
         g_app.row_count = result->count;
@@ -347,7 +373,10 @@ static void apply_refresh(RefreshResult *result)
         g_app.rows_stale = false;
         g_app.provider_error[0] = '\0';
         settings_status("Connected. Access to this organisation's runners was verified.");
-        if (g_app.selected_row >= (int)g_app.row_count) g_app.selected_row = -1;
+        g_app.selected_row = runner_index(g_app.rows, g_app.row_count, selected);
+        if (g_app.selected_row >= 0 && !row_matches_filter(&g_app.rows[g_app.selected_row]))
+            g_app.selected_row = -1;
+        update_layout(g_app.window);
         rebuild_table();
     }
     if (result) { free(result->rows); free(result); }

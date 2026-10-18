@@ -10,6 +10,11 @@ int main(int argc, char **argv)
     g_assert_false(runner_linux_service_is_runner("actions.runner./bad.service"));
     g_assert_false(runner_linux_service_is_runner(NULL));
 
+    g_assert_true(runner_linux_service_matches_runner("actions.runner.Org.worker.service", "Org", "worker"));
+    g_assert_false(runner_linux_service_matches_runner("actions.runner.Org.worker-2.service", "Org", "worker"));
+    g_assert_false(runner_linux_service_matches_runner("actions.runner.Other.worker.service", "Org", "worker"));
+    g_assert_false(runner_linux_service_matches_runner("actions.runner.Org.worker.service", "Org", ""));
+
     GVariantBuilder unit_builder, service_builder, commands;
     g_variant_builder_init(&unit_builder, G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(&unit_builder, "{sv}", "Description", g_variant_new_string("Fixture runner"));

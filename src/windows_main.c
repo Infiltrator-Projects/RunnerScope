@@ -180,6 +180,7 @@ typedef struct {
 static App g_app;
 
 static void rebuild_table(void);
+static void update_layout(HWND window);
 static void refresh_begin(void);
 static void settings_status(const char *message);
 
@@ -253,13 +254,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous,
     ShowWindow(g_app.window, show_command);
     UpdateWindow(g_app.window);
 
-    MSG message;
-    while (GetMessageW(&message, NULL, 0U, 0U) > 0) {
+    MSG message = {0};
+    int message_status;
+    while ((message_status = (int)GetMessageW(&message, NULL, 0U, 0U)) > 0) {
         if (g_app.settings_window && IsDialogMessageW(g_app.settings_window, &message))
             continue;
         TranslateMessage(&message);
         DispatchMessageW(&message);
     }
     if (SUCCEEDED(com_status)) CoUninitialize();
-    return (int)message.wParam;
+    return message_status < 0 ? 1 : (int)message.wParam;
 }

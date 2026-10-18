@@ -62,6 +62,16 @@ gboolean runner_linux_service_is_runner(const char *name)
         g_str_has_suffix(name, ".service") && !strchr(name, '/');
 }
 
+gboolean runner_linux_service_matches_runner(const char *unit,
+    const char *organisation, const char *runner)
+{
+    if (!unit || !organisation || !*organisation || !runner || !*runner) return FALSE;
+    char *expected = g_strdup_printf("actions.runner.%s.%s.service", organisation, runner);
+    const gboolean matches = !g_ascii_strcasecmp(unit, expected);
+    g_free(expected);
+    return matches;
+}
+
 static char *property_string(GVariant *properties, const char *key, const char *fallback)
 {
     const char *value = NULL;

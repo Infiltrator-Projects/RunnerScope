@@ -12,6 +12,10 @@ typedef struct {
     guint32 pid;
 } RunnerLinuxService;
 gboolean runner_linux_service_is_runner(const char *name);
+/* Match the complete canonical organisation/runner identity. Partial names
+ * and another organisation must never inherit a runner's observed state. */
+gboolean runner_linux_service_matches_runner(const char *unit,
+    const char *organisation, const char *runner);
 RunnerLinuxService *runner_linux_service_from_properties(const char *name,
     GVariant *unit, GVariant *service, const char *file_state);
 void runner_linux_service_free(gpointer service);

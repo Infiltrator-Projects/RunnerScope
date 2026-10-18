@@ -3,24 +3,35 @@
 #include <stdio.h>
 #include <string.h>
 
+static bool cancelled(void *context) { (void)context; return true; }
+
 int main(void)
 {
-    const char *paths[] = {NULL, "", "/login/other", "https://github.com/login/device/code",
-        "//evil.invalid/login/device/code", "/login/device/code?redirect=evil"};
+    const char *urls[] = {NULL, "", "http://api.github.com/x", "https://github.com/login/device/code",
+        "https://api.github.com.evil.invalid/x", "https://api.github.com@evil.invalid/x",
+        "https://api.github.com/x#fragment", "https://api.github.com/x\\escape",
+        "https://api.github.com/x\r\nInjected: header", "https://api.github.com/x y"};
     const char *private_value = "offline-private-value";
-    for (size_t i = 0U; i < sizeof(paths) / sizeof(paths[0]); ++i) {
+    for (size_t i = 0U; i < sizeof(urls) / sizeof(urls[0]); ++i) {
         RunnerHttpResponse response = {0};
         char error[320] = "";
-        if (runner_http_post_oauth(paths[i], private_value, &response, error, sizeof(error), NULL) ||
+        if (runner_http_get(urls[i], private_value, &response, error, sizeof(error), NULL) ||
             response.body || response.link || !error[0] || strstr(error, private_value)) return 1;
     }
-    const char *forms[] = {NULL, "client_id=offline-private-value\r\nInjected: header", "client_id=bad value"};
-    for (size_t i = 0U; i < sizeof(forms) / sizeof(forms[0]); ++i) {
+    const char *tokens[] = {"invalid token", "invalid\r\ntoken", "invalid\ttoken"};
+    for (size_t i = 0U; i < sizeof(tokens) / sizeof(tokens[0]); ++i) {
         RunnerHttpResponse response = {0};
         char error[320] = "";
-        if (runner_http_post_oauth("/login/device/code", forms[i], &response, error, sizeof(error), NULL) ||
-            response.body || response.link || !error[0] || strstr(error, private_value)) return 2;
+        if (runner_http_get("https://api.github.com/", tokens[i], &response, error, sizeof(error), NULL) ||
+            response.body || response.link || !error[0] || strstr(error, tokens[i])) return 2;
     }
-    puts("Native OAuth transport rejected unapproved endpoints and invalid forms without networking.");
+    RunnerHttpOptions limits[] = {{1U, NULL, NULL}, {0U, cancelled, NULL}};
+    for (size_t i = 0U; i < sizeof(limits) / sizeof(limits[0]); ++i) {
+        RunnerHttpResponse response = {0};
+        char error[320] = "";
+        if (runner_http_get("https://api.github.com/", private_value, &response, error, sizeof(error), &limits[i]) ||
+            response.body || response.link || !error[0] || strstr(error, private_value)) return 3;
+    }
+    puts("Native HTTP rejected untrusted addresses and invalid credentials without networking.");
     return 0;
 }

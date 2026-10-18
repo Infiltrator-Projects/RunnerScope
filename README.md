@@ -11,6 +11,7 @@ There is no Python or Tk/Tkinter runtime in the current native product line.
 - Linux: C11 + GTK 3 desktop shell, built as the ELF executable `/usr/bin/runnerscope`.
 - Windows: C11 + native Win32 shell, built as `RunnerScope-Windows-v<version>.exe`.
 - Shared configuration contract: `src/core/runner_config.c` owns the tested schema, defaults, validation and serialisation for both native applications.
+- Linux storage adapter: `linux_storage.c` owns bounded settings/history reads and private atomic publication independently of GTK.
 - Windows platform adapters: `windows_config_store.c` owns private durable config I/O and `windows_http.c` uses Windows WinHTTP directly.
 - Shared dependency: the exact `infiltratr-common` gitlink recorded by this RunnerScope revision.
 - Common owns the product-neutral palette, typography/metrics contract, formatting and other shared primitives.
@@ -47,7 +48,7 @@ The native Windows application currently provides the C/Common Win32 monitor she
 
 ## Requirements
 
-Windows requires 64-bit Windows with WinHTTP. Linux requires GTK 3, libcurl and trusted CA certificates. Local Linux service health uses systemd's native D-Bus interface; an explicit restart uses its interactive authorization support.
+The supplied sign-in broker currently supports x86-64 Windows and Linux. Windows requires WinHTTP. Linux requires GTK 3, libcurl 7.85 or newer and trusted CA certificates. Local Linux service health uses systemd's native D-Bus interface; an explicit restart uses its interactive authorization support.
 
 Choose **Sign in with GitHub**. RunnerScope reuses an existing session when it has runner access; otherwise it opens your browser and copies the one-time code. Paste it into GitHub and approve access. The application remembers the account, discovers organisation choices and saves/connects automatically. A single administered organisation is selected for you. No app registration, Client ID, personal token, terminal command or separate helper installation is required. GitHub’s official sign-in tool is supplied with the release; monitoring itself remains inside the native application.
 
@@ -69,7 +70,7 @@ The native applications retain the stable RunnerScope configuration identity so 
 - Windows: `%APPDATA%\RunnerScope\config.json`
 - Linux: `$XDG_CONFIG_HOME/runnerscope/config.json`, or `~/.config/runnerscope/config.json`
 
-The shared configuration contract covers `organisation`, the saved GitHub session (`github_token`), expected runner count, runner/activity/local-health polling intervals, repository scan limit and theme mode. Settings preserves unrelated fields. Older configuration without a session opens for browser sign-in; corrupt or unreadable configuration is reported. Saved settings survive application restarts and upgrades. Legacy `System`/`Day`/`Night` names are accepted through Common's case-insensitive theme parser. Historical whole-second timer values, including decimal spellings such as `2.0`, retain their values; fresh-install defaults stay unchanged.
+The shared configuration contract covers `organisation`, the saved GitHub session (`github_token`), expected runner count, runner/activity/local-health polling intervals, repository scan limit and theme mode. Settings preserves unrelated schema fields. Older configuration without a session opens for browser sign-in; corrupt or unreadable configuration is reported. Saved settings survive application restarts and upgrades. Legacy `System`/`Day`/`Night` names are accepted through Common's case-insensitive theme parser. Historical whole-second timer values, including decimal spellings such as `2.0`, retain their values; fresh-install defaults stay unchanged.
 
 ## Build
 
@@ -82,13 +83,20 @@ ctest --test-dir build --output-on-failure
 
 CMake verifies that a populated Common submodule matches the gitlink recorded by the RunnerScope revision; there is no second hand-maintained Common commit/version pin in the build definition.
 
+For offline core/contract work, configure with `-DRUNNERSCOPE_BUILD_DESKTOP=OFF`.
+This builds the configuration, JSON, provider, authentication and UI contracts without
+GTK, WinHTTP, font downloads or the supplied sign-in broker. `BUILD_TESTING=OFF`
+disables test targets. The default desktop build and release qualification remain unchanged.
+
 On Windows, configure with the Visual Studio generator and build the Release configuration. Windows CTest additionally exercises the private durable configuration store. Linux CTest exercises native service response interpretation. Both platforms test configuration, API parsing, pagination and failure handling without real credentials.
 
 ## Privacy and credentials
 
-The session returned by GitHub is saved in the existing per-user JSON configuration file. Linux restricts the file to its owner; Windows restricts its ACL to the current user and SYSTEM. Credentials never appear in URLs, diagnostics or the Settings controls. Cancelling sign-in preserves any previous saved account. Expired or revoked sessions ask for browser sign-in again. The supplied official GitHub sign-in broker handles browser authorization; see [GitHub sign-in](docs/OAUTH.md).
+The session returned by GitHub is saved in the existing per-user JSON configuration file. Linux restricts the file to its owner; Windows restricts its ACL to the current user and SYSTEM. Credentials never appear in URLs, diagnostics or the Settings controls. History reads are limited to 4 MiB and 300 retained entries. A corrupt or unreadable history file is preserved and reported; new events stay in memory until a readable history file is available on the next launch. Cancelling sign-in preserves any previous saved account. Expired or revoked sessions ask for browser sign-in again. The supplied official GitHub sign-in broker handles browser authorization; see [GitHub sign-in](docs/OAUTH.md).
 
 cJSON 1.7.19 is bundled under its MIT licence; source identity and hashes are recorded in `third_party/cjson/README.md`. Linux packages carry the licence and Windows embeds it in the executable.
+
+The complete maintenance review and validation scope is recorded in [the codebase review](docs/REVIEW_2026-10-18.md).
 
 ## Licence
 

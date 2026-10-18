@@ -17,6 +17,6 @@ RunnerScope builds this as static implementation code with
 `CJSON_HIDE_SYMBOLS` and `CJSON_NESTING_LIMIT=128`. GitHub response limits,
 schema checks, UTF-8 validation, separator normalization, credential handling,
 pagination and error presentation remain RunnerScope policy in
-`src/core/github.c`. No cJSON global allocation hooks or error-pointer API are
-used. Parsing is serialized because the upstream decoder retains a global
+`src/core/github.c` and `src/core/json.c`. No cJSON global allocation hooks or error-pointer API are
+used. Monitoring and sign-in parsing share one lock because the upstream decoder retains a global
 last-error record; projected snapshots are request-owned.

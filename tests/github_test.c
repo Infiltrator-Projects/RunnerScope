@@ -261,6 +261,12 @@ static bool bounds(void)
 
 int main(void)
 {
+    if (strcmp(runner_github_job_environment("", "self-hosted,linux"), "LOCAL") ||
+        strcmp(runner_github_job_environment("", "linux,self-hosted,x64"), "LOCAL") ||
+        strcmp(runner_github_job_environment("GitHub Actions", "ubuntu-latest"), "GITHUB") ||
+        strcmp(runner_github_job_environment("", "not-self-hosted"), "UNKNOWN") ||
+        strcmp(runner_github_job_environment("", "custom-latest,ubuntu-build"), "UNKNOWN") ||
+        strcmp(runner_github_job_environment(NULL, NULL), "UNKNOWN")) return 3;
     if (!decoding() || !invalid_payloads() || !pagination() ||
         !active_run_filtering() || !refused_requests() || !safe_failures() || !bounds()) return 1;
     RunnerHttpResponse response = {200U, copy("body"), copy("link")};

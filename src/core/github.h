@@ -18,6 +18,10 @@ char *runner_github_fetch(const char *endpoint, const char *token,
     RunnerGithubProjection projection, RunnerHttpGet get, void *context,
     char *error, size_t error_size);
 
+/* Only exact provider labels/groups establish a hosting classification.
+ * Custom OS-looking labels do not prove that GitHub owns the runner. */
+const char *runner_github_job_environment(const char *group, const char *labels);
+
 /* Decoder seam for deterministic offline protocol tests. */
 char *runner_github_project(const char *json, RunnerGithubProjection projection,
     char *error, size_t error_size);

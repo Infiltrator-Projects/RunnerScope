@@ -1,5 +1,9 @@
 # Official GitHub CLI is an isolated sign-in broker, never the monitoring provider.
 # Immutable archives and upstream digests; no runtime download or user installation.
+include("${CMAKE_CURRENT_LIST_DIR}/VerifiedDownload.cmake")
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64)$")
+    message(FATAL_ERROR "The supplied GitHub sign-in broker currently requires an x86-64 target")
+endif()
 set(RUNNERSCOPE_GH_VERSION "2.102.0")
 if(WIN32)
     set(RUNNERSCOPE_GH_ARCHIVE_NAME "gh_2.102.0_windows_amd64.zip")
@@ -11,26 +15,41 @@ else()
     set(RUNNERSCOPE_GH_RELATIVE_EXECUTABLE "gh_2.102.0_linux_amd64/bin/gh")
 endif()
 set(RUNNERSCOPE_GH_ARCHIVE "${CMAKE_BINARY_DIR}/${RUNNERSCOPE_GH_ARCHIVE_NAME}")
-if(NOT EXISTS "${RUNNERSCOPE_GH_ARCHIVE}")
-    file(DOWNLOAD
-        "https://github.com/cli/cli/releases/download/v${RUNNERSCOPE_GH_VERSION}/${RUNNERSCOPE_GH_ARCHIVE_NAME}"
-        "${RUNNERSCOPE_GH_ARCHIVE}"
-        EXPECTED_HASH "SHA256=${RUNNERSCOPE_GH_ARCHIVE_SHA256}"
-        TLS_VERIFY ON STATUS RUNNERSCOPE_GH_DOWNLOAD)
-    list(GET RUNNERSCOPE_GH_DOWNLOAD 0 RUNNERSCOPE_GH_DOWNLOAD_CODE)
-    if(NOT RUNNERSCOPE_GH_DOWNLOAD_CODE EQUAL 0)
-        message(FATAL_ERROR "Unable to obtain mandatory GitHub sign-in broker: ${RUNNERSCOPE_GH_DOWNLOAD}")
+runnerscope_download(
+    "https://github.com/cli/cli/releases/download/v${RUNNERSCOPE_GH_VERSION}/${RUNNERSCOPE_GH_ARCHIVE_NAME}"
+    "${RUNNERSCOPE_GH_ARCHIVE_SHA256}" "${RUNNERSCOPE_GH_ARCHIVE}")
+set(RUNNERSCOPE_GH_DIR "${CMAKE_BINARY_DIR}/github-sign-in")
+set(RUNNERSCOPE_GH_BINARY "${RUNNERSCOPE_GH_DIR}/${RUNNERSCOPE_GH_RELATIVE_EXECUTABLE}")
+set(broker_manifest "${RUNNERSCOPE_GH_DIR}/verified.sha256")
+set(broker_valid FALSE)
+if(EXISTS "${broker_manifest}" AND EXISTS "${RUNNERSCOPE_GH_BINARY}")
+    file(STRINGS "${broker_manifest}" broker_identity)
+    list(LENGTH broker_identity broker_identity_count)
+    if(broker_identity_count EQUAL 2)
+        list(GET broker_identity 0 broker_archive_sha)
+        list(GET broker_identity 1 broker_binary_sha)
+        file(SHA256 "${RUNNERSCOPE_GH_BINARY}" broker_actual_sha)
+        if(broker_archive_sha STREQUAL RUNNERSCOPE_GH_ARCHIVE_SHA256 AND
+           broker_binary_sha STREQUAL broker_actual_sha)
+            set(broker_valid TRUE)
+        endif()
     endif()
 endif()
-file(SHA256 "${RUNNERSCOPE_GH_ARCHIVE}" RUNNERSCOPE_GH_ARCHIVE_ACTUAL)
-if(NOT RUNNERSCOPE_GH_ARCHIVE_ACTUAL STREQUAL RUNNERSCOPE_GH_ARCHIVE_SHA256)
-    message(FATAL_ERROR "GitHub sign-in broker archive checksum mismatch")
+if(NOT broker_valid)
+    # Configure must not overwrite a helper that an existing build is using.
+    # Extract privately, record its verified identity, then replace a missing
+    # or damaged generated cache. Interrupted extraction has no valid manifest.
+    string(RANDOM LENGTH 12 ALPHABET 0123456789abcdef broker_nonce)
+    set(broker_staging "${RUNNERSCOPE_GH_DIR}.extract-${broker_nonce}")
+    file(MAKE_DIRECTORY "${broker_staging}")
+    file(ARCHIVE_EXTRACT INPUT "${RUNNERSCOPE_GH_ARCHIVE}" DESTINATION "${broker_staging}")
+    set(broker_extracted "${broker_staging}/${RUNNERSCOPE_GH_RELATIVE_EXECUTABLE}")
+    if(NOT EXISTS "${broker_extracted}")
+        message(FATAL_ERROR "Verified GitHub sign-in archive is missing its executable")
+    endif()
+    file(SHA256 "${broker_extracted}" broker_binary_sha)
+    file(WRITE "${broker_staging}/verified.sha256"
+        "${RUNNERSCOPE_GH_ARCHIVE_SHA256}\n${broker_binary_sha}\n")
+    file(REMOVE_RECURSE "${RUNNERSCOPE_GH_DIR}")
+    file(RENAME "${broker_staging}" "${RUNNERSCOPE_GH_DIR}")
 endif()
-set(RUNNERSCOPE_GH_DIR "${CMAKE_BINARY_DIR}/github-sign-in")
-file(MAKE_DIRECTORY "${RUNNERSCOPE_GH_DIR}")
-file(ARCHIVE_EXTRACT INPUT "${RUNNERSCOPE_GH_ARCHIVE}" DESTINATION "${RUNNERSCOPE_GH_DIR}")
-set(RUNNERSCOPE_GH_BINARY "${RUNNERSCOPE_GH_DIR}/${RUNNERSCOPE_GH_RELATIVE_EXECUTABLE}")
-if(NOT EXISTS "${RUNNERSCOPE_GH_BINARY}")
-    message(FATAL_ERROR "Verified GitHub sign-in broker is missing its executable")
-endif()
-file(SHA256 "${RUNNERSCOPE_GH_BINARY}" RUNNERSCOPE_GH_BINARY_SHA256)

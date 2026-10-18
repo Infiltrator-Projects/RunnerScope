@@ -1,6 +1,6 @@
 # Roadmap
 
-## Current foundation — 1.3.8
+## Current foundation — 1.3.20
 
 - native C/GTK Linux RunnerScope is the shipping Linux application;
 - native C/Win32 Windows RunnerScope is built, runtime-qualified and released as an EXE;
@@ -12,11 +12,11 @@
 - the toolkit-neutral UI contract owns the migrated navigation, shell chrome, page transitions, workspace summary and runner-card/detail semantics;
 - `src/core/runner_config.c` owns the tested extracted configuration schema/validation/serialisation contract;
 - Windows durable configuration storage is isolated from the Win32 controller and preserves unrelated configuration fields on Settings saves;
-- Windows provider process execution is isolated, bounded and timeout-tested;
+- Windows monitoring uses bounded WinHTTP directly; the isolated process adapter is used only for GitHub sign-in;
 - hosted CI builds and tests the exact Debian package and exact Windows EXE that it publishes; and
 - `VERSION`, the release tag and the validated `main` commit are mechanically kept in sync.
 
-Two architectural migrations remain. Issue #2 owns completion of the shared UI definition. Issue #14 now primarily owns migration of the Linux controller onto the extracted configuration/provider/persistence boundaries and removal of its superseded inline policy.
+Linux configuration/history storage now has a tested platform boundary, with bounded reads and corrupt-file preservation. Two broader architectural migrations remain. Issue #2 owns completion of the shared UI definition. Issue #14 now primarily owns migration of the Linux controller onto the extracted configuration/provider/persistence boundaries and removal of its superseded inline policy.
 
 ## 1.3.x UI migration objective
 

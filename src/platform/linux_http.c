@@ -3,6 +3,7 @@
 #include "platform/http.h"
 
 #include <curl/curl.h>
+#include <infiltratr/posix.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,21 +85,34 @@ static bool append_header(struct curl_slist **headers, const char *value)
     return true;
 }
 
-static bool http_request(const char *url, const char *token, const char *form,
+static int transfer_progress(void *context, curl_off_t total_down, curl_off_t downloaded,
+    curl_off_t total_up, curl_off_t uploaded)
+{
+    (void)total_down; (void)downloaded; (void)total_up; (void)uploaded;
+    const RunnerHttpOptions *options = context;
+    return options && options->cancelled && options->cancelled(options->context) ? 1 : 0;
+}
+
+bool runner_http_get(const char *url, const char *token,
     RunnerHttpResponse *response, char *error, size_t error_size, void *context)
 {
-    (void)context;
+    const RunnerHttpOptions *options = context;
     if (!response) return false;
     memset(response, 0, sizeof(*response));
     if (error && error_size) error[0] = '\0';
     /* This provider never forwards a bearer token to another origin, even if
      * an API redirect or pagination header attempts to change authority. */
-    const bool oauth = form != NULL;
-    const char *origin = oauth ? "https://github.com/" : "https://api.github.com/";
+    const char *origin = "https://api.github.com/";
     if (!url || strncmp(url, origin, strlen(origin)) != 0 || strlen(url) > 4096U ||
-        strchr(url, '\r') || strchr(url, '\n')) {
+        strpbrk(url, "\\#")) {
         set_error(error, error_size, "GitHub request address is invalid.");
         return false;
+    }
+    for (const unsigned char *p = (const unsigned char *)url; *p; ++p) {
+        if (*p <= 0x20U || *p >= 0x7fU) {
+            set_error(error, error_size, "GitHub request address is invalid.");
+            return false;
+        }
     }
     if (!token) token = "";
     if (strlen(token) > 1023U) {
@@ -110,6 +124,18 @@ static bool http_request(const char *url, const char *token, const char *form,
             set_error(error, error_size, "The saved access token contains invalid characters. Update it in Settings.");
             return false;
         }
+    }
+    long timeout_ms = (long)RUNNER_HTTP_TIMEOUT_SECONDS * 1000L;
+    const double monotonic = infiltratr_monotonic_seconds();
+    if (transfer_progress((void *)options, 0, 0, 0, 0) ||
+        (options && options->deadline_ms && (monotonic < 0.0 ||
+            (uint64_t)(monotonic * 1000.0) >= options->deadline_ms))) {
+        set_error(error, error_size, "GitHub request cancelled or timed out.");
+        return false;
+    }
+    if (options && options->deadline_ms) {
+        const uint64_t remaining = options->deadline_ms - (uint64_t)(monotonic * 1000.0);
+        if (remaining < (uint64_t)timeout_ms) timeout_ms = (long)remaining;
     }
     (void)pthread_once(&curl_once, initialize_curl);
     if (curl_status != CURLE_OK) {
@@ -124,9 +150,7 @@ static bool http_request(const char *url, const char *token, const char *form,
     struct curl_slist *headers = NULL;
     char authorization[1056];
     (void)snprintf(authorization, sizeof(authorization), "Authorization: Bearer %s", token);
-    bool configured = oauth ? (append_header(&headers, "Accept: application/json") &&
-        append_header(&headers, "Content-Type: application/x-www-form-urlencoded")) :
-        (append_header(&headers, "Accept: application/vnd.github+json") &&
+    bool configured = (append_header(&headers, "Accept: application/vnd.github+json") &&
         append_header(&headers, "X-GitHub-Api-Version: 2022-11-28") &&
         (!*token || append_header(&headers, authorization)));
     memset(authorization, 0, sizeof(authorization));
@@ -136,11 +160,7 @@ static bool http_request(const char *url, const char *token, const char *form,
 #define SET_OPTION(option, value) \
     do { if (curl_easy_setopt(client, (option), (value)) != CURLE_OK) configured = false; } while (0)
     SET_OPTION(CURLOPT_URL, url);
-    if (form) {
-        SET_OPTION(CURLOPT_POST, 1L);
-        SET_OPTION(CURLOPT_POSTFIELDS, form);
-        SET_OPTION(CURLOPT_POSTFIELDSIZE, (long)strlen(form));
-    } else SET_OPTION(CURLOPT_HTTPGET, 1L);
+    SET_OPTION(CURLOPT_HTTPGET, 1L);
     SET_OPTION(CURLOPT_HTTPHEADER, headers);
     SET_OPTION(CURLOPT_USERAGENT, "RunnerScope");
     SET_OPTION(CURLOPT_PROTOCOLS_STR, "https");
@@ -149,7 +169,10 @@ static bool http_request(const char *url, const char *token, const char *form,
     SET_OPTION(CURLOPT_SSL_VERIFYHOST, 2L);
     SET_OPTION(CURLOPT_SSLVERSION, (long)CURL_SSLVERSION_TLSv1_2);
     SET_OPTION(CURLOPT_CONNECTTIMEOUT, 10L);
-    SET_OPTION(CURLOPT_TIMEOUT, (long)RUNNER_HTTP_TIMEOUT_SECONDS);
+    SET_OPTION(CURLOPT_TIMEOUT_MS, timeout_ms);
+    SET_OPTION(CURLOPT_NOPROGRESS, 0L);
+    SET_OPTION(CURLOPT_XFERINFOFUNCTION, transfer_progress);
+    SET_OPTION(CURLOPT_XFERINFODATA, options);
     SET_OPTION(CURLOPT_LOW_SPEED_LIMIT, 1L);
     SET_OPTION(CURLOPT_LOW_SPEED_TIME, 10L);
     SET_OPTION(CURLOPT_NOSIGNAL, 1L);
@@ -184,30 +207,4 @@ static bool http_request(const char *url, const char *token, const char *form,
         return false;
     }
     return true;
-}
-
-
-bool runner_http_get(const char *url, const char *token,
-    RunnerHttpResponse *response, char *error, size_t error_size, void *context)
-{
-    return http_request(url, token, NULL, response, error, error_size, context);
-}
-
-bool runner_http_post_oauth(const char *path, const char *form,
-    RunnerHttpResponse *response, char *error, size_t error_size, void *context)
-{
-    if (response) memset(response, 0, sizeof(*response));
-    if (!path || (strcmp(path, "/login/device/code") != 0 &&
-        strcmp(path, "/login/oauth/access_token") != 0) || !form || strlen(form) > 4096U) {
-        set_error(error, error_size, "Invalid GitHub sign-in request.");
-        return false;
-    }
-    for (const unsigned char *p = (const unsigned char *)form; *p; ++p)
-        if (*p < 33U || *p > 126U) {
-            set_error(error, error_size, "Invalid GitHub sign-in request.");
-            return false;
-        }
-    char url[128];
-    (void)snprintf(url, sizeof(url), "https://github.com%s", path);
-    return http_request(url, NULL, form, response, error, error_size, context);
 }

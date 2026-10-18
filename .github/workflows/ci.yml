@@ -11,7 +11,29 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: runnerscope-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  core-sanitizers:
+    name: Core contracts / sanitizers / release tools
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - name: Qualify the core without desktop assets or network downloads
+        run: |
+          cmake -S . -B build-core -DRUNNERSCOPE_BUILD_DESKTOP=OFF -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
+          cmake --build build-core --parallel 2
+          ctest --test-dir build-core --output-on-failure
+      - name: Verify release recovery and shell policy
+        run: |
+          shellcheck support/installer/*.sh support/release/*.sh tests/release_state_test.sh
+
   linux-package:
     name: Linux package / installed runtime
     runs-on: ubuntu-24.04
@@ -73,13 +95,18 @@ jobs:
           set -euo pipefail
           version="$(tr -d '[:space:]' < VERSION)"
           sudo apt-get install -y "./dist/runnerscope_${version}_amd64.deb"
-          cmp build-debian/github-sign-in/gh_2.102.0_linux_amd64/bin/gh /usr/libexec/runnerscope/gh
+          broker=$(find build-debian/github-sign-in -type f -path '*/bin/gh' -print)
+          test -n "$broker"
+          cmp "$broker" /usr/libexec/runnerscope/gh
           runnerscope --self-test
           XDG_CONFIG_HOME="$RUNNER_TEMP/runner-ui-config" \
           XDG_STATE_HOME="$RUNNER_TEMP/runner-ui-state" \
             xvfb-run -a runnerscope --ui-self-test
           file /usr/bin/runnerscope | grep -q ELF
           ! ldd /usr/bin/runnerscope | grep -Eiq 'python|libtk|tkinter'
+          test -s /usr/share/doc/runnerscope/COPYING
+          test -s /usr/share/doc/runnerscope/cJSON-LICENSE
+          test -s /usr/share/doc/runnerscope/GitHub-CLI-LICENSE
           test -f /usr/share/applications/runnerscope.desktop
           test -f /usr/share/icons/hicolor/scalable/apps/runnerscope.svg
           test -f /usr/share/icons/hicolor/128x128/apps/runnerscope.png
@@ -227,28 +254,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
-        run: |
-          set -euo pipefail
-          version="$(tr -d '[:space:]' < VERSION)"
-          test -n "$version"
-          tag="v${version}"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-          if git rev-parse -q --verify "refs/tags/${tag}^{commit}" >/dev/null; then
-            tagged="$(git rev-parse "refs/tags/${tag}^{commit}")"
-            if [[ "$tagged" != "$GITHUB_SHA" ]]; then
-              echo "VERSION ${version} is already released from ${tagged}; main is ${GITHUB_SHA}. Bump VERSION before changing main." >&2
-              exit 1
-            fi
-            gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
+        run: bash support/release/state.sh
 
   publish:
     name: Publish qualified release
-    needs: [linux-package, native-installer, windows-release, release-state]
+    needs: [core-sanitizers, linux-package, native-installer, windows-release, release-state]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-state.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10

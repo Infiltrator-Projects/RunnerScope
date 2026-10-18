@@ -2,6 +2,7 @@
 #include "ui/ui_contract.h"
 #include "ui/ui_renderer.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -517,6 +518,15 @@ static int verify_runner_cards_renderer(void)
         strstr(recorder.selection_secondary, "Job: Build") == NULL ||
         strstr(recorder.selection_secondary, "Labels: self-hosted,windows") == NULL)
         return 7;
+
+    const double nonfinite[] = {NAN, INFINITY, -INFINITY};
+    for (size_t i = 0U; i < sizeof(nonfinite) / sizeof(nonfinite[0]); ++i) {
+        RunnerUiRunnerItem invalid_fraction = items[0];
+        invalid_fraction.busy_fraction = nonfinite[i];
+        RunnerUiRunnerCardSpec card;
+        if (!runner_ui_prepare_runner_card(&invalid_fraction, false, &card) ||
+            !isfinite(card.busy_fraction) || card.busy_fraction != 0.0) return 14;
+    }
 
     RunnerCardsRecorder filtered = {0};
     renderer.context = &filtered;

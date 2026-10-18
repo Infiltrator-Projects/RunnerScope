@@ -7,6 +7,8 @@ RunnerScope is a native C application on every supported desktop platform.
 - `src/linux_main.c` is the shipping Linux desktop application.
 - `src/windows_main.c` is the shipping Windows desktop application.
 - `src/core/runner_config.c` is the toolkit-neutral configuration schema, validation and serialisation authority.
+- `src/core/json.c` owns strict bounded JSON decoding and the one process-wide cJSON parsing lock for monitoring and sign-in.
+- `src/platform/linux_storage.c` owns Linux configuration/history paths, bounded reads, validation and private atomic publication, without a GTK dependency.
 - `src/platform/windows_config_store.c` owns Windows configuration storage and atomic publication.
 - `src/core/github.c` owns GitHub JSON interpretation, projections, pagination and failure semantics.
 - `src/platform/linux_http.c` and `windows_http.c` own native HTTPS transport.
@@ -22,7 +24,7 @@ The previous Python compatibility shell and native helper bridge were removed af
 
 RunnerScope calls GitHub directly using the access token saved through Settings. GitHub remains authoritative for runner/workflow facts; RunnerScope owns correlation, timing, history, presentation and local-service policy. There are no child-process provider or service adapters.
 
-The shared provider validates JSON and projects runners, repositories, runs and jobs into the existing controller format. Pagination only accepts HTTPS links to `api.github.com`, has page/byte bounds and discards the complete fetch if any page fails. Native transports verify certificates, refuse redirects, bound response size and timeout, and omit credentials from diagnostics. cJSON is bundled at an exact recorded source revision.
+The shared provider validates JSON and projects runners, repositories, runs and jobs into the existing controller format. Pagination only accepts HTTPS links to `api.github.com`, has page/byte bounds and discards the complete fetch if any page fails. Native transports verify certificates, refuse redirects, bound response size and timeout, honor the controller deadline and cancellation, and omit credentials from diagnostics. cJSON is bundled at an exact recorded source revision.
 
 Workers consume immutable organisation/token snapshots. Superseded results cannot update a view after Settings changes. Provider errors retain last-known observations as stale and make current counts unavailable rather than describing old data as idle.
 
@@ -64,7 +66,17 @@ Configuration/history are user data and must remain migration-compatible across 
 
 Windows configuration publication writes a complete validated document to a temporary file, flushes it, and replaces the prior file atomically. Read, parse and publication errors are surfaced rather than silently replaced.
 
-Linux configuration storage and history retain the stable paths and use Common durable-write primitives. Linux configuration now consumes the same core parser as Windows. Further controller decomposition can proceed without changing those contracts.
+Linux storage retains the stable paths and uses Common durable-write primitives.
+Its platform module consumes the same configuration parser as Windows. Settings
+reads are limited to 64 KiB, history to 4 MiB and 300 retained entries. Nonregular
+files and symlinks are rejected without blocking. Unreadable/corrupt history is
+reported and never overwritten by a new empty session; new events remain in
+memory. Publication failures remain visible and can be retried by later writes.
+
+Local service observation has independent fresh/stale/error state. GitHub state
+is correlated only through a complete canonical organisation/runner unit name,
+never a substring match. Custom or escaped unit identities that cannot be proved
+remain uncorrelated.
 
 ## Build and release ownership
 
@@ -75,3 +87,19 @@ Linux packages and Windows executables are published only when the exact artifac
 The shared authentication controller owns existing-session qualification, output validation and organisation discovery. The official GitHub CLI is supplied at a pinned release identity as a sign-in broker only. Native platform adapters own hidden process creation, private temporary configuration, bounded output, deadlines and cancellation. Neither platform searches PATH or requests developer registration. The native UI copies a valid challenge code and opens the browser automatically, then saves/connects on completion. Generation checks discard results after cancellation, organisation changes or window closure. The monitoring provider still performs its own HTTPS requests and JSON interpretation. See [GitHub sign-in](OAUTH.md).
 
 Release CI also verifies the live beta and alpha APT indexes and downloads the published package to compare it with the qualified GitHub release digest. A GitHub release alone does not complete publication.
+
+## Build seams
+
+`CMakeLists.txt` defines the shared libraries and dependency identity.
+`cmake/NativeDesktop.cmake` owns platform targets and install layout;
+`cmake/RuntimeAssets.cmake` consumes Common font identity and the pinned broker;
+`cmake/Tests.cmake` owns test registration and respects `BUILD_TESTING`.
+`RUNNERSCOPE_BUILD_DESKTOP=OFF` removes desktop/platform dependencies and asset
+downloads from core-contract builds. Archive downloads are checksum-verified in
+partial files before entering the reusable cache.
+
+Release jobs serialize publication on each ref. `support/release/state.sh`
+distinguishes a published release from an interrupted draft at the same commit,
+so reruns resume publication while refusing to reuse a released version for a
+different revision. The native installer installs the declared Git build
+dependency, rejects incompatible PGO profiles and respects Debian `nocheck`.

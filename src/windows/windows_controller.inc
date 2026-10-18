@@ -9,7 +9,13 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         if (g_app.dpi == 0U) g_app.dpi = 96U;
         resolve_theme();
         create_brushes();
-        load_private_fonts();
+        if (!load_private_fonts()) {
+            unload_private_fonts();
+            delete_brushes();
+            MessageBoxW(window, L"RunnerScope could not load its required MB Corpo fonts.",
+                APP_TITLE, MB_OK | MB_ICONERROR);
+            return -1;
+        }
         create_fonts();
         const HRESULT image_status = CoCreateInstance(
             &CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER,
@@ -22,7 +28,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         BOOL dark = system_prefers_dark() ? TRUE : FALSE;
         const DWORD attribute = 20U;
         (void)DwmSetWindowAttribute(window, attribute, &dark, sizeof(dark));
-        SetTimer(window, TIMER_REFRESH, g_app.config.runner_poll_seconds * 1000U, NULL);
+        SetTimer(window, TIMER_REFRESH, refresh_interval_ms(g_app.config.runner_poll_seconds), NULL);
         SetTimer(window, TIMER_PRESENT, 1000U, NULL);
         update_layout(window);
         if (g_app.config_error[0]) {
@@ -212,6 +218,15 @@ static bool resource_exists(int resource_id)
 static int self_test(void)
 {
     if (!runner_github_sign_in_available() || !runner_github_sign_in_probe()) return 12;
+    const bool fonts_ready = load_private_fonts();
+    unload_private_fonts();
+    if (!fonts_ready) return 14;
+    RunnerRow ordered[2] = {0};
+    infiltratr_copy_string(ordered[0].name, sizeof(ordered[0].name), "Second");
+    infiltratr_copy_string(ordered[1].name, sizeof(ordered[1].name), "First");
+    if (runner_index(ordered, 2U, "First") != 1 || runner_index(ordered, 2U, "Removed") != -1 ||
+        refresh_interval_ms(3U) != 3000U || refresh_interval_ms(0xffffffffU) != USER_TIMER_MAXIMUM)
+        return 13;
     char ui_error[256];
     if (!runner_ui_contract_validate(ui_error, sizeof(ui_error))) return 1;
     RunnerConfig config;
@@ -253,7 +268,7 @@ static int self_test(void)
         return 9;
     if (runner_http_get("https://api.github.com/", "invalid\r\ntoken",
         &response, http_error_text, sizeof(http_error_text), NULL)) return 10;
-    const ULONGLONG expired = 0U;
+    const RunnerHttpOptions expired = {1U, NULL, NULL};
     if (runner_http_get("https://api.github.com/", "offline_test_token",
         &response, http_error_text, sizeof(http_error_text), (void *)&expired)) return 11;
     return 0;

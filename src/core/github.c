@@ -1,20 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "core/github.h"
 #include "core/runner_config.h"
-#include "cJSON.h"
-#include <infiltratr/utf8.h>
+#include "core/json.h"
 
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#else
-#include <pthread.h>
-#endif
 
 #define GITHUB_ORIGIN "https://api.github.com"
 #define GITHUB_PAGE_LIMIT 100U
@@ -111,84 +104,25 @@ static bool labels(const cJSON *object, bool runner_labels, Text *text, bool *va
     return append(text, "", 0U);
 }
 
-/* cJSON exposes a process-global last-error pointer. Serialize only parsing;
- * decoded trees and projection buffers remain owned by their request thread. */
-static cJSON *parse(const char *json, size_t length)
-{
-    const char *end = NULL;
-#ifdef _WIN32
-    static SRWLOCK lock = SRWLOCK_INIT;
-    AcquireSRWLockExclusive(&lock);
-#else
-    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-    (void)pthread_mutex_lock(&lock);
-#endif
-    cJSON *root = cJSON_ParseWithLengthOpts(json, length + 1U, &end, 1);
-#ifdef _WIN32
-    ReleaseSRWLockExclusive(&lock);
-#else
-    (void)pthread_mutex_unlock(&lock);
-#endif
-    return root;
-}
 
-/* Reject lexical forms that a permissive decoder can accept, and embedded
- * NUL escapes that would truncate C strings after an otherwise valid parse. */
-static bool lexical_json(const char *json)
+const char *runner_github_job_environment(const char *group, const char *labels)
 {
-    const unsigned char *p = (const unsigned char *)json;
-    while (*p) {
-        if (*p == '"') {
-            p++;
-            while (*p && *p != '"') {
-                if (*p < 0x20U) return false;
-                if (*p == '\\') {
-                    p++;
-                    if (!*p) return false;
-                    if (*p == 'u' && strncmp((const char *)p, "u0000", 5U) == 0) return false;
-                }
-                p++;
-            }
-            if (*p != '"') return false;
-            p++;
-        } else if (*p == '-' || (*p >= '0' && *p <= '9')) {
-            if (*p == '-') p++;
-            if (*p == '0') p++;
-            else {
-                if (*p < '1' || *p > '9') return false;
-                do { p++; } while (*p >= '0' && *p <= '9');
-            }
-            if (*p == '.') {
-                p++;
-                if (*p < '0' || *p > '9') return false;
-                do { p++; } while (*p >= '0' && *p <= '9');
-            }
-            if (*p == 'e' || *p == 'E') {
-                p++;
-                if (*p == '+' || *p == '-') p++;
-                if (*p < '0' || *p > '9') return false;
-                do { p++; } while (*p >= '0' && *p <= '9');
-            }
-            if (*p && !strchr(" \t\r\n,}]", (int)*p)) return false;
-        } else {
-            if (*p < 0x20U && !strchr("\t\r\n", (int)*p)) return false;
-            p++;
-        }
+    const char *p = labels;
+    while (p && *p) {
+        const char *end = strchr(p, ',');
+        const size_t length = end ? (size_t)(end - p) : strlen(p);
+        if (length == strlen("self-hosted") && !strncmp(p, "self-hosted", length))
+            return "LOCAL";
+        p = end ? end + 1 : NULL;
     }
-    return true;
+    return group && !strcmp(group, "GitHub Actions") ? "GITHUB" : "UNKNOWN";
 }
 
 char *runner_github_project(const char *json, RunnerGithubProjection projection,
                             char *error, size_t error_size)
 {
     if (error && error_size) error[0] = '\0';
-    const size_t length = bounded_length(json, RUNNER_HTTP_BODY_LIMIT + 1U);
-    if (!json || !length || length > RUNNER_HTTP_BODY_LIMIT ||
-        !infiltratr_utf8_validate(json, length) || !lexical_json(json)) {
-        fail(error, error_size, "GitHub returned invalid or oversized data. Try refreshing again.");
-        return NULL;
-    }
-    cJSON *root = parse(json, length);
+    cJSON *root = runner_json_parse(json, RUNNER_HTTP_BODY_LIMIT);
     if (!root) {
         fail(error, error_size, "GitHub returned invalid JSON. Try refreshing again.");
         return NULL;

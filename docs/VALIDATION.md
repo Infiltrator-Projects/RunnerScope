@@ -102,3 +102,25 @@ The shared parser recognises JSON numeric syntax as ASCII and performs exact int
 ## Native browser sign-in
 
 Authentication qualification covers reuse, denied access, invalid output, cancellation, organisation discovery and cleanup. The native child-process fixture exercises the same adapters used for the supplied broker. GTK qualification checks automatic clipboard copy, absence of developer-registration controls and automatic save with preserved preferences. The shipping native self-test launches the supplied helper with --version. Real GitHub account approval and organisation access remain external checks.
+
+## Maintenance review gates
+
+The core-only CI job builds without desktop assets and runs AddressSanitizer and
+UndefinedBehaviorSanitizer over the shared configuration, provider, concurrent
+JSON parsing, authentication and UI contracts. Release-state fixtures cover new,
+draft, published, unavailable and mismatched immutable tag states; ShellCheck
+covers the native installer and release helper.
+
+Linux storage tests run without GTK and cover private config publication,
+round-trips, empty/corrupt files, bounded history, embedded NULs, invalid UTF-8,
+FIFO/symlink rejection and failed-write preservation. The graphical test also
+proves that a corrupt history file survives subsequent in-memory events and
+application shutdown. Service correlation fixtures distinguish full runner and
+organisation identities from misleading partial matches.
+
+Native HTTP policy tests reject unsafe origins, separators, credentials,
+expired deadlines and cancellation without contacting GitHub. Windows native
+self-tests also cover selection identity lookup and overflow-safe polling
+interval conversion. Non-finite utilisation fractions become zero before any
+native drawing operation. Product licence and bundled third-party notices are
+carried by the Linux package.

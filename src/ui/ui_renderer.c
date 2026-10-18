@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ui_renderer.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -133,7 +134,7 @@ bool runner_ui_prepare_runner_card(const RunnerUiRunnerItem *item,
     memset(card, 0, sizeof(*card));
     card->item = item;
     card->selected = selected;
-    card->busy_fraction = item->busy_fraction;
+    card->busy_fraction = isfinite(item->busy_fraction) ? item->busy_fraction : 0.0;
     if (card->busy_fraction < 0.0) card->busy_fraction = 0.0;
     if (card->busy_fraction > 1.0) card->busy_fraction = 1.0;
 

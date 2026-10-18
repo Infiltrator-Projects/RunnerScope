@@ -406,6 +406,7 @@ bool runner_config_validate(const RunnerConfig *config,
 bool runner_config_parse_json(const char *json, RunnerConfig *config,
                               char *error, size_t error_size)
 {
+    if (error && error_size) error[0] = '\0';
     if (!json || !config) {
         set_error(error, error_size, "configuration document is missing");
         return false;

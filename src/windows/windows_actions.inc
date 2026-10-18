@@ -109,7 +109,7 @@ static void save_settings(HWND window, bool test_access)
         g_app.selected_row = -1;
     }
     KillTimer(g_app.window, TIMER_REFRESH);
-    SetTimer(g_app.window, TIMER_REFRESH, g_app.config.runner_poll_seconds * 1000U, NULL);
+    SetTimer(g_app.window, TIMER_REFRESH, refresh_interval_ms(g_app.config.runner_poll_seconds), NULL);
     if (credentials_changed || !g_app.config.github_token[0]) {
         mark_rows_stale();
         infiltratr_copy_string(g_app.provider_error, sizeof(g_app.provider_error),

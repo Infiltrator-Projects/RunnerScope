@@ -67,6 +67,18 @@ int main(void)
     f.members = "[{\"state\":\"active\",\"role\":\"member\",\"organization\":{\"login\":\"MemberOrg\"}}]";
     runner_github_authenticate(&auth, "", execute, &f, get, &f, &callbacks);
     assert(!auth.organisation[0] && auth.organisation_count == 0U);
+    f = (Fixture){0}; f.existing = true;
+    f.members = "[{\"state\":\"active\",\"role\":\"admin\",\"organization\":{\"login\":\"OnlyOrg\"}}]";
+    runner_github_authenticate(&auth, "", execute, &f, get, &f, &callbacks);
+    assert(auth.phase == RUNNER_AUTH_COMPLETE && !strcmp(auth.organisation, "OnlyOrg"));
+    assert(f.calls[RUNNER_AUTH_BROWSER_LOGIN] == 0U);
+    f = (Fixture){0};
+    f.members = "[{\"state\":\"active\",\"role\":\"admin\",\"organization\":{\"login\":\"Org\\u0000suffix\"}}]";
+    runner_github_authenticate(&auth, "", execute, &f, get, &f, &callbacks);
+    assert(!auth.organisation[0] && auth.organisation_count == 0U);
+    f.members = "[{\"state\":\"active\",\"role\":\"admin\",\"organization\":{\"login\":\"One\",\"login\":\"Two\"}}]";
+    runner_github_authenticate(&auth, "", execute, &f, get, &f, &callbacks);
+    assert(!auth.organisation[0] && auth.organisation_count == 0U);
     runner_github_auth_clear(&auth); assert(!auth.token[0] && !auth.organisation[0]);
     puts("GitHub sign-in reuse, browser flow, discovery and failure contracts passed.");
     return 0;

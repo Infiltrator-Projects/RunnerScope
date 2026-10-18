@@ -112,11 +112,12 @@ static HANDLE load_private_font_resource(int resource_id)
     return AddFontMemResourceEx(data, size, NULL, &fonts);
 }
 
-static void load_private_fonts(void)
+static bool load_private_fonts(void)
 {
     g_app.private_fonts[0] = load_private_font_resource(IDR_FONT_BRAND);
     g_app.private_fonts[1] = load_private_font_resource(IDR_FONT_UI_BOLD);
     g_app.private_fonts[2] = load_private_font_resource(IDR_FONT_UI_REGULAR);
+    return g_app.private_fonts[0] && g_app.private_fonts[1] && g_app.private_fonts[2];
 }
 
 static void unload_private_fonts(void)
@@ -144,8 +145,8 @@ static void delete_fonts(void)
 static void create_fonts(void)
 {
     const InfiltratrTypography *typography = infiltratr_typography();
-    wchar_t ui_family[96] = L"Segoe UI";
-    wchar_t brand_family[96] = L"Segoe UI";
+    wchar_t ui_family[96] = L"";
+    wchar_t brand_family[96] = L"";
     if (typography) {
         if (typography->ui_family) utf8_to_wide(typography->ui_family, ui_family, 96U);
         if (typography->brand_family) utf8_to_wide(typography->brand_family, brand_family, 96U);

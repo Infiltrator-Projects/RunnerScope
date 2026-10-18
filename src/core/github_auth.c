@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "core/github_auth.h"
-#include "cJSON.h"
+#include "core/json.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,8 +60,8 @@ static cJSON *request_json(const char *url, const char *token, RunnerHttpGet get
     RunnerHttpResponse response = {0U, NULL, NULL};
     char error[320] = "";
     const bool ok = get(url, token, &response, error, sizeof(error), context);
-    cJSON *json = ok && response.status == 200U && response.body &&
-        strlen(response.body) <= 1024U * 1024U ? cJSON_ParseWithOpts(response.body, NULL, true) : NULL;
+    cJSON *json = ok && response.status == 200U
+        ? runner_json_parse(response.body, 1024U * 1024U) : NULL;
     free(response.body); free(response.link);
     return json;
 }
@@ -71,7 +71,7 @@ static bool can_monitor(const char *org, const char *token, RunnerHttpGet get, v
     char url[320];
     (void)snprintf(url, sizeof(url), "https://api.github.com/orgs/%s/actions/runners?per_page=1", org);
     cJSON *json = request_json(url, token, get, context);
-    const bool ok = json && cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(json, "runners"));
+    const bool ok = json && cJSON_IsArray(runner_json_unique_member(json, "runners"));
     cJSON_Delete(json);
     return ok;
 }
@@ -83,10 +83,10 @@ static void discover_organisations(RunnerGithubAuth *auth, RunnerHttpGet get, vo
     if (!cJSON_IsArray(json)) { cJSON_Delete(json); return; }
     const cJSON *entry = NULL;
     cJSON_ArrayForEach(entry, json) {
-        const cJSON *state = cJSON_GetObjectItemCaseSensitive(entry, "state");
-        const cJSON *role = cJSON_GetObjectItemCaseSensitive(entry, "role");
-        const cJSON *org = cJSON_GetObjectItemCaseSensitive(entry, "organization");
-        const cJSON *login = cJSON_GetObjectItemCaseSensitive(org, "login");
+        const cJSON *state = runner_json_unique_member(entry, "state");
+        const cJSON *role = runner_json_unique_member(entry, "role");
+        const cJSON *org = runner_json_unique_member(entry, "organization");
+        const cJSON *login = runner_json_unique_member(org, "login");
         if (!cJSON_IsString(state) || strcmp(state->valuestring, "active") != 0 ||
             !cJSON_IsString(role) || strcmp(role->valuestring, "admin") != 0 ||
             !cJSON_IsString(login) || !org_name(login->valuestring)) continue;
@@ -124,11 +124,19 @@ void runner_github_authenticate(RunnerGithubAuth *auth, const char *organisation
     if (execute && !runner_github_auth_cancelled(callbacks) &&
         execute(RUNNER_AUTH_EXISTING_SESSION, output, sizeof(output), callbacks, execute_context) &&
         runner_github_auth_token(output, auth->token, sizeof(auth->token)) &&
-        !runner_github_auth_cancelled(callbacks))
+        !runner_github_auth_cancelled(callbacks)) {
+        if (!auth->organisation[0]) discover_organisations(auth, get, http_context);
         reused = can_monitor(auth->organisation, auth->token, get, http_context);
+        for (size_t i = 0U; !reused && i < auth->organisation_count &&
+                !runner_github_auth_cancelled(callbacks); ++i)
+            reused = can_monitor(auth->organisations[i], auth->token, get, http_context);
+    }
     memset(output, 0, sizeof(output));
     if (!reused) {
         memset(auth->token, 0, sizeof(auth->token));
+        memset(auth->organisations, 0, sizeof(auth->organisations));
+        auth->organisation_count = 0U;
+        (void)snprintf(auth->organisation, sizeof(auth->organisation), "%s", organisation ? organisation : "");
         if (!execute || runner_github_auth_cancelled(callbacks) ||
             !execute(RUNNER_AUTH_BROWSER_LOGIN, output, sizeof(output), callbacks, execute_context) ||
             runner_github_auth_cancelled(callbacks) ||

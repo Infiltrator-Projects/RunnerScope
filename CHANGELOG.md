@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.20 — 2026-10-18
+
+- Share strict, thread-safe JSON parsing between monitoring and sign-in; reject malformed and duplicate organisation identities and reuse authorised sessions on first setup.
+- Extract Linux settings/history storage from GTK, bound reads and writes, preserve corrupt history, surface publication errors and reject blocking special files.
+- Honor cancellation and overall refresh deadlines in both native HTTP transports; remove the unused OAuth POST implementation.
+- Correct activity hosting classification, include unknown active jobs in totals, and keep failed local service observations explicitly stale.
+- Match complete local runner identities; preserve Windows selection across row reordering and prevent polling timer overflow.
+- Verify Windows bundled fonts can actually load and remove substitute-font fallback.
+- Separate core, native desktop, runtime assets and test build responsibilities; support offline core-only builds and respect BUILD_TESTING.
+- Verify downloads before caching; declare the supported architecture and curl runtime floor, and ship the product licence.
+- Harden native installer dependencies, PGO mismatch detection and Debian nocheck handling.
+- Serialize release runs, recover same-commit draft publication and add sanitizer, storage, concurrency, transport and release-state regression gates.
+
 ## 1.3.19 — 2026-10-17
 
 - Add a System Monitor-style hardware-native `.run` release alongside the normal Debian package and Windows executable.

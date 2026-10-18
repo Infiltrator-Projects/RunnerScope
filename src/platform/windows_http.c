@@ -67,13 +67,21 @@ static void CALLBACK http_completed(HINTERNET request, DWORD_PTR context,
 }
 
 static bool http_wait(HttpOperation *operation, DWORD expected, ULONGLONG deadline,
-                       char *error, size_t error_size)
+                       const RunnerHttpOptions *options, char *error, size_t error_size)
 {
-    const ULONGLONG now = GetTickCount64();
-    if (now >= deadline || WaitForSingleObject(operation->event,
-            (DWORD)(deadline - now)) != WAIT_OBJECT_0) {
-        http_error(error, error_size, "GitHub request timed out after 30 seconds.");
-        return false;
+    for (;;) {
+        const ULONGLONG now = GetTickCount64();
+        if ((options && options->cancelled && options->cancelled(options->context)) || now >= deadline) {
+            http_error(error, error_size, "GitHub request cancelled or timed out.");
+            return false;
+        }
+        const DWORD remaining = (DWORD)(deadline - now);
+        const DWORD waited = WaitForSingleObject(operation->event, remaining < 100U ? remaining : 100U);
+        if (waited == WAIT_OBJECT_0) break;
+        if (waited != WAIT_TIMEOUT) {
+            http_error(error, error_size, "Unable to wait for the GitHub response.");
+            return false;
+        }
     }
     if (operation->completion == expected) return true;
     http_error(error, error_size,
@@ -137,28 +145,26 @@ static char *http_link_header(HINTERNET request, bool *ok)
     return NULL;
 }
 
-static bool http_request(const char *url, const char *token, const char *form,
+bool runner_http_get(const char *url, const char *token,
     RunnerHttpResponse *response, char *error, size_t error_size, void *context)
 {
     if (error && error_size) error[0] = '\0';
     if (!response) return false;
     memset(response, 0, sizeof(*response));
-    const bool oauth = form != NULL;
-    const char *prefix = oauth ? "https://github.com/" : "https://api.github.com/";
+    const char *prefix = "https://api.github.com/";
     if (!url || strncmp(url, prefix, strlen(prefix)) != 0 || strlen(url) > 8192U) {
         http_error(error, error_size, "Only HTTPS requests to api.github.com are allowed.");
         return false;
     }
     for (const unsigned char *p = (const unsigned char *)url; *p; ++p)
-        if (*p <= 32U || *p >= 127U || *p == '#') {
+        if (*p <= 32U || *p >= 127U || *p == '#' || *p == '\\') {
             http_error(error, error_size, "The GitHub request address is invalid.");
             return false;
         }
-    if (!oauth && (!token || !*token || strlen(token) >= RUNNER_GITHUB_TOKEN_CAPACITY)) {
+    if (!token || !*token || strlen(token) >= RUNNER_GITHUB_TOKEN_CAPACITY) {
         http_error(error, error_size, "Sign in with GitHub in Settings before refreshing runners.");
         return false;
     }
-    if (!token) token = "";
     for (const unsigned char *p = (const unsigned char *)token; *p; ++p)
         if (*p < 33U || *p > 126U) {
             http_error(error, error_size, "The saved GitHub token contains invalid characters.");
@@ -167,23 +173,22 @@ static bool http_request(const char *url, const char *token, const char *form,
 
     wchar_t path[8193];
     wchar_t headers[1400];
-    const char *resource = url + strlen(oauth ? "https://github.com" : "https://api.github.com");
+    const char *resource = url + strlen("https://api.github.com");
     if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, resource, -1,
                               path, (int)(sizeof(path) / sizeof(path[0])))) {
         http_error(error, error_size, "The GitHub request address is invalid.");
         return false;
     }
-    if (oauth) wcscpy_s(headers, sizeof(headers) / sizeof(headers[0]),
-        L"Accept: application/json\r\nContent-Type: application/x-www-form-urlencoded\r\n");
-    else _snwprintf_s(headers, sizeof(headers) / sizeof(headers[0]), _TRUNCATE,
+    _snwprintf_s(headers, sizeof(headers) / sizeof(headers[0]), _TRUNCATE,
         L"Authorization: Bearer %hs\r\nAccept: application/vnd.github+json\r\n"
         L"X-GitHub-Api-Version: 2022-11-28\r\n", token);
 
+    const RunnerHttpOptions *options = context;
     ULONGLONG deadline = GetTickCount64() + RUNNER_HTTP_TIMEOUT_SECONDS * 1000U;
     /* A native refresh may impose an earlier overall pagination deadline. */
-    if (context && *(const ULONGLONG *)context < deadline)
-        deadline = *(const ULONGLONG *)context;
-    if (GetTickCount64() >= deadline) {
+    if (options && options->deadline_ms && options->deadline_ms < deadline)
+        deadline = options->deadline_ms;
+    if ((options && options->cancelled && options->cancelled(options->context)) || GetTickCount64() >= deadline) {
         SecureZeroMemory(headers, sizeof(headers));
         http_error(error, error_size, "Runner refresh exceeded its 60-second deadline.");
         return false;
@@ -203,9 +208,9 @@ static bool http_request(const char *url, const char *token, const char *form,
     if (!session || !WinHttpSetTimeouts(session, 30000, 30000, 30000, 30000)) goto done;
     DWORD retries = 1U;
     if (!WinHttpSetOption(session, WINHTTP_OPTION_CONNECT_RETRIES, &retries, sizeof(retries))) goto done;
-    connection = WinHttpConnect(session, oauth ? L"github.com" : L"api.github.com", INTERNET_DEFAULT_HTTPS_PORT, 0U);
+    connection = WinHttpConnect(session, L"api.github.com", INTERNET_DEFAULT_HTTPS_PORT, 0U);
     if (!connection) goto done;
-    request = WinHttpOpenRequest(connection, oauth ? L"POST" : L"GET", path, NULL, WINHTTP_NO_REFERER,
+    request = WinHttpOpenRequest(connection, L"GET", path, NULL, WINHTTP_NO_REFERER,
                                  WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
     if (!request) goto done;
     DWORD redirect_policy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
@@ -226,11 +231,10 @@ static bool http_request(const char *url, const char *token, const char *form,
     }
     callbacks = true;
     if (!http_started(WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0U,
-            form ? (LPVOID)form : WINHTTP_NO_REQUEST_DATA,
-            form ? (DWORD)strlen(form) : 0U, form ? (DWORD)strlen(form) : 0U, request_context)) ||
-        !http_wait(operation, WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE, deadline, error, error_size) ||
+            WINHTTP_NO_REQUEST_DATA, 0U, 0U, request_context)) ||
+        !http_wait(operation, WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE, deadline, options, error, error_size) ||
         !http_started(WinHttpReceiveResponse(request, NULL)) ||
-        !http_wait(operation, WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE, deadline, error, error_size)) goto done;
+        !http_wait(operation, WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE, deadline, options, error, error_size)) goto done;
     DWORD status = 0U, status_size = sizeof(status);
     if (!WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                              WINHTTP_HEADER_NAME_BY_INDEX, &status, &status_size,
@@ -243,12 +247,12 @@ static bool http_request(const char *url, const char *token, const char *form,
     if (!body) goto done;
     for (;;) {
         if (!http_started(WinHttpQueryDataAvailable(request, NULL)) ||
-            !http_wait(operation, WINHTTP_CALLBACK_STATUS_DATA_AVAILABLE, deadline, error, error_size)) goto done;
+            !http_wait(operation, WINHTTP_CALLBACK_STATUS_DATA_AVAILABLE, deadline, options, error, error_size)) goto done;
         if (operation->amount == 0U) break;
         const DWORD requested = operation->amount < sizeof(operation->chunk)
             ? operation->amount : (DWORD)sizeof(operation->chunk);
         if (!http_started(WinHttpReadData(request, operation->chunk, requested, NULL)) ||
-            !http_wait(operation, WINHTTP_CALLBACK_STATUS_READ_COMPLETE, deadline, error, error_size)) goto done;
+            !http_wait(operation, WINHTTP_CALLBACK_STATUS_READ_COMPLETE, deadline, options, error, error_size)) goto done;
         if (operation->amount == 0U) break;
         if (operation->amount > sizeof(operation->chunk) ||
             memchr(operation->chunk, '\0', operation->amount)) {
@@ -296,30 +300,4 @@ done:
             http_error(error, error_size, "Unable to complete the GitHub HTTPS request. Check the connection and try again.");
     }
     return ok;
-}
-
-
-bool runner_http_get(const char *url, const char *token,
-    RunnerHttpResponse *response, char *error, size_t error_size, void *context)
-{
-    return http_request(url, token, NULL, response, error, error_size, context);
-}
-
-bool runner_http_post_oauth(const char *path, const char *form,
-    RunnerHttpResponse *response, char *error, size_t error_size, void *context)
-{
-    if (response) memset(response, 0, sizeof(*response));
-    if (!path || (strcmp(path, "/login/device/code") != 0 &&
-        strcmp(path, "/login/oauth/access_token") != 0) || !form || strlen(form) > 4096U) {
-        http_error(error, error_size, "Invalid GitHub sign-in request.");
-        return false;
-    }
-    for (const unsigned char *p = (const unsigned char *)form; *p; ++p)
-        if (*p < 33U || *p > 126U) {
-            http_error(error, error_size, "Invalid GitHub sign-in request.");
-            return false;
-        }
-    char url[128];
-    (void)snprintf(url, sizeof(url), "https://github.com%s", path);
-    return http_request(url, NULL, form, response, error, error_size, context);
 }

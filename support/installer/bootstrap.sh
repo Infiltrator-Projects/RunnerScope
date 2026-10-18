@@ -75,6 +75,7 @@ need_deb_package() {
 }
 need_deb_package "build-essential" build-essential
 need_deb_package "CMake" cmake
+need_deb_package "Git" git
 need_deb_package "Debian package builder" dpkg-dev
 need_deb_package "debhelper" debhelper
 need_deb_package "pkg-config" pkg-config
@@ -148,7 +149,7 @@ mkdir -p -- "$profile"
 
 generate_flags="-O3 -march=native -mtune=native -flto -fprofile-generate=$profile"
 generate_link="-flto -fprofile-generate=$profile"
-use_flags="-O3 -march=native -mtune=native -flto -fprofile-use=$profile -fprofile-correction -Wno-missing-profile -Wno-error=missing-profile -Wno-error=coverage-mismatch"
+use_flags="-O3 -march=native -mtune=native -flto -fprofile-use=$profile -fprofile-correction -Wno-missing-profile -Wno-error=missing-profile -Werror=coverage-mismatch"
 use_link="-flto -fprofile-use=$profile -fprofile-correction"
 
 printf 'Building RunnerScope %s PGO training image (%s jobs)...\n' "$version" "$jobs"
