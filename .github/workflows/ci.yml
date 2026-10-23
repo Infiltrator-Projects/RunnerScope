@@ -24,11 +24,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-      - name: Ensure self-hosted core qualification tools
+      - name: Ensure rootless self-hosted core qualification tools
         if: runner.environment == 'self-hosted'
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential cmake shellcheck
+          set -euo pipefail
+          for command_name in cc cmake ctest apt-get dpkg-deb; do
+            command -v "$command_name" >/dev/null || { echo "Missing $command_name on the runner." >&2; exit 1; }
+          done
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            mkdir -p "$RUNNER_TEMP/shellcheck-packages" "$RUNNER_TEMP/shellcheck-root"
+            cd "$RUNNER_TEMP/shellcheck-packages"
+            apt-get download shellcheck
+            package=$(find . -maxdepth 1 -type f -name 'shellcheck_*.deb' -print -quit)
+            test -n "$package"
+            dpkg-deb -x "$package" "$RUNNER_TEMP/shellcheck-root"
+            test -x "$RUNNER_TEMP/shellcheck-root/usr/bin/shellcheck"
+            echo "$RUNNER_TEMP/shellcheck-root/usr/bin" >> "$GITHUB_PATH"
+          fi
 
       - name: Qualify the core without desktop assets or network downloads
         run: |
