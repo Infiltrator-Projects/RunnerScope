@@ -18,7 +18,7 @@ concurrency:
 jobs:
   core-sanitizers:
     name: Core contracts / sanitizers / release tools
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-24.04"]' || '["self-hosted","Linux","X64","linux-native"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -224,7 +224,7 @@ jobs:
   release-state:
     name: Release state invariant
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 5
     outputs:
       publish: ${{ steps.state.outputs.publish }}
@@ -247,7 +247,7 @@ jobs:
     name: Publish qualified release
     needs: [core-sanitizers, linux-package, native-installer, windows-release, release-state]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release-state.outputs.publish == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 10
     permissions:
       contents: write
@@ -346,7 +346,7 @@ jobs:
       needs.release-state.result == 'success' &&
       (needs.publish.result == 'success' ||
        (needs.publish.result == 'skipped' && needs.release-state.outputs.publish == 'false'))
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 30
     steps:
       - name: Require the qualified release in the live APT repository
