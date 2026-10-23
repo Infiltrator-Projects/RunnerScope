@@ -24,6 +24,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+      - name: Ensure self-hosted core qualification tools
+        if: runner.environment == 'self-hosted'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake shellcheck
+
       - name: Qualify the core without desktop assets or network downloads
         run: |
           cmake -S . -B build-core -DRUNNERSCOPE_BUILD_DESKTOP=OFF -DCMAKE_BUILD_TYPE=Debug \
