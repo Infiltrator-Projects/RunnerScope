@@ -288,6 +288,25 @@ jobs:
           name: runnerscope-windows
           path: release/windows
 
+      - name: Prepare rootless GitHub CLI for release publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v gh >/dev/null 2>&1; then
+            mkdir -p "$RUNNER_TEMP/github-cli-package" "$RUNNER_TEMP/github-cli-root"
+            (
+              cd "$RUNNER_TEMP/github-cli-package"
+              apt-get download gh
+              package=$(find . -maxdepth 1 -type f -name 'gh_*.deb' -print -quit)
+              test -n "$package"
+              dpkg-deb -x "$package" "$RUNNER_TEMP/github-cli-root"
+            )
+            test -x "$RUNNER_TEMP/github-cli-root/usr/bin/gh"
+            echo "$RUNNER_TEMP/github-cli-root/usr/bin" >> "$GITHUB_PATH"
+          fi
+          # Check the same rootless binary that will handle the release.
+          if command -v gh >/dev/null 2>&1; then gh --version; fi
+
       - name: Publish immutable release from qualified artifacts
         env:
           GH_TOKEN: ${{ github.token }}
