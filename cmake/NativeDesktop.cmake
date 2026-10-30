@@ -73,6 +73,8 @@ if(WIN32)
     )
     runnerscope_warnings(runnerscope)
 else()
+    # C++ is required only for the native Linux reader; core and Windows stay C.
+    enable_language(CXX)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
     pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
@@ -80,6 +82,7 @@ else()
     add_library(runnerscope_linux_platform STATIC
         src/platform/linux_http.c
         src/platform/linux_storage.c
+        src/platform/linux_storage_reader.cpp
         src/platform/linux_services.c
         src/platform/linux_github_sign_in.c)
     target_compile_definitions(runnerscope_linux_platform PRIVATE
@@ -88,6 +91,8 @@ else()
         RUNNERSCOPE_GH_BUILD_EXECUTABLE="${RUNNERSCOPE_GH_BINARY}"
         RUNNERSCOPE_GH_EXECUTABLE="${CMAKE_INSTALL_FULL_LIBEXECDIR}/runnerscope/gh")
     target_include_directories(runnerscope_linux_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_features(runnerscope_linux_platform PRIVATE cxx_std_20)
+    set_target_properties(runnerscope_linux_platform PROPERTIES CXX_EXTENSIONS OFF)
     target_link_libraries(runnerscope_linux_platform PUBLIC
         runnerscope_core PkgConfig::GIO CURL::libcurl Threads::Threads)
     runnerscope_warnings(runnerscope_linux_platform)

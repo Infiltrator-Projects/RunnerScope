@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #define _POSIX_C_SOURCE 200809L
 #include "platform/linux_storage.h"
+#include "platform/linux_storage_reader.h"
 #include <infiltratr/posix.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -16,41 +17,6 @@ char *runner_linux_config_path(void)
 char *runner_linux_history_path(void)
 {
     return g_build_filename(g_get_user_state_dir(), "runnerscope", "history.tsv", NULL);
-}
-
-static char *read_text(const char *path, size_t limit, gboolean *missing, GError **error)
-{
-    if (missing) *missing = FALSE;
-    const int fd = open(path, O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW);
-    if (fd < 0) {
-        if (errno == ENOENT) { if (missing) *missing = TRUE; return g_strdup(""); }
-        g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(errno),
-            "Unable to read saved data: %s. The original file has been kept.", g_strerror(errno));
-        return NULL;
-    }
-    struct stat status;
-    gboolean ok = fstat(fd, &status) == 0 && S_ISREG(status.st_mode) &&
-        status.st_size >= 0 && (guint64)status.st_size <= limit;
-    char *contents = g_malloc(limit + 2U);
-    size_t used = 0U;
-    while (ok && used <= limit) {
-        const ssize_t count = read(fd, contents + used, limit + 1U - used);
-        if (count < 0 && errno == EINTR) continue;
-        if (count < 0) { ok = FALSE; break; }
-        if (!count) break;
-        used += (size_t)count;
-    }
-    (void)close(fd);
-    if (!ok || used > limit || memchr(contents, '\0', used) ||
-        !g_utf8_validate(contents, (gssize)used, NULL)) {
-        memset(contents, 0, limit + 2U);
-        g_free(contents);
-        g_set_error_literal(error, G_FILE_ERROR, G_FILE_ERROR_INVAL,
-            "Saved data is unreadable, oversized or invalid. The original file has been kept.");
-        return NULL;
-    }
-    contents[used] = '\0';
-    return contents;
 }
 
 static gboolean write_text(const char *path, const char *text, size_t length, GError **error)
@@ -77,7 +43,7 @@ gboolean runner_linux_config_load(RunnerConfig *config, GError **error)
     char *path = runner_linux_config_path();
     /* Distinguish a missing file from an existing empty (corrupt) document. */
     gboolean missing = FALSE;
-    char *contents = read_text(path, 65536U, &missing, error);
+    char *contents = runner_linux_read_text(path, 65536U, &missing, error);
     g_free(path);
     if (!contents) return FALSE;
     char detail[256] = "";
@@ -116,7 +82,7 @@ void runner_history_entry_free(gpointer data)
 GPtrArray *runner_linux_history_load(GError **error)
 {
     char *path = runner_linux_history_path();
-    char *contents = read_text(path, RUNNER_HISTORY_BYTE_LIMIT, NULL, error);
+    char *contents = runner_linux_read_text(path, RUNNER_HISTORY_BYTE_LIMIT, NULL, error);
     g_free(path);
     if (!contents) return NULL;
     GPtrArray *entries = g_ptr_array_new_with_free_func(runner_history_entry_free);

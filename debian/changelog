@@ -1,3 +1,13 @@
+runnerscope (1.3.21) unstable; urgency=medium
+
+  * Give Linux settings/history file descriptors and rejected input buffers
+    deterministic C++20 RAII ownership; securely erase rejected secret data.
+  * Retain the C storage ABI, exact config and history format, bounded and
+    symlink-safe reads, file permissions and existing regression coverage.
+  * Keep Windows and portable core independent of the C++ compiler.
+
+ -- Shannon Smith <infiltratr@yandex.com>  Sat, 31 Oct 2026 04:40:00 +1100
+
 runnerscope (1.3.20) unstable; urgency=medium
 
   * Harden shared JSON/authentication, native HTTP deadlines and cancellation.
