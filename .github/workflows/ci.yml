@@ -387,6 +387,28 @@ jobs:
     runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 30
     steps:
+      - name: Prepare rootless GitHub CLI for APT publication verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v gh >/dev/null 2>&1; then
+            gh --version
+            exit 0
+          fi
+          root="$RUNNER_TEMP/github-cli-root"
+          dl="$RUNNER_TEMP/github-cli-package"
+          mkdir -p "$root" "$dl"
+          (
+            cd "$dl"
+            apt-get download gh
+            package="$(find . -maxdepth 1 -type f -name 'gh_*.deb' -print -quit)"
+            test -n "$package"
+            dpkg-deb -x "$package" "$root"
+          )
+          test -x "$root/usr/bin/gh"
+          "$root/usr/bin/gh" --version
+          echo "$root/usr/bin" >> "$GITHUB_PATH"
+
       - name: Require the qualified release in the live APT repository
         env:
           GH_TOKEN: ${{ github.token }}
