@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.22 — 2026-10-31
+
+- Restore the independent APT publication verification job on self-hosted Linux by provisioning its own rootless GitHub CLI.
+- Keep release identity immutable and continue verifying both alpha and beta APT indices against the exact qualified package digest.
+
+
 ## 1.3.20 — 2026-10-18
 
 - Share strict, thread-safe JSON parsing between monitoring and sign-in; reject malformed and duplicate organisation identities and reuse authorised sessions on first setup.
